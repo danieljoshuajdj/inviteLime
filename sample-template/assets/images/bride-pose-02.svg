@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" role="img" aria-label="Illustrated bride silhouette, updo">
+  <defs>
+    <linearGradient id="bp2bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c3a5e"/>
+      <stop offset="0.6" stop-color="#4a0630"/>
+      <stop offset="1" stop-color="#1a0818"/>
+    </linearGradient>
+    <radialGradient id="bp2glow" cx="0.5" cy="0.3" r="0.6">
+      <stop offset="0" stop-color="#f9a8d4" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#f9a8d4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="400" height="500" fill="url(#bp2bg)"/>
+  <rect width="400" height="500" fill="url(#bp2glow)"/>
+  <g fill="#f9a8d4" fill-opacity="0.65">
+    <circle cx="76" cy="96" r="2"/>
+    <circle cx="326" cy="118" r="2.4"/>
+    <circle cx="58" cy="264" r="1.6"/>
+    <circle cx="344" cy="286" r="1.6"/>
+    <circle cx="200" cy="56" r="1.6"/>
+  </g>
+  <rect x="16" y="16" width="368" height="468" fill="none" stroke="#d4909a" stroke-opacity="0.55"/>
+
+  <path d="M200 344 C146 344 108 392 100 474 L300 474 C292 392 254 344 200 344 Z" fill="#2b0720"/>
+  <path d="M186 236 h28 v72 h-28 z" fill="#2b0720"/>
+  <ellipse cx="200" cy="190" rx="53" ry="63" fill="#2b0720"/>
+
+  <path d="M200 116 C162 116 144 148 145 190 C146 214 138 232 132 244 C127 254 134 262 143 257 C155 250 158 232 160 212
+           C164 246 179 266 200 266 C221 266 236 246 240 212 C242 232 245 250 257 257 C266 262 273 254 268 244 C262 232 254 214 255 190 C256 148 238 116 200 116 Z"
+        fill="#1f0517"/>
+
+  <ellipse cx="200" cy="112" rx="34" ry="26" fill="#1f0517"/>
+  <path d="M166 118 q34 -30 68 0" fill="none" stroke="#d4909a" stroke-opacity="0.75" stroke-width="3"/>
+
+  <g fill="none" stroke="#d4909a" stroke-opacity="0.7" stroke-width="2.4" stroke-linecap="round">
+    <path d="M170 182 q12 -9 24 0"/>
+    <path d="M206 182 q12 -9 24 0"/>
+    <path d="M188 226 q12 9 24 0"/>
+  </g>
+  <circle cx="147" cy="212" r="5" fill="#d4909a"/>
+  <circle cx="253" cy="212" r="5" fill="#d4909a"/>
+
+  <g fill="#d4909a" opacity="0.9">
+    <circle cx="176" cy="368" r="5"/>
+    <circle cx="200" cy="356" r="6"/>
+    <circle cx="224" cy="368" r="5"/>
+    <circle cx="200" cy="384" r="5"/>
+  </g>
+  <path d="M122 474 h156" stroke="#d4909a" stroke-opacity="0.7" stroke-width="2"/>
+</svg>

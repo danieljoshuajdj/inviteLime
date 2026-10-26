@@ -1,0 +1,3649 @@
+# MASTER IMPLEMENTATION PROMPT
+
+You are working on a production-ready wedding invitation platform.
+
+I have already designed the UI using Google Stitch and provided the HTML files.
+
+Your job is to transform these UI designs into a **fully functional, production-ready full-stack application**.
+
+Do NOT treat the supplied HTML as disposable mockup code.
+
+The HTML is the **visual source of truth for the UI/UX**.
+
+Preserve the visual design, layout hierarchy, typography, spacing, responsive behavior, cards, buttons, navigation, forms, modals, tables, filters, previews, and overall visual language.
+
+However, replace all static/mock/demo behavior with real application functionality.
+
+---
+
+# 1. PROVIDED UI FILES
+
+The following Stitch HTML files are provided:
+
+```text
+admin panel.html
+public UI.html
+public UI guest buy.html
+user account mobile and desktop.html
+```
+
+They represent four major parts of the application.
+
+## A. Admin
+
+```text
+admin panel.html
+```
+
+This contains the admin dashboard and administration interface.
+
+The existing design includes the admin navigation, Dashboard, Templates, Settings, Categories, Users, date filters, export controls and operational dashboard styling.
+
+## B. Public Website
+
+```text
+public UI.html
+```
+
+This contains the public marketing website, template discovery, features, pricing, workflow, FAQs and calls to action.
+
+## C. Guest Purchase / Creation Flow
+
+```text
+public UI guest buy.html
+```
+
+This contains the guest invitation creation workflow, progress steps, live preview, guest session, email/contact step and payment confirmation experience.
+
+## D. Customer Account
+
+```text
+user account mobile and desktop.html
+```
+
+This contains the authenticated customer experience, including Explore, Favorites, My Invitations, template search and category filtering.
+
+---
+
+# 2. FIRST RULE: INSPECT BEFORE IMPLEMENTING
+
+Before writing or changing application code:
+
+1. Inspect the entire existing repository.
+2. Inspect `package.json`.
+3. Inspect the existing framework.
+4. Inspect the existing routing.
+5. Inspect the existing database configuration.
+6. Inspect existing Supabase configuration if present.
+7. Inspect existing authentication.
+8. Inspect existing storage.
+9. Inspect existing API routes/server actions.
+10. Inspect existing template runtime.
+11. Inspect existing migrations.
+12. Inspect existing environment variables.
+13. Inspect existing components.
+14. Inspect existing styling system.
+15. Inspect all four provided HTML files completely.
+
+Do not assume the repository is empty.
+
+Do not rebuild functionality that already exists.
+
+Do not create duplicate authentication systems.
+
+Do not create duplicate database tables if equivalent tables already exist.
+
+Do not replace working infrastructure unnecessarily.
+
+First understand the current application.
+
+Then implement the missing functionality.
+
+---
+
+# 3. PRIMARY OBJECTIVE
+
+The final application must become:
+
+```text
+PUBLIC WEBSITE
+       │
+       ├── Explore Templates
+       │
+       ├── View Demo
+       │
+       ├── Guest Create Invitation
+       │
+       ├── Login / Register
+       │
+       └── Pricing / Features / Information
+                │
+                ▼
+       TEMPLATE PLATFORM
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+   GUEST FLOW       USER FLOW
+        │                │
+        └───────┬────────┘
+                ▼
+        INVITATION BUILDER
+                │
+                ▼
+             PREVIEW
+                │
+                ▼
+           PAYMENT
+                │
+                ▼
+        PAYMENT VERIFIED
+                │
+                ▼
+        PUBLISHED INVITATION
+                │
+                ▼
+        UNIQUE /w/[slug]
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+      SHARE             EMAIL
+        │                │
+        └───────┬────────┘
+                ▼
+        CUSTOMER ACCOUNT
+                │
+        ┌───────┼────────┐
+        ▼       ▼        ▼
+    Explore Favorites My Invitations
+                         │
+                         ▼
+                       Edit
+                         │
+                         ▼
+                     Share URL
+                         │
+                         ▼
+                    Expiration
+```
+
+---
+
+# 4. ARCHITECTURAL PRINCIPLE
+
+There must be:
+
+```text
+ONE APPLICATION
+ONE DATABASE
+ONE CUSTOMER SYSTEM
+ONE ADMIN SYSTEM
+ONE TEMPLATE RUNTIME
+MANY TEMPLATES
+MANY CUSTOMER INVITATIONS
+MANY UNIQUE PUBLIC URLS
+```
+
+Do NOT create:
+
+```text
+one React application per template
+one deployment per template
+one website per customer
+one database per customer
+```
+
+A template is data/content loaded by the platform.
+
+A customer invitation is a database record referencing a template version.
+
+---
+
+# 5. TEMPLATE ARCHITECTURE
+
+Templates are independent normalized HTML/CSS/JS packages.
+
+Canonical structure:
+
+```text
+template/
+├── index.html
+├── manifest.json
+└── assets/
+    ├── images/
+    ├── videos/
+    ├── audio/
+    └── fonts/
+```
+
+Templates may contain their own:
+
+* HTML
+* CSS
+* JavaScript
+* animations
+* transitions
+* GSAP
+* SVG
+* canvas
+* WebGL where appropriate
+* audio
+* video
+* custom fonts
+
+Do not reject a template merely because it contains JavaScript.
+
+Instead, execute it in an isolated/controlled runtime.
+
+---
+
+# 6. TEMPLATE RESPONSIBILITY
+
+The template controls:
+
+```text
+Visual design
+Layout
+Typography
+Animation
+Transitions
+Effects
+Gallery presentation
+Audio/video presentation
+Responsive behavior
+Visual interactions
+```
+
+The platform controls:
+
+```text
+Authentication
+Customer data
+Template selection
+Template versions
+Media storage
+Invitation records
+Publishing
+URLs
+Payments
+Expiration
+Sharing
+Email
+Ownership
+Security
+Analytics
+```
+
+---
+
+# 7. TEMPLATE VERSIONING
+
+Every template must have immutable versions.
+
+Example:
+
+```text
+Template:
+Royal Mughal
+
+Versions:
+1.0.0
+1.1.0
+2.0.0
+```
+
+When an invitation is purchased:
+
+```text
+wedding.template_version_id
+```
+
+must point to the exact template version used.
+
+If an administrator uploads a newer version:
+
+```text
+Existing invitations
+    ↓
+remain on existing version
+
+New invitations
+    ↓
+use new published version
+```
+
+Never silently migrate existing invitations.
+
+---
+
+# 8. TEMPLATE DATA BINDING
+
+Templates should receive standardized wedding data.
+
+Use the existing canonical schema where available.
+
+Core structure:
+
+```text
+couple
+families
+wedding
+events
+gallery
+media
+rsvp
+optional settings
+```
+
+Examples:
+
+```text
+couple.bride.name
+couple.groom.name
+couple.bride.photo
+couple.groom.photo
+couple.photo
+
+wedding.date
+wedding.time
+wedding.venue
+wedding.address
+wedding.mapsUrl
+
+events[]
+
+gallery.bride[]
+gallery.groom[]
+gallery.couple[]
+gallery.general[]
+
+media.music
+media.weddingVideo
+media.heroVideo
+```
+
+Do not hardcode customer wedding information inside templates.
+
+---
+
+# 9. DEMO MODE
+
+Every template must support Demo Mode.
+
+The public template preview must use the actual template runtime.
+
+Flow:
+
+```text
+Template
+    ↓
+Demo Data
+    ↓
+Actual Template Runtime
+    ↓
+Interactive Preview
+```
+
+Do not create a fake screenshot-only preview.
+
+The demo should preserve:
+
+* animations
+* interactions
+* typography
+* layout
+* audio/video behavior
+* responsive behavior
+
+---
+
+# 10. CUSTOMER MODE
+
+The same template runtime must support customer data.
+
+```text
+Template
+    ↓
+Customer Wedding Data
+    ↓
+Customer Media
+    ↓
+Actual Template Runtime
+```
+
+Demo Mode and Customer Mode should use the same underlying rendering system.
+
+---
+
+# 11. TEMPLATE SECURITY
+
+Templates must be isolated.
+
+A template must NOT have access to:
+
+```text
+authentication cookies
+admin session
+customer session
+database credentials
+service-role keys
+private APIs
+admin APIs
+private customer data
+payment secrets
+```
+
+The runtime should only receive the data required to render the invitation.
+
+Use a sandboxed/isolated iframe or equivalent secure runtime where appropriate.
+
+---
+
+# 12. PUBLIC WEBSITE
+
+Use:
+
+```text
+public UI.html
+```
+
+as the visual reference for the public website.
+
+Preserve the Stitch design.
+
+The public site should include:
+
+```text
+/
+ /templates
+ /templates/[slug]
+ /how-it-works
+ /features
+ /pricing
+ /live-demos
+ /about
+ /contact
+ /faq
+ /privacy
+ /terms
+ /login
+ /register
+```
+
+Do not create unnecessary routes if equivalent routes already exist.
+
+---
+
+# 13. PUBLIC LANDING PAGE
+
+The landing page should connect the Stitch sections to real application functionality.
+
+Existing UI contains:
+
+* Header
+* Hero
+* Template discovery
+* Features
+* Workflow
+* Pricing
+* FAQ
+* Final CTA
+
+Keep the visual structure.
+
+But replace static values with real/configurable data.
+
+---
+
+# 14. REMOVE FAKE PRODUCTION CLAIMS
+
+The Stitch designs contain example claims such as:
+
+```text
+42,000+ couples
+1.8M+ RSVPs
+0.04s edge latency
+4.98 / 5 ratings
+84+ templates
+```
+
+Do NOT publish these as factual production data unless they are actually true and stored/verified.
+
+The UI may visually retain the component, but the values must either:
+
+1. Come from real data,
+2. Come from admin-configurable site settings, or
+3. Be removed/hidden until real data exists.
+
+Never fabricate social proof.
+
+Never fabricate reviews.
+
+Never fabricate ratings.
+
+Never fabricate platform statistics.
+
+The same applies to example pricing.
+
+---
+
+# 15. PRICING
+
+The Stitch UI currently contains example pricing values.
+
+Do not hardcode them as the actual payment amount.
+
+The actual price must come from a server-side product/template pricing configuration.
+
+Example:
+
+```text
+template.price
+```
+
+or a proper pricing/product model.
+
+The browser must never be trusted for the final payment amount.
+
+---
+
+# 16. TEMPLATE MARKETPLACE
+
+Public template marketplace must load real templates from the database.
+
+Each template should have:
+
+```text
+name
+description
+unique ID
+slug
+status
+categories
+thumbnail
+preview
+version
+price
+created_at
+```
+
+Only active/published templates should be publicly selectable.
+
+---
+
+# 17. MULTIPLE TEMPLATE CATEGORIES
+
+A template can belong to multiple categories.
+
+Use a many-to-many relationship:
+
+```text
+templates
+categories
+template_categories
+```
+
+Example:
+
+```text
+Royal Mughal
+    ├── Muslim Wedding
+    ├── Royal
+    ├── Luxury
+    └── Traditional
+```
+
+Do not use a single `category_id` as the only template-category relationship.
+
+---
+
+# 18. CATEGORY FILTERING
+
+Template marketplace filtering must support multiple category selections.
+
+Example:
+
+```text
+☑ Royal
+☑ Luxury
+☐ Minimalist
+☐ Traditional
+```
+
+Support:
+
+```text
+Match Any
+Match All
+```
+
+where practical.
+
+The UI shown in the customer Stitch design already uses multi-select category filtering.
+
+---
+
+# 19. CUSTOMER ACCOUNT
+
+Use:
+
+```text
+user account mobile and desktop.html
+```
+
+as the visual source of truth.
+
+Authenticated navigation:
+
+```text
+Explore
+Favorites
+My Invitations
+Account
+```
+
+The default page after login must be:
+
+```text
+Templates → Explore
+```
+
+not My Invitations.
+
+The Stitch customer design already establishes Explore, Favorites and My Invitations as the primary customer navigation.
+
+---
+
+# 20. CUSTOMER EXPLORE
+
+Display:
+
+```text
+Search
+Category filters
+Template cards
+Favorite button
+View Demo
+Use Template
+```
+
+Each template card should use real database data.
+
+Do not hardcode template counts.
+
+---
+
+# 21. FAVORITES
+
+Customers can favorite any template.
+
+Use a database relationship:
+
+```text
+favorite_templates
+```
+
+Prevent duplicate favorites.
+
+The favorite state must work across:
+
+```text
+Explore
+Template detail
+Demo
+Favorites
+```
+
+---
+
+# 22. GUEST CREATION
+
+Users must NOT be forced to log in before creating an invitation.
+
+A public visitor can:
+
+```text
+Explore
+ ↓
+Choose Template
+ ↓
+Enter Details
+ ↓
+Upload Photos
+ ↓
+Enter Email
+ ↓
+Preview
+ ↓
+Payment
+```
+
+The guest UI provided in:
+
+```text
+public UI guest buy.html
+```
+
+must become the functional guest builder.
+
+The provided design already contains a multi-step guest flow and guest session concept.
+
+---
+
+# 23. GUEST DRAFT SESSION
+
+When a guest selects a template:
+
+Create a temporary guest draft/session.
+
+Store enough information server-side to recover the draft.
+
+Do not depend only on localStorage.
+
+Guest draft should contain:
+
+```text
+session ID
+template ID
+template version
+wedding data
+uploaded media references
+email
+status
+created_at
+updated_at
+expires_at
+```
+
+Drafts must have automatic cleanup/expiration.
+
+---
+
+# 24. INVITATION BUILDER
+
+The builder should use the Stitch guest UI as the visual reference.
+
+Recommended steps:
+
+```text
+1. Couple Details
+2. Media Gallery
+3. Wedding Details
+4. Location
+5. Email
+6. Preview
+7. Payment
+```
+
+The actual number of steps can adapt based on template features.
+
+Do not show unsupported fields.
+
+---
+
+# 25. COUPLE DETAILS
+
+Collect:
+
+```text
+Bride Name
+Groom Name
+```
+
+Optional:
+
+```text
+Bride Photo
+Groom Photo
+Couple Photo
+Bride Bio
+Groom Bio
+Couple Story
+```
+
+---
+
+# 26. MEDIA
+
+Allow:
+
+```text
+Bride Photo
+Groom Photo
+Couple Photo
+Gallery Photos
+Video
+Audio
+```
+
+only where supported.
+
+Support:
+
+```text
+mobile camera
+mobile gallery
+desktop upload
+drag/drop desktop
+preview
+replace
+remove
+upload progress
+validation
+```
+
+Use the existing storage architecture.
+
+---
+
+# 27. LOCATION
+
+Support both:
+
+```text
+Choose location on map
+```
+
+and:
+
+```text
+Enter address manually
+```
+
+Store:
+
+```text
+venue
+address
+mapsUrl
+latitude
+longitude
+```
+
+where applicable.
+
+Do not force map selection.
+
+---
+
+# 28. EVENTS
+
+If the selected template supports multiple events:
+
+```text
+Add Event
+Edit Event
+Delete Event
+Reorder Event
+```
+
+Each event can have:
+
+```text
+name
+date
+time
+venue
+address
+mapsUrl
+description
+```
+
+---
+
+# 29. EMAIL
+
+Guest must provide an email address before final payment.
+
+The email is required for:
+
+```text
+payment confirmation
+invitation URL
+invitation access
+account linking
+future management
+```
+
+Validate the email.
+
+---
+
+# 30. LIVE PREVIEW
+
+Preview must use the real template runtime.
+
+The customer should see their actual:
+
+```text
+names
+photos
+date
+time
+venue
+events
+location
+gallery
+```
+
+inside the selected template.
+
+Do not create a separate fake preview.
+
+---
+
+# 31. CREATE / PROCEED BUTTON
+
+When the customer clicks:
+
+```text
+Create Invitation
+```
+
+or:
+
+```text
+Proceed
+```
+
+perform server-side validation.
+
+Then show a payment confirmation modal.
+
+---
+
+# 32. PAYMENT CONFIRMATION MODAL
+
+The modal should communicate clearly:
+
+```text
+Own This Invitation
+
+Template: Royal Mughal
+Couple: Daniel & Sarah
+Wedding Date: 15 December 2026
+
+Price: ₹XXX
+
+Valid Until: 15 February 2027
+
+[Cancel]
+[Pay ₹XXX]
+```
+
+The wording and visual style should follow the Stitch guest UI.
+
+The price must come from the server.
+
+---
+
+# 33. RAZORPAY
+
+Implement Razorpay securely.
+
+Flow:
+
+```text
+Customer clicks Pay
+        ↓
+Server creates pending order
+        ↓
+Razorpay order
+        ↓
+Razorpay Checkout
+        ↓
+Customer pays
+        ↓
+Server verifies payment
+        ↓
+Payment marked paid
+        ↓
+Invitation becomes active
+        ↓
+URL generated
+```
+
+Never trust frontend payment success.
+
+Never expose Razorpay secret keys.
+
+Use webhook handling where appropriate.
+
+---
+
+# 34. ORDER MODEL
+
+Use a proper order/payment relationship.
+
+Example:
+
+```text
+orders
+├── id
+├── user_id nullable
+├── guest_session_id nullable
+├── wedding_id
+├── template_id
+├── template_version_id
+├── amount
+├── currency
+├── provider
+├── provider_order_id
+├── provider_payment_id
+├── status
+├── created_at
+├── paid_at
+└── refunded_at
+```
+
+Adapt this to the existing schema instead of blindly creating duplicates.
+
+---
+
+# 35. PAYMENT STATES
+
+Use states such as:
+
+```text
+pending
+paid
+failed
+cancelled
+refunded
+```
+
+Only:
+
+```text
+paid
+```
+
+can activate the invitation.
+
+---
+
+# 36. GUEST ACCOUNT LINKING
+
+After successful payment:
+
+If the email already belongs to an account:
+
+```text
+Link invitation to that account.
+```
+
+If it does not:
+
+```text
+Create/link a customer account
+```
+
+using a secure passwordless/magic-link or account activation mechanism.
+
+Do not force the user to create a password during checkout unless the existing authentication architecture requires it.
+
+---
+
+# 37. INVITATION PUBLISHING
+
+After payment verification:
+
+```text
+Wedding
+ ↓
+Active
+ ↓
+Unique slug
+ ↓
+Published invitation
+```
+
+URL:
+
+```text
+/w/[slug]
+```
+
+Example:
+
+```text
+/w/daniel-sarah-2026
+```
+
+The URL must remain stable during the invitation's active period.
+
+---
+
+# 38. POST-PAYMENT SUCCESS PAGE
+
+Immediately show:
+
+```text
+Your Invitation is Ready
+
+[View Invitation]
+
+Your invitation link:
+
+https://domain.com/w/daniel-sarah-2026
+
+[Copy Link]
+[Share Invitation]
+```
+
+Also display:
+
+```text
+Valid Until:
+15 February 2027
+```
+
+---
+
+# 39. EMAIL INVITATION URL
+
+After successful payment and publishing, send the invitation URL to the customer's email.
+
+Email should include:
+
+```text
+Couple Names
+Wedding Date
+Invitation URL
+View Invitation button
+Expiration Date
+Account access instructions
+```
+
+Email delivery must happen after successful publishing.
+
+If email fails, do not invalidate the paid invitation.
+
+Provide retry/resend functionality.
+
+---
+
+# 40. SHARING
+
+Provide:
+
+```text
+Copy Link
+Share Invitation
+Resend Email
+```
+
+after purchase.
+
+Also provide the same controls from My Invitations.
+
+Use native Web Share API on supported mobile devices.
+
+Desktop fallback:
+
+```text
+Copy Link
+WhatsApp
+Email
+Telegram
+```
+
+where appropriate.
+
+---
+
+# 41. CUSTOMER MY INVITATIONS
+
+Display all invitations owned by the customer.
+
+Each card should show:
+
+```text
+Preview
+Couple Names
+Template
+Wedding Date
+Status
+Expiration Date
+```
+
+Actions:
+
+```text
+View
+Edit
+Share
+Copy URL
+```
+
+Optional:
+
+```text
+Resend Email
+```
+
+---
+
+# 42. EDIT INVITATION
+
+Customer can edit an active invitation.
+
+Editable fields:
+
+```text
+Names
+Photos
+Wedding Date
+Time
+Venue
+Address
+Map
+Events
+Gallery
+RSVP
+Other supported fields
+```
+
+The URL must remain unchanged.
+
+Editing must update the data used by the same template version.
+
+Do not create a new invitation every time the customer edits.
+
+---
+
+# 43. EXPIRATION
+
+Every paid invitation has:
+
+```text
+expiration_date = wedding_date + 2 calendar months
+```
+
+Example:
+
+```text
+Wedding Date:
+15 December 2026
+
+Expiration:
+15 February 2027
+```
+
+Store the expiration date server-side.
+
+Do not calculate it only in the browser.
+
+---
+
+# 44. EXPIRATION ENFORCEMENT
+
+When:
+
+```text
+current date > expiration_date
+```
+
+set:
+
+```text
+status = expired
+```
+
+The public URL must no longer render the active invitation.
+
+Show:
+
+```text
+This invitation has expired.
+```
+
+Do not immediately delete the database record.
+
+Keep payment/order history.
+
+---
+
+# 45. ACTIVE INVITATIONS
+
+Customer dashboard should show:
+
+```text
+Active Invitations
+```
+
+with:
+
+```text
+Template
+Couple
+Wedding Date
+Expiration Date
+Status
+```
+
+Expired invitations must not appear as active.
+
+Optionally provide:
+
+```text
+Expired
+```
+
+as a separate section.
+
+---
+
+# 46. PUBLIC INVITATION RUNTIME
+
+Route:
+
+```text
+/w/[slug]
+```
+
+Runtime:
+
+```text
+slug
+ ↓
+invitation
+ ↓
+verify status
+ ↓
+verify expiration
+ ↓
+template_version_id
+ ↓
+load immutable template
+ ↓
+load public wedding data
+ ↓
+load media
+ ↓
+render
+```
+
+Guests do not need an account to view an active invitation.
+
+---
+
+# 47. PUBLIC INVITATION SECURITY
+
+Public visitors may access only public invitation information.
+
+Never expose:
+
+```text
+customer email
+payment information
+internal user ID
+private media
+admin information
+database credentials
+```
+
+If an invitation contains private media, use appropriate signed/public URLs and access controls.
+
+---
+
+# 48. ADMIN PANEL
+
+Use:
+
+```text
+admin panel.html
+```
+
+as the visual source of truth.
+
+Admin navigation:
+
+```text
+Dashboard
+Templates
+Settings
+  Categories
+  Users
+```
+
+The Stitch admin design already provides this structure.
+
+---
+
+# 49. ADMIN DASHBOARD
+
+Dashboard metrics:
+
+```text
+Revenue
+New Users
+Template Usage
+Template Performance
+User Locations
+```
+
+Date filters:
+
+```text
+Today
+This Week
+This Year
+Custom
+```
+
+Custom:
+
+```text
+From
+To
+```
+
+Export:
+
+```text
+Export Data
+```
+
+The existing admin design already includes Today, This Week, This Year, Custom, From/To and Export Data controls.
+
+---
+
+# 50. ADMIN DASHBOARD DATA
+
+All metrics must be real.
+
+Revenue:
+
+```text
+successful paid transactions
+```
+
+New users:
+
+```text
+users created during range
+```
+
+Template usage:
+
+```text
+invitations created/paid using template
+```
+
+Template performance:
+
+```text
+template usage grouped by template
+```
+
+User locations:
+
+```text
+actual stored geographic information
+```
+
+Never use fake statistics.
+
+---
+
+# 51. ADMIN EXPORT
+
+Support CSV export.
+
+Respect the selected date range.
+
+Potential exports:
+
+```text
+Dashboard
+Users
+Template Usage
+Revenue
+Locations
+```
+
+---
+
+# 52. ADMIN TEMPLATES
+
+Template table:
+
+```text
+☐
+Name
+Category
+Unique ID
+Status
+Used Today
+Created At
+Actions
+```
+
+Actions:
+
+```text
+Enable
+Disable
+Delete
+```
+
+---
+
+# 53. ADMIN TEMPLATE MULTI-CATEGORY
+
+Add Template form must contain:
+
+```text
+Title
+Description
+Categories
+Status
+Template ZIP
+```
+
+Categories MUST be a multi-select.
+
+Example:
+
+```text
+[ Muslim Wedding × ]
+[ Royal × ]
+[ Luxury × ]
+```
+
+Search categories.
+
+Add/remove categories.
+
+The same multi-category relationship must be used in:
+
+```text
+Add Template
+Edit Template
+Template Table
+Template Filters
+Public Marketplace
+Customer Explore
+```
+
+---
+
+# 54. ADMIN TEMPLATE FILTERS
+
+Support:
+
+```text
+Category
+Status
+Created At
+Search
+```
+
+Category is multi-select.
+
+Status:
+
+```text
+All
+Active
+Disabled
+```
+
+Created:
+
+```text
+From
+To
+```
+
+---
+
+# 55. ADMIN BULK ACTIONS
+
+All major admin tables support:
+
+```text
+Select All
+Multi-select
+Bulk actions
+```
+
+Templates:
+
+```text
+Enable
+Disable
+Delete
+```
+
+Categories:
+
+```text
+Delete
+```
+
+Users:
+
+```text
+Delete
+```
+
+Require confirmation for destructive actions.
+
+---
+
+# 56. ADMIN CATEGORIES
+
+Categories table:
+
+```text
+Name
+Unique ID
+Created At
+Actions
+```
+
+Actions:
+
+```text
+Create
+Edit
+Delete
+```
+
+Deleting a category must not delete templates.
+
+Only remove category relationships.
+
+---
+
+# 57. ADMIN USERS
+
+Users table:
+
+```text
+Name
+Email
+Unique ID
+Created At
+Status
+Last Seen
+Templates Used
+Revenue
+Actions
+```
+
+Filters:
+
+```text
+Created At
+Templates Used
+Status
+Last Active Before
+Last Active After
+```
+
+Sorting:
+
+```text
+Name
+Created At
+Last Seen
+Templates Used
+Revenue
+```
+
+Ascending/Descending.
+
+Actions:
+
+```text
+Edit
+Delete
+```
+
+---
+
+# 58. ADMIN USER INACTIVITY
+
+Admin should be able to identify users inactive before a selected date.
+
+Example:
+
+```text
+Last Active Before:
+01/01/2026
+```
+
+Do not automatically delete users based on this filter.
+
+Deletion is always an explicit action.
+
+---
+
+# 59. DATABASE DESIGN
+
+Use the existing schema if already present.
+
+Otherwise implement a clean relational model.
+
+Core:
+
+```text
+users
+profiles
+
+categories
+templates
+template_categories
+template_versions
+
+weddings
+wedding_events
+wedding_media
+
+favorite_templates
+
+orders
+payments
+
+rsvp_responses
+invitation_views
+
+guest_sessions
+guest_drafts
+
+email_deliveries
+audit_logs
+
+site_settings
+```
+
+Adapt names to the existing project.
+
+---
+
+# 60. WEDDING MODEL
+
+Minimum conceptual fields:
+
+```text
+id
+user_id nullable
+guest_session_id nullable
+template_id
+template_version_id
+slug
+bride_name
+groom_name
+wedding_date
+wedding_time
+venue
+address
+maps_url
+latitude
+longitude
+description
+status
+expiration_date
+created_at
+updated_at
+published_at
+```
+
+---
+
+# 61. MEDIA MODEL
+
+Conceptually:
+
+```text
+id
+wedding_id
+type
+storage_key
+url
+mime_type
+width
+height
+duration
+sort_order
+created_at
+```
+
+Keep template assets and customer assets separate.
+
+---
+
+# 62. STORAGE
+
+Template assets:
+
+```text
+templates/{templateId}/{version}/...
+```
+
+Customer assets:
+
+```text
+weddings/{weddingId}/...
+```
+
+Do not mix them.
+
+Use CDN/object storage for large assets.
+
+Optimize images appropriately.
+
+Do not store large videos directly inside database records.
+
+---
+
+# 63. AUTHENTICATION
+
+Support:
+
+```text
+Register
+Login
+Logout
+Forgot Password
+Reset Password
+Passwordless/magic-link access where appropriate
+```
+
+Guest purchase must not require authentication before payment.
+
+After purchase, connect the invitation to the customer's account.
+
+---
+
+# 64. AUTHORIZATION
+
+Customers may only access:
+
+```text
+their own invitations
+their own media
+their own orders
+their own favorites
+their own account data
+```
+
+Server-side ownership checks are mandatory.
+
+Never trust:
+
+```text
+user_id
+wedding_id
+```
+
+provided by the browser without verifying ownership.
+
+---
+
+# 65. ADMIN AUTHORIZATION
+
+Required behavior:
+
+```text
+Anonymous → 401
+Normal user → 403
+Admin → 200
+```
+
+Every admin API/server action must enforce authorization.
+
+---
+
+# 66. RLS
+
+If Supabase is used, implement proper RLS policies.
+
+Customers:
+
+```text
+SELECT own data
+INSERT own data
+UPDATE own data
+DELETE own data
+```
+
+Admins:
+
+```text
+authorized administrative access
+```
+
+Public:
+
+```text
+only active public invitation data
+```
+
+Never bypass security merely to make the UI work.
+
+---
+
+# 67. PAYMENT SECURITY
+
+Never trust frontend:
+
+```text
+price
+payment success
+user_id
+order status
+```
+
+The backend must determine and verify all critical payment information.
+
+Razorpay secret credentials must remain server-side.
+
+---
+
+# 68. EMAIL SYSTEM
+
+Create an email service abstraction.
+
+Required emails:
+
+```text
+Payment Confirmation
+Invitation Published
+Invitation URL
+Account Access
+Invitation Resend
+```
+
+Use a proper transactional email provider.
+
+Do not put provider credentials in frontend code.
+
+---
+
+# 69. URL / SLUG SYSTEM
+
+Invitation URLs:
+
+```text
+/w/[slug]
+```
+
+Requirements:
+
+```text
+unique
+stable
+safe
+URL-friendly
+reserved route protection
+```
+
+Editing invitation information must NOT change the URL.
+
+---
+
+# 70. RESPONSIVE DESIGN
+
+The supplied Stitch files contain both desktop and mobile designs.
+
+Do not simply shrink desktop.
+
+Build responsive behavior intentionally.
+
+Test:
+
+```text
+360
+390
+414
+430
+480
+768
+1024
+1280
+1440
+1920
+```
+
+Customer invitation creation must be fully usable on mobile.
+
+Admin should also remain usable on tablet/mobile.
+
+---
+
+# 71. UI PRESERVATION
+
+Do not redesign the supplied UI without a functional reason.
+
+Preserve:
+
+```text
+Typography
+Spacing
+Color hierarchy
+Card design
+Buttons
+Tables
+Forms
+Navigation
+Modal structure
+Preview areas
+Responsive layout
+```
+
+The supplied HTML uses fonts including:
+
+```text
+Playfair Display
+Plus Jakarta Sans
+Material Symbols
+```
+
+Preserve the intended typography where practical.
+
+---
+
+# 72. STITCH HTML CLEANUP
+
+The Stitch HTML currently uses:
+
+```text
+Tailwind CDN
+inline styles
+inline JavaScript
+Google Fonts CDN
+static href="#"
+static demo values
+hardcoded image URLs
+mock interaction
+```
+
+Do not blindly keep this structure in production.
+
+Convert it into the project's proper component/style architecture.
+
+For example:
+
+```text
+React/Next components
+Tailwind configuration
+local reusable components
+proper routing
+server/client boundaries
+API/server actions
+database queries
+real state
+```
+
+Do not load Tailwind from CDN in the production application if the project already uses a build-time Tailwind setup.
+
+---
+
+# 73. COMPONENTIZATION
+
+Break the Stitch HTML into reusable components.
+
+Examples:
+
+```text
+components/
+├── public/
+│   ├── Header
+│   ├── Hero
+│   ├── TemplateCard
+│   ├── TemplateFilters
+│   ├── Pricing
+│   ├── FAQ
+│   └── Footer
+│
+├── customer/
+│   ├── CustomerHeader
+│   ├── TemplateCard
+│   ├── FavoriteButton
+│   ├── TemplateFilters
+│   ├── InvitationCard
+│   ├── BuilderStepper
+│   ├── MediaUploader
+│   ├── LocationPicker
+│   ├── LivePreview
+│   ├── ShareDialog
+│   └── PaymentModal
+│
+└── admin/
+    ├── AdminSidebar
+    ├── AdminHeader
+    ├── DataTable
+    ├── FilterBar
+    ├── BulkActionBar
+    ├── ConfirmDialog
+    ├── StatCard
+    └── ExportMenu
+```
+
+Reuse components instead of duplicating markup.
+
+---
+
+# 74. REAL ROUTING
+
+Replace all Stitch:
+
+```text
+href="#"
+```
+
+navigation with real application routes.
+
+Do not leave dead navigation links.
+
+Every button should either:
+
+```text
+navigate
+open modal
+submit form
+perform API operation
+```
+
+or be intentionally non-interactive.
+
+---
+
+# 75. LOADING STATES
+
+Every async operation needs a loading state.
+
+Examples:
+
+```text
+Loading templates
+Uploading image
+Saving invitation
+Creating payment
+Verifying payment
+Publishing invitation
+Sending email
+Deleting template
+Exporting data
+```
+
+Do not freeze the interface without feedback.
+
+---
+
+# 76. ERROR STATES
+
+Handle:
+
+```text
+Network error
+Validation error
+Authentication error
+Authorization error
+Upload error
+Payment error
+Email error
+Template error
+Database error
+Expired invitation
+Unavailable template
+```
+
+Use clear customer-friendly messages.
+
+Do not expose stack traces or database errors to customers.
+
+---
+
+# 77. EMPTY STATES
+
+Implement useful empty states.
+
+Examples:
+
+```text
+No Favorites
+No Invitations
+No Templates
+No Search Results
+No Users
+No Categories
+No Active Invitations
+No Dashboard Data
+```
+
+---
+
+# 78. PERFORMANCE
+
+The application must scale.
+
+Use:
+
+```text
+server-side pagination
+database indexes
+CDN
+cached template assets
+optimized images
+lazy loading
+responsive images
+object storage
+background processing
+```
+
+Do not load all users/templates into the browser.
+
+---
+
+# 79. TEMPLATE ASSET CACHING
+
+Published template assets are immutable.
+
+Use long-lived caching for immutable template versions.
+
+Example:
+
+```text
+/templates/royal-mughal/1.0.0/...
+```
+
+Existing published invitations must continue using those assets.
+
+---
+
+# 80. CUSTOMER MEDIA PROCESSING
+
+When customers upload images:
+
+```text
+validate
+resize
+compress
+generate optimized formats
+store
+return public/signed URL
+```
+
+Do not make every invitation load huge original camera images unnecessarily.
+
+---
+
+# 81. VIDEO/AUDIO
+
+Templates may include:
+
+```text
+video
+audio
+```
+
+Do not upload the same template video separately for every customer.
+
+Template assets are shared.
+
+Customer-uploaded media remains separate.
+
+Respect browser autoplay restrictions.
+
+Provide user interaction to start audio where necessary.
+
+---
+
+# 82. INVITATION EDITING
+
+When a customer edits an invitation:
+
+```text
+update wedding data
+ ↓
+same template version
+ ↓
+same slug
+ ↓
+published invitation reflects changes
+```
+
+Do not create a second invitation.
+
+Do not create a new URL.
+
+---
+
+# 83. SHARE SYSTEM
+
+Share must be available:
+
+```text
+Immediately after purchase
+My Invitations
+Invitation preview
+```
+
+Actions:
+
+```text
+Copy URL
+Native Share
+Email
+WhatsApp where appropriate
+```
+
+Use the stable public URL.
+
+---
+
+# 84. EMAIL RESEND
+
+Customer can resend invitation email from My Invitations.
+
+Rate-limit resend.
+
+Record email delivery attempts.
+
+---
+
+# 85. EXPIRATION JOB
+
+Implement reliable expiration handling.
+
+Do not depend solely on someone opening the invitation to mark it expired.
+
+Use a scheduled/background job where available.
+
+Also enforce expiration at request time.
+
+This gives:
+
+```text
+background cleanup
++
+runtime safety
+```
+
+---
+
+# 86. CRON / BACKGROUND JOB
+
+If the deployment environment supports scheduled jobs, periodically:
+
+```text
+find active invitations where expiration_date < now
+set status = expired
+```
+
+Do not delete historical orders.
+
+---
+
+# 87. ANALYTICS
+
+Track useful operational data.
+
+At minimum:
+
+```text
+invitation created
+template selected
+template favorited
+preview viewed
+payment initiated
+payment successful
+invitation published
+invitation viewed
+share clicked
+URL copied
+email sent
+email failed
+invitation expired
+```
+
+Do not collect unnecessary personal information.
+
+---
+
+# 88. ADMIN DASHBOARD AGGREGATION
+
+Dashboard queries should be database-side.
+
+Do not:
+
+```text
+download all users
+download all invitations
+calculate everything in browser
+```
+
+Use SQL aggregation/grouping and indexed queries.
+
+---
+
+# 89. ADMIN TABLE PERFORMANCE
+
+Use server-side:
+
+```text
+search
+filter
+sort
+pagination
+bulk selection
+```
+
+for large datasets.
+
+---
+
+# 90. AUDIT LOGS
+
+Record important admin actions:
+
+```text
+Template created
+Template enabled
+Template disabled
+Template deleted
+Category created
+Category edited
+Category deleted
+User edited
+User deleted
+```
+
+Record:
+
+```text
+admin
+action
+target
+timestamp
+```
+
+---
+
+# 91. DATA VALIDATION
+
+Validate on both:
+
+```text
+frontend
+backend
+```
+
+Never rely only on frontend validation.
+
+Validate:
+
+```text
+names
+dates
+email
+URLs
+coordinates
+uploads
+template packages
+prices
+slugs
+IDs
+```
+
+---
+
+# 92. SECURITY AGAINST UPLOAD ATTACKS
+
+Template ZIP uploads must protect against:
+
+```text
+path traversal
+zip bombs
+malicious files
+oversized files
+unexpected executables
+directory traversal
+```
+
+Customer uploads must also have:
+
+```text
+file type validation
+file size limits
+content validation
+safe storage
+```
+
+---
+
+# 93. SECURITY HEADERS
+
+Implement appropriate:
+
+```text
+CSP
+X-Content-Type-Options
+Referrer-Policy
+frame/security policies
+secure cookies
+```
+
+However, ensure the template runtime remains compatible with the required sandbox architecture.
+
+---
+
+# 94. RATE LIMITING
+
+Rate-limit:
+
+```text
+login
+registration
+password reset
+guest draft creation
+uploads
+payment creation
+email resend
+public RSVP
+admin destructive operations
+```
+
+---
+
+# 95. NO DARK PATTERNS
+
+The UI should not:
+
+```text
+hide price
+fake scarcity
+fake reviews
+fake user counts
+make cancellation difficult
+mislead about payment
+```
+
+The payment modal must clearly communicate the amount.
+
+---
+
+# 96. ADMIN VS CUSTOMER UI
+
+Do not mix visual responsibilities.
+
+Admin:
+
+```text
+Functional
+Dense
+Operational
+Data-oriented
+```
+
+Customer:
+
+```text
+Calm
+Elegant
+Wedding-focused
+Simple
+```
+
+Invitation runtime:
+
+```text
+Cinematic
+Emotional
+Immersive
+```
+
+---
+
+# 97. PUBLIC UI CONTENT
+
+Treat the supplied Stitch content as design/content reference, but convert claims to real configurable values.
+
+For example, the current public HTML contains example statistics and marketing claims.
+
+Do not blindly publish them.
+
+Create configurable site settings where appropriate:
+
+```text
+site_settings
+```
+
+Possible fields:
+
+```text
+site_name
+hero_title
+hero_description
+support_email
+default_currency
+social_links
+pricing_visibility
+marketing_statistics
+```
+
+Only display values that are intentionally configured.
+
+---
+
+# 98. PRICING ARCHITECTURE
+
+Do not tightly couple pricing to the visual public page.
+
+Use a backend source of truth.
+
+Example:
+
+```text
+products
+├── id
+├── name
+├── description
+├── price
+├── currency
+├── active
+└── metadata
+```
+
+A template may reference a product or pricing configuration.
+
+The payment server determines the final amount.
+
+---
+
+# 99. GUEST PURCHASE SECURITY
+
+A guest must not be able to modify another guest's draft by guessing an ID.
+
+Use secure guest session identifiers.
+
+Never use:
+
+```text
+incrementing ID
+```
+
+as the only guest authorization mechanism.
+
+---
+
+# 100. PAYMENT IDEMPOTENCY
+
+Payment processing must be idempotent.
+
+If Razorpay webhook or callback arrives multiple times:
+
+```text
+do not create duplicate invitation
+do not create duplicate order
+do not charge twice
+do not publish duplicate URLs
+```
+
+---
+
+# 101. INVITATION PUBLISHING IDEMPOTENCY
+
+If publishing is retried:
+
+```text
+same wedding
+same paid order
+same invitation
+same URL
+```
+
+Do not create duplicates.
+
+---
+
+# 102. EMAIL IDEMPOTENCY
+
+Do not send unlimited duplicate payment emails because of retries.
+
+Track delivery state.
+
+---
+
+# 103. DATABASE CONSTRAINTS
+
+Use database constraints for important rules.
+
+Examples:
+
+```text
+unique template slug
+unique category slug
+unique invitation slug
+unique template-category pair
+unique favorite user/template pair
+unique payment provider transaction
+```
+
+---
+
+# 104. MOBILE-FIRST CUSTOMER CREATION
+
+The guest creation flow must be excellent on mobile.
+
+Test:
+
+```text
+360px
+390px
+414px
+430px
+480px
+```
+
+Use:
+
+```text
+large touch targets
+sticky bottom actions
+mobile image upload
+native date picker
+native time picker
+responsive preview
+```
+
+---
+
+# 105. DESKTOP CUSTOMER CREATION
+
+On desktop:
+
+```text
+left side = form/controls
+right side = live preview
+```
+
+where appropriate.
+
+The supplied guest UI already uses a desktop split between simulator/live preview and workspace controls. Preserve this concept while making it functional.
+
+---
+
+# 106. MOBILE CUSTOMER CREATION
+
+On mobile:
+
+```text
+step
+ ↓
+form
+ ↓
+continue
+ ↓
+preview
+```
+
+Do not force the desktop split-screen layout into a narrow viewport.
+
+---
+
+# 107. ADMIN RESPONSIVENESS
+
+Admin tables should work on:
+
+```text
+desktop
+tablet
+mobile
+```
+
+On mobile:
+
+```text
+horizontal scrolling
+priority columns
+action menu
+responsive filters
+```
+
+Do not destroy table usability.
+
+---
+
+# 108. ACCESSIBILITY
+
+Implement:
+
+```text
+keyboard navigation
+focus states
+labels
+aria attributes
+screen reader support
+contrast
+reduced motion
+accessible dialogs
+accessible tables
+```
+
+---
+
+# 109. REDUCED MOTION
+
+Respect:
+
+```text
+prefers-reduced-motion
+```
+
+for platform UI animations.
+
+Do not automatically remove the actual wedding template's visual design unless required by the template's accessibility behavior.
+
+---
+
+# 110. TESTING
+
+Create tests for critical functionality.
+
+At minimum:
+
+## Authentication
+
+```text
+register
+login
+logout
+forgot password
+```
+
+## Template
+
+```text
+create
+upload
+validate
+enable
+disable
+delete
+multi-category
+favorites
+```
+
+## Guest
+
+```text
+create draft
+save details
+upload media
+email
+preview
+payment
+```
+
+## Payment
+
+```text
+create order
+payment success
+payment failure
+duplicate callback
+webhook
+```
+
+## Invitation
+
+```text
+publish
+view
+edit
+share
+copy URL
+expire
+```
+
+## Admin
+
+```text
+authorization
+dashboard filters
+export
+bulk actions
+user filters
+template filters
+```
+
+---
+
+# 111. END-TO-END TEST
+
+Verify the complete flow:
+
+```text
+1. Visitor opens public website
+2. Visitor explores templates
+3. Visitor filters templates
+4. Visitor opens demo
+5. Visitor favorites template if logged in
+6. Visitor chooses template
+7. Guest draft is created
+8. Guest enters couple details
+9. Guest uploads photos
+10. Guest enters wedding details
+11. Guest chooses location
+12. Guest enters email
+13. Guest sees live preview
+14. Guest clicks Create
+15. Payment modal appears
+16. Correct server-side price appears
+17. Razorpay opens
+18. Test payment succeeds
+19. Server verifies payment
+20. Invitation becomes Active
+21. Unique URL generated
+22. Email sent
+23. Success page displayed
+24. Copy URL works
+25. Share works
+26. Account access works
+27. Invitation appears in My Invitations
+28. Edit works
+29. URL remains unchanged
+30. Invitation expires after wedding date + 2 months
+31. Public URL shows expired state
+```
+
+---
+
+# 112. ADMIN END-TO-END TEST
+
+Verify:
+
+```text
+1. Admin login
+2. Dashboard opens
+3. Today filter
+4. Week filter
+5. Year filter
+6. Custom date range
+7. Revenue calculated
+8. New users calculated
+9. Template usage calculated
+10. Template performance calculated
+11. Locations displayed
+12. Dashboard export works
+13. Templates page
+14. Multi-category template creation
+15. Enable
+16. Disable
+17. Delete
+18. Category filtering
+19. Status filtering
+20. Created date filtering
+21. Categories page
+22. Create category
+23. Edit category
+24. Delete category
+25. Users page
+26. Search
+27. Filters
+28. Sorting
+29. Last-active filtering
+30. Edit
+31. Delete
+32. Multi-select
+33. Bulk actions
+```
+
+---
+
+# 113. REAL DATA REQUIREMENT
+
+No production UI should depend on:
+
+```text
+hardcoded user counts
+hardcoded revenue
+hardcoded template counts
+hardcoded ratings
+hardcoded locations
+hardcoded usage
+hardcoded customer names
+hardcoded payment success
+hardcoded invitation URLs
+```
+
+Demo mode may contain demo data.
+
+Production mode must use real data.
+
+Clearly separate:
+
+```text
+DEMO DATA
+```
+
+from:
+
+```text
+PRODUCTION DATA
+```
+
+---
+
+# 114. ENVIRONMENT VARIABLES
+
+Create a documented environment configuration for required services.
+
+Examples:
+
+```text
+DATABASE_URL
+SUPABASE_URL
+SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+RAZORPAY_KEY_ID
+RAZORPAY_KEY_SECRET
+RAZORPAY_WEBHOOK_SECRET
+STORAGE_ENDPOINT
+STORAGE_ACCESS_KEY
+STORAGE_SECRET_KEY
+EMAIL_API_KEY
+EMAIL_FROM
+PUBLIC_APP_URL
+```
+
+Never commit secrets.
+
+Never expose server secrets to client bundles.
+
+Use the actual existing environment variable names if the project already has them.
+
+---
+
+# 115. DEPLOYMENT
+
+The application should be deployable to the existing chosen infrastructure.
+
+The architecture should support:
+
+```text
+frontend/application
+database
+object storage
+CDN
+email provider
+Razorpay
+background jobs
+```
+
+Do not make local-only assumptions.
+
+---
+
+# 116. LOGGING
+
+Implement structured server-side logging for:
+
+```text
+payment failures
+upload failures
+template validation
+publishing failures
+email failures
+authentication failures
+admin destructive actions
+```
+
+Do not log sensitive credentials or payment secrets.
+
+---
+
+# 117. ERROR MONITORING
+
+If the project already has an error monitoring system, integrate with it.
+
+Otherwise create a clean abstraction so one can be added later.
+
+---
+
+# 118. IMPLEMENTATION PHASES
+
+Implement in phases.
+
+## PHASE 1
+
+Foundation:
+
+```text
+Project inspection
+Database inspection
+Authentication
+Roles
+Core schema
+Storage
+Environment
+```
+
+Do not start by rewriting every HTML file.
+
+---
+
+## PHASE 2
+
+Public UI:
+
+```text
+Landing page
+Templates
+Template detail
+Demo
+Pricing
+FAQ
+Navigation
+```
+
+Connect to real template data.
+
+---
+
+## PHASE 3
+
+Guest Builder:
+
+```text
+Guest session
+Draft
+Template selection
+Couple
+Media
+Wedding details
+Location
+Email
+Preview
+```
+
+---
+
+## PHASE 4
+
+Payments:
+
+```text
+Orders
+Razorpay
+Payment verification
+Webhook
+Idempotency
+```
+
+---
+
+## PHASE 5
+
+Publishing:
+
+```text
+Invitation
+Slug
+Template version
+Public runtime
+Expiration
+```
+
+---
+
+## PHASE 6
+
+Email + Sharing:
+
+```text
+Payment email
+Invitation URL email
+Copy URL
+Native Share
+Resend
+```
+
+---
+
+## PHASE 7
+
+Customer Account:
+
+```text
+Explore
+Favorites
+My Invitations
+Edit
+Share
+Expiration
+Account access
+```
+
+---
+
+## PHASE 8
+
+Admin:
+
+```text
+Dashboard
+Templates
+Categories
+Users
+Filters
+Bulk actions
+Export
+```
+
+---
+
+## PHASE 9
+
+Security:
+
+```text
+RLS
+Authorization
+Upload security
+Rate limiting
+CSP
+Input validation
+```
+
+---
+
+## PHASE 10
+
+Testing:
+
+```text
+Unit
+Integration
+E2E
+Mobile
+Desktop
+Payment
+Expiration
+Security
+```
+
+---
+
+# 119. DO NOT STOP AT UI
+
+The most important instruction:
+
+**Do not stop after converting the Stitch HTML into React components.**
+
+The final result must have real:
+
+```text
+database
+authentication
+authorization
+API
+storage
+template system
+guest sessions
+invitation builder
+media uploads
+payments
+Razorpay verification
+email
+sharing
+publishing
+expiration
+favorites
+admin
+analytics
+filters
+exports
+```
+
+---
+
+# 120. DO NOT FAKE FUNCTIONALITY
+
+Do not implement:
+
+```text
+button → console.log()
+button → alert("success")
+fake payment success
+fake database response
+hardcoded dashboard
+fake URL
+fake email
+fake upload
+fake template selection
+```
+
+Every important interaction must be connected to the actual application backend.
+
+---
+
+# 121. KEEP THE STITCH DESIGN
+
+The objective is:
+
+```text
+Stitch UI
+      +
+Production Application Architecture
+      =
+Fully Functional Product
+```
+
+Not:
+
+```text
+Stitch UI
+      ↓
+Generic redesigned application
+```
+
+Do not replace the visual design with a generic dashboard or generic SaaS UI.
+
+---
+
+# 122. FIX DEMO-ONLY CONTENT
+
+The supplied HTML contains many visual/demo artifacts.
+
+Examples include:
+
+```text
+fake names
+fake template counts
+fake ratings
+fake user counts
+fake performance claims
+fake dates
+fake URLs
+fake locations
+fake payment values
+```
+
+Replace these with real data when the corresponding functionality is implemented.
+
+Where a value is purely illustrative, keep it only in explicit Demo Mode.
+
+---
+
+# 123. DO NOT TRUST HTML BUSINESS LOGIC
+
+The HTML is a UI specification.
+
+It is NOT the security model.
+
+It is NOT the database model.
+
+It is NOT the payment implementation.
+
+It is NOT the authorization system.
+
+It is NOT the source of truth for prices.
+
+It is NOT the source of truth for user identity.
+
+It is NOT the source of truth for invitation status.
+
+Implement all critical business logic server-side.
+
+---
+
+# 124. FINAL PRODUCT ARCHITECTURE
+
+The finished platform should conceptually be:
+
+```text
+                         PUBLIC WEBSITE
+                              │
+              ┌───────────────┼────────────────┐
+              │               │                │
+          Templates         Demo           Pricing
+              │
+              ▼
+       Choose Template
+              │
+       ┌──────┴──────┐
+       │             │
+     Guest        Logged In
+       │             │
+       └──────┬──────┘
+              ▼
+        Invitation Builder
+              │
+       ┌──────┼────────┐
+       │      │        │
+     Data   Media   Location
+       │      │        │
+       └──────┼────────┘
+              ▼
+           Preview
+              │
+              ▼
+       Payment Confirmation
+              │
+              ▼
+          RAZORPAY
+              │
+              ▼
+     Server Payment Verification
+              │
+              ▼
+         Active Invitation
+              │
+       ┌──────┼──────────────┐
+       │      │              │
+       ▼      ▼              ▼
+      URL   Email          Share
+       │
+       ▼
+   /w/[slug]
+       │
+       ▼
+ Template Runtime
+       │
+       ▼
+ Wedding Data + Media
+
+
+Logged-in Customer
+       │
+       ├── Explore
+       ├── Favorites
+       └── My Invitations
+                    │
+                    ├── View
+                    ├── Edit
+                    ├── Share
+                    ├── Copy URL
+                    └── Expiration
+
+
+Admin
+ │
+ ├── Dashboard
+ │     ├── Revenue
+ │     ├── Users
+ │     ├── Template Usage
+ │     ├── Performance
+ │     ├── Locations
+ │     └── Export
+ │
+ ├── Templates
+ │     ├── Upload
+ │     ├── Categories
+ │     ├── Enable
+ │     ├── Disable
+ │     ├── Delete
+ │     └── Bulk Actions
+ │
+ └── Settings
+       ├── Categories
+       └── Users
+```
+
+---
+
+# 125. FINAL ACCEPTANCE CRITERIA
+
+The application is not complete until all of the following are true:
+
+### Public
+
+```text
+□ Landing page works
+□ Navigation works
+□ Template marketplace works
+□ Template search works
+□ Multi-category filtering works
+□ Template demo works
+□ Pricing is real/configurable
+□ No fake production statistics
+```
+
+### Guest
+
+```text
+□ Guest can choose template without login
+□ Guest draft works
+□ Guest can enter details
+□ Guest can upload images
+□ Guest can select map location
+□ Guest can enter address
+□ Guest can enter email
+□ Guest can preview
+□ Payment modal works
+□ Razorpay works
+□ Payment verified server-side
+□ Invitation publishes after payment
+□ URL generated
+□ Email sent
+□ Share works
+□ Copy URL works
+```
+
+### Customer
+
+```text
+□ Register works
+□ Login works
+□ Explore is default
+□ Favorites work
+□ My Invitations works
+□ Edit works
+□ Share works
+□ Copy URL works
+□ Resend email works
+□ Expiration is displayed
+□ Expiration enforced
+□ Mobile works
+□ Desktop works
+```
+
+### Admin
+
+```text
+□ Admin authentication works
+□ Dashboard works
+□ Date filters work
+□ Revenue works
+□ New users works
+□ Template usage works
+□ Template performance works
+□ Locations work
+□ Export works
+□ Templates table works
+□ Multi-category assignment works
+□ Category filters work
+□ Status filters work
+□ Created date filters work
+□ Enable works
+□ Disable works
+□ Delete works
+□ Categories CRUD works
+□ Users table works
+□ User filters work
+□ User sorting works
+□ Last-active filter works
+□ Bulk selection works
+□ Bulk actions work
+```
+
+### Security
+
+```text
+□ Customer ownership enforced
+□ Admin authorization enforced
+□ RLS enforced where applicable
+□ Payment secrets protected
+□ Service-role keys protected
+□ Template runtime isolated
+□ Upload validation implemented
+□ ZIP security implemented
+□ Rate limiting implemented
+□ Server-side validation implemented
+```
+
+### Production
+
+```text
+□ No fake production data
+□ No dead buttons
+□ No placeholder API calls
+□ No console-only functionality
+□ No hardcoded payment success
+□ No hardcoded customer data
+□ No hardcoded invitation URLs
+□ No duplicate invitation creation
+□ Payment idempotency works
+□ Webhook handling works
+□ Expiration works
+□ Email failure does not destroy invitation
+□ Responsive UI works
+□ Build passes
+□ Type checking passes
+□ Lint passes
+□ Critical E2E tests pass
+```
+
+---
+
+# FINAL INSTRUCTION TO THE CODING AGENT
+
+Treat the four supplied Stitch HTML files as the **UI/UX reference and starting material**.
+
+Do not throw away their design.
+
+Do not blindly preserve their mock data.
+
+Do not blindly preserve their fake business claims.
+
+Do not blindly preserve their static JavaScript.
+
+Convert the designs into a properly architected full-stack application.
+
+Before implementation, inspect the existing codebase and determine what is already implemented.
+
+Then implement missing functionality incrementally.
+
+After each major phase:
+
+1. Run lint.
+2. Run typecheck.
+3. Run tests.
+4. Run production build.
+5. Fix errors before moving forward.
+6. Verify the affected UI visually.
+7. Verify the affected backend functionality.
+8. Verify authorization.
+9. Verify mobile responsiveness.
+
+Do not declare the application complete merely because the pages visually resemble the Stitch files.
+
+The definition of complete is:
+
+**The supplied UI designs work as a real wedding invitation platform from public template discovery through guest customization, payment, publishing, email, sharing, customer management, expiration, and administration.**

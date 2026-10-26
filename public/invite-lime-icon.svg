@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" width="360" height="360" role="img" aria-labelledby="title desc">
+  <title id="title">Invite Lime Concept A icon</title>
+  <desc id="desc">A minimalist interlocked IL-inspired mark in forest green and lime green, on a transparent background.</desc>
+  <!-- Lime accent at the top-left -->
+  <path fill="#A4D65E" d="M54 28h47c28 0 50 22 50 50v63c-13-18-30-31-51-39-28-10-46-28-46-55V28z"/>
+  <!-- Main left stem -->
+  <path fill="#174a35" d="M54 151h53c22 0 39 17 39 39v100c0 24 9 42 27 56h-35c-48 0-84-37-84-85V151z"/>
+  <!-- Main right stem, forming the L-like continuation -->
+  <path fill="#174a35" d="M170 94c36 17 61 45 72 79v96c0 29 14 48 42 57h-44c-42 0-70-30-70-72V94z"/>
+  <!-- Lime accent at the lower-right -->
+  <path fill="#A4D65E" d="M285 239h21c28 0 50 22 50 50v49c-16-19-35-30-59-34-28-5-45-25-45-52v-13h33z"/>
+  <!-- Smooth connecting foot -->
+  <path fill="#174a35" d="M222 263c0 27 14 45 41 51 15 3 29 11 40 24h-47c-43 0-69-27-69-70v-5h35z"/>
+</svg>

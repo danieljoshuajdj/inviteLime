@@ -1,0 +1,1238 @@
+<!-- Invite Lime Guest — Invitation Creation Flow & Payment Confirmation Modal -->
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"tertiary-fixed-dim":"#b7ccb9","inverse-primary":"#c0c6db","secondary-container":"#fed488","surface-container-lowest":"#ffffff","on-primary-container":"#7d8497","on-error":"#ffffff","tertiary":"#000000","on-secondary-fixed":"#261900","on-primary":"#ffffff","outline-variant":"#c6c6cd","tertiary-fixed":"#d3e8d5","surface-bright":"#fef9f2","on-surface":"#1d1c18","surface-container-high":"#ece7e1","on-tertiary-fixed-variant":"#394b3d","on-tertiary":"#ffffff","on-secondary-container":"#785a1a","secondary-fixed-dim":"#e9c176","error":"#ba1a1a","primary-container":"#141b2b","surface":"#fef9f2","primary-fixed":"#dce2f7","on-error-container":"#93000a","on-background":"#1d1c18","on-secondary-fixed-variant":"#5d4201","on-primary-fixed":"#141b2b","surface-variant":"#e6e2db","on-surface-variant":"#45464c","primary":"#000000","on-tertiary-container":"#758978","on-primary-fixed-variant":"#404758","background":"#fef9f2","secondary":"#775a19","surface-container-highest":"#e6e2db","inverse-surface":"#32302c","surface-container-low":"#f8f3ec","primary-fixed-dim":"#c0c6db","secondary-fixed":"#ffdea5","inverse-on-surface":"#f5f0e9","surface-container":"#f2ede6","on-tertiary-fixed":"#0e1f13","on-secondary":"#ffffff","tertiary-container":"#0e1f13","outline":"#76777d","surface-tint":"#575e70","error-container":"#ffdad6","surface-dim":"#ded9d3"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"margin-mobile":"1.25rem",gutter:"1.5rem","space-xs":"0.25rem","space-xl":"2.5rem","space-lg":"1.75rem","space-2xl":"4rem","space-md":"1rem",margin:"3rem","space-sm":"0.5rem","gutter-mobile":"1rem"},fontFamily:{"display-hero-mobile":["Playfair Display"],"label-lg":["Plus Jakarta Sans"],"label-sm":["Plus Jakarta Sans"],"headline-lg-mobile":["Playfair Display"],"body-lg":["Plus Jakarta Sans"],"headline-sm":["Playfair Display"],"headline-lg":["Playfair Display"],"body-md":["Plus Jakarta Sans"],"display-hero":["Playfair Display"],"label-md":["Plus Jakarta Sans"],"headline-md":["Playfair Display"],"body-sm":["Plus Jakarta Sans"]},fontSize:{"display-hero-mobile":["38px",{lineHeight:"46px",letterSpacing:"-0.01em",fontWeight:"400"}],"label-lg":["14px",{lineHeight:"20px",letterSpacing:"0.04em",fontWeight:"600"}],"label-sm":["10px",{lineHeight:"14px",letterSpacing:"0.08em",fontWeight:"700"}],"headline-lg-mobile":["28px",{lineHeight:"36px",fontWeight:"500"}],"body-lg":["18px",{lineHeight:"28px",fontWeight:"400"}],"headline-sm":["20px",{lineHeight:"28px",fontWeight:"600"}],"headline-lg":["36px",{lineHeight:"44px",letterSpacing:"-0.01em",fontWeight:"500"}],"body-md":["15px",{lineHeight:"24px",fontWeight:"400"}],"display-hero":["56px",{lineHeight:"64px",letterSpacing:"-0.02em",fontWeight:"400"}],"label-md":["12px",{lineHeight:"16px",letterSpacing:"0.06em",fontWeight:"600"}],"headline-md":["26px",{lineHeight:"34px",fontWeight:"500"}],"body-sm":["13px",{lineHeight:"20px",fontWeight:"400"}]}}}};</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 w-full z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-20 max-w-7xl mx-auto px-margin flex items-center justify-between gap-gutter"><div class="flex items-center gap-space-xl"><a class="flex flex-col group" data-path="atelier-home" href="#"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface group-hover:text-secondary transition-colors">Invite Lime Atelier</span><span class="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant -mt-1">Fine Bridal &amp; Stationery</span></a><nav class="hidden lg:flex items-center gap-space-lg" data-active-classes="text-on-surface font-semibold underline underline-offset-8 decoration-secondary"><a aria-current="page" class="transition-colors uppercase tracking-wider text-on-surface font-semibold underline underline-offset-8 decoration-secondary" data-path="explore-templates" href="#">Explore Templates</a><a class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors uppercase tracking-wider" data-path="how-it-works" href="#">How It Works</a><a class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors uppercase tracking-wider" data-path="real-weddings" href="#">Real Weddings</a></nav></div><div class="flex items-center gap-space-md"><div class="hidden sm:flex items-center gap-space-xs px-space-sm py-space-xs bg-surface-container-high rounded-full"><span class="material-symbols-outlined text-[14px] text-secondary">sync_saved_locally</span><span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Guest Session (Draft Auto-Saved)</span></div><div class="flex items-center gap-space-sm pl-space-xs"><a class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface px-space-sm py-space-xs transition-colors uppercase tracking-wider" data-path="sign-in" href="#">Sign In</a><a class="hidden md:inline-flex items-center justify-center px-space-md py-space-sm bg-primary text-on-primary font-label-md text-label-md rounded hover:bg-surface-variant hover:text-on-surface transition-all shadow-[0_2px_8px_rgba(17,24,39,0.06)]" data-path="all-designs" href="#">+ Browse All Designs</a><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></div></header><main class="w-full pt-20 bg-surface min-h-screen"><div class="flex flex-col w-full relative">
+<!-- Top Stepper Header Navigation -->
+<div class="w-full bg-surface-container-low shadow-sm">
+<div class="max-w-7xl mx-auto px-margin py-space-md">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+<!-- Breadcrumb & Suite Meta -->
+<div>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm uppercase tracking-widest">
+<span>Atelier Suites</span>
+<span class="material-symbols-outlined text-[12px]">chevron_right</span>
+<span class="text-secondary font-semibold">Mughal Archival Series</span>
+<span class="material-symbols-outlined text-[12px]">chevron_right</span>
+<span class="text-on-surface font-bold">Session gst_8492</span>
+</div>
+<h1 class="font-headline-sm text-headline-sm text-on-surface mt-space-xs tracking-tight">Royal Mughal Palace Suite</h1>
+</div>
+<!-- Flow State Badge -->
+<div class="flex items-center gap-space-sm bg-surface-container-highest/60 px-space-md py-space-xs rounded-full">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface font-medium uppercase tracking-wider">Guest Checkout Pipeline • Unsaved Account</span>
+<span class="font-label-sm text-label-sm px-space-xs py-0.5 bg-surface text-secondary font-semibold rounded">Express Pass</span>
+</div>
+</div>
+<!-- 5-Step Process Indicator -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-space-sm mt-space-lg pt-space-sm">
+<!-- Step 1 -->
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface font-semibold truncate">01. Couple Details</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate">Daniel &amp; Sarah</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface font-semibold truncate">02. Media Gallery</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate">6 Portraits Linked</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface font-semibold truncate">03. Venues &amp; Dates</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate">Falaknuma Palace</p>
+</div>
+</div>
+<!-- Step 4 -->
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface font-semibold truncate">04. Magic Link Contact</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate text-secondary font-medium">sarah.atelier@gmail.com</p>
+</div>
+</div>
+<!-- Step 5: Active -->
+<div class="flex items-center gap-space-xs col-span-2 md:col-span-1 bg-surface-container px-space-sm py-1.5 rounded-lg shadow-sm">
+<div class="w-7 h-7 rounded-full bg-secondary text-surface flex items-center justify-center font-label-sm text-label-sm font-bold shrink-0">
+            05
+          </div>
+<div class="min-w-0">
+<p class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface font-bold truncate">Checkout • Active</p>
+<p class="font-body-sm text-[11px] text-secondary font-semibold truncate">Confirm Ownership</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Studio Workspace Stage -->
+<div class="max-w-7xl mx-auto w-full px-margin py-space-xl">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- LEFT COLUMN: Simulator Device & Live Preview (Cols 1-5) -->
+<div class="lg:col-span-5 flex flex-col gap-space-md">
+<!-- Canvas Status & Tools -->
+<div class="flex items-center justify-between bg-surface-container-low px-space-md py-space-sm rounded-xl shadow-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px]">verified</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface">Runtime Simulator</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-[11px] px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded">60 FPS Render</span>
+<button class="text-secondary hover:text-on-surface transition-colors flex items-center gap-0.5 font-label-sm text-[11px]" type="button">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+              Adjust
+            </button>
+</div>
+</div>
+<!-- Phone Bezel Frame -->
+<div class="mx-auto w-full max-w-[390px] bg-primary rounded-[2.5rem] p-3 shadow-xl relative">
+<!-- Dynamic Island / Speaker Notch -->
+<div class="absolute top-5 left-1/2 -translate-x-1/2 w-28 h-4 bg-primary rounded-full z-30 flex items-center justify-between px-3">
+<span class="w-2.5 h-2.5 rounded-full bg-neutral-900"></span>
+<span class="w-2 h-2 rounded-full bg-neutral-800"></span>
+</div>
+<!-- Screen Container with Inner Scroll -->
+<div class="w-full bg-surface-container-lowest rounded-[2rem] overflow-hidden text-on-surface relative h-[680px] overflow-y-auto">
+<!-- Cover Art & Header Hero -->
+<div class="relative w-full h-80 bg-cover bg-center" data-alt="Exquisite royal Mughal palace courtyard with arched carved sandstone colonnades, fragrant marigold garlands, antique brass oil lamps, and a romantic sunset glow over reflecting lotus pools in Hyderabad, luxury bridal heritage aesthetic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDX6kGOi_8EXvHjQ0X3Sszx21RiWMPjZHJXDqtBQUG_x0RQ8hoqY6dlSkmdM5Q5PECpL42cSZOfhrgHROYGFX_m6JLP8TjM6RR00mTgWa7uWHzUtD--0UrjMtS8Lf2UNSoicbc1YXoMk52kJBILSwrlv-uRJFBvZkWqQkApxF3AEoaFq0839s5cd79ARf0rAStE53KdU255l5R3o82vAugX__zqwj7FsuGkhHef95Q7Q4FnsFN1IQTb')">
+<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/20"></div>
+<!-- Draft Overlay Badge -->
+<div class="absolute top-6 left-4 right-4 flex items-center justify-between z-10">
+<span class="bg-black/60 backdrop-blur-md text-surface font-label-sm text-[10px] px-2 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary-fixed"></span> Guest Draft
+                </span>
+<span class="bg-secondary/90 text-surface font-label-sm text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider">
+                  Mughal Gold
+                </span>
+</div>
+<!-- Typography Lockup -->
+<div class="absolute bottom-4 left-4 right-4 text-center text-surface">
+<p class="font-label-sm text-[11px] uppercase tracking-[0.25em] text-secondary-fixed">Celebration of Union</p>
+<h2 class="font-display-hero text-[32px] leading-tight text-white mt-1">Daniel &amp; Sarah</h2>
+<div class="w-12 h-0.5 bg-secondary-fixed mx-auto my-2 opacity-80"></div>
+<p class="font-label-md text-label-md tracking-wider text-surface/90">15 December 2026</p>
+<p class="font-body-sm text-[12px] text-surface/75">The Grand Falaknuma Palace, Hyderabad</p>
+</div>
+</div>
+<!-- Audio Player Bar inside Invite -->
+<div class="px-space-md py-space-sm bg-surface-container flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<button class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[16px]">play_arrow</span>
+</button>
+<div>
+<p class="font-label-sm text-[11px] font-semibold text-on-surface">Raag Yaman • Sitar Ambient</p>
+<p class="font-body-sm text-[10px] text-on-surface-variant">Royal Court Accompaniment</p>
+</div>
+</div>
+<!-- Mini SVG Waveform -->
+<div class="flex items-center gap-0.5 h-4">
+<span class="w-1 h-2 bg-secondary rounded-full"></span>
+<span class="w-1 h-3.5 bg-secondary rounded-full animate-pulse"></span>
+<span class="w-1 h-1.5 bg-secondary rounded-full"></span>
+<span class="w-1 h-4 bg-secondary rounded-full"></span>
+<span class="w-1 h-2.5 bg-secondary rounded-full"></span>
+</div>
+</div>
+<!-- Invitation Body Content -->
+<div class="p-space-md flex flex-col gap-space-md">
+<!-- Cordial Invitation Note -->
+<div class="text-center px-space-xs">
+<span class="material-symbols-outlined text-secondary text-[24px]">flare</span>
+<p class="font-headline-sm text-[17px] text-on-surface mt-1">Bismillah-ir-Rahman-ir-Rahim</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2 leading-relaxed">
+                  With profound joy and honor, we request your graceful presence as we celebrate the sacred union and Nikah of our beloved Daniel &amp; Sarah.
+                </p>
+</div>
+<!-- Itinerary Cards -->
+<div class="flex flex-col gap-space-sm">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">Celebration Itinerary</span>
+<!-- Event 1 -->
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded bg-secondary-fixed/40 text-on-secondary-fixed flex flex-col items-center justify-center shrink-0">
+<span class="font-label-sm text-[10px] uppercase font-bold">DEC</span>
+<span class="font-headline-sm text-[16px] -mt-1 font-bold">13</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<h4 class="font-label-md text-label-md font-bold text-on-surface">Mehendi &amp; Sangeet</h4>
+<span class="font-label-sm text-[10px] text-on-surface-variant">06:00 PM</span>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant">The Jade Gardens • Falaknuma</p>
+</div>
+</div>
+<!-- Event 2 -->
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-start gap-space-sm">
+<div class="w-10 h-10 rounded bg-primary text-on-primary flex flex-col items-center justify-center shrink-0">
+<span class="font-label-sm text-[10px] uppercase font-bold">DEC</span>
+<span class="font-headline-sm text-[16px] -mt-1 font-bold">15</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<h4 class="font-label-md text-label-md font-bold text-on-surface">Grand Nikah &amp; Banquet</h4>
+<span class="font-label-sm text-[10px] text-on-surface-variant">07:30 PM</span>
+</div>
+<p class="font-body-sm text-[11px] text-on-surface-variant">Durbar Hall • Imperial Courtyard</p>
+</div>
+</div>
+</div>
+<!-- Interactive RSVP Preview Module -->
+<div class="bg-surface-container p-space-sm rounded-xl">
+<span class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-secondary">mark_email_read</span>
+                  Guest RSVP Module (Live on Publish)
+                </span>
+<p class="font-body-sm text-[11px] text-on-surface-variant mt-1">Real-time dietary notes, plus-one registry &amp; WhatsApp guest notifications enabled.</p>
+<div class="mt-space-sm flex items-center justify-between bg-surface-container-lowest px-space-sm py-2 rounded">
+<span class="font-label-sm text-[11px] text-on-surface">Notify via WhatsApp Broadcast</span>
+<span class="w-8 h-4 bg-primary rounded-full relative inline-flex items-center px-0.5">
+<span class="w-3 h-3 bg-white rounded-full translate-x-3.5 transition-transform"></span>
+</span>
+</div>
+</div>
+</div>
+<!-- Footer Preview Notice -->
+<div class="bg-surface-container-high p-space-sm text-center">
+<p class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-widest">Invite Lime Atelier Protected Digital Asset</p>
+</div>
+</div>
+</div>
+<div class="text-center">
+<span class="font-body-sm text-[12px] text-on-surface-variant">Looking to tweak copy or imagery? </span>
+<button class="font-label-sm text-[12px] text-secondary font-semibold uppercase tracking-wider hover:underline" type="button">
+            Return to Step 3 (Venues)
+          </button>
+</div>
+</div>
+<!-- RIGHT COLUMN / CENTER STAGE: Modal Card (Cols 6-12) -->
+<div class="lg:col-span-7 flex flex-col">
+<!-- Floating Elevation Container simulating Modal focus -->
+<div class="w-full bg-surface-container-lowest rounded-2xl shadow-xl p-space-lg lg:p-space-xl relative overflow-hidden">
+<!-- Subtle Luxury Watermark Ornament -->
+<div class="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-secondary/5 blur-2xl pointer-events-none"></div>
+<!-- Dialog Top Badge -->
+<div class="flex items-center justify-between pb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">lock_open</span>
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary font-bold">Unauthenticated Checkout Session</span>
+</div>
+<span class="font-label-sm text-[11px] text-on-surface-variant bg-surface-container px-space-xs py-0.5 rounded">
+              Ref: #VO-MUG-8492
+            </span>
+</div>
+<!-- Modal Title Lockup -->
+<div class="mt-space-xs">
+<h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Own Your Invitation Suite</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-space-xs leading-relaxed">
+              You are purchasing the perpetual animated celebration suite for your wedding milestone. No upfront account registration or password required — your license is linked immediately to your email address.
+            </p>
+</div>
+<!-- Order & Suite Metadata Ledger -->
+<div class="mt-space-lg bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between pb-space-xs">
+<span class="font-label-md text-label-md font-semibold text-on-surface">Suite Specification</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-secondary-fixed text-on-secondary-fixed font-bold rounded">Royalty Tier</span>
+</div>
+<!-- Line Items Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md py-space-xs">
+<div>
+<p class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface-variant">Archival Template</p>
+<p class="font-body-md font-semibold text-on-surface">Royal Mughal Palace (Gold Foil)</p>
+</div>
+<div>
+<p class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface-variant">Honored Couple</p>
+<p class="font-body-md font-semibold text-on-surface">Daniel &amp; Sarah</p>
+</div>
+<div>
+<p class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface-variant">Ceremony Date</p>
+<p class="font-body-md font-semibold text-on-surface">15 December 2026</p>
+</div>
+<div>
+<p class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface-variant">Archival Window</p>
+<p class="font-body-md font-semibold text-on-surface flex items-center gap-1">
+                  Active until 15 Feb 2027
+                  <span class="material-symbols-outlined text-[14px] text-secondary" title="Calculated: Wedding + 2 Full Months">info</span>
+</p>
+</div>
+</div>
+<!-- Magic Link Dispatch Card -->
+<div class="mt-space-xs bg-surface-container-lowest p-space-sm rounded-lg flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]">mark_email_unread</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="font-label-sm text-[11px] uppercase tracking-wider text-on-surface font-semibold">Immediate Dispatch Recipient</p>
+<p class="font-body-sm text-[13px] text-secondary font-bold truncate">sarah.atelier@gmail.com</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant">Your passwordless magic link to edit &amp; inspect RSVPs will be routed here upon confirmation.</p>
+</div>
+</div>
+</div>
+<!-- Pricing & Financial Summary -->
+<div class="mt-space-lg flex flex-col gap-space-xs">
+<span class="font-label-md text-label-md font-bold uppercase tracking-wider text-on-surface">Investment Summary</span>
+<div class="flex items-center justify-between text-body-sm text-on-surface-variant pt-space-xs">
+<span>Bespoke Interactive Suite License</span>
+<span class="font-medium text-on-surface">₹4,237.00</span>
+</div>
+<div class="flex items-center justify-between text-body-sm text-on-surface-variant">
+<span>Standard Matrimonial Goods &amp; Services Tax (18% GST)</span>
+<span class="font-medium text-on-surface">₹762.00</span>
+</div>
+<div class="flex items-center justify-between text-body-sm text-on-surface-variant">
+<span>Global CDN Hosting &amp; WhatsApp RSVP Webhook Bridge</span>
+<span class="font-label-sm text-label-sm text-secondary font-bold uppercase">Complimentary</span>
+</div>
+<!-- Grand Total Bar -->
+<div class="mt-space-sm pt-space-sm bg-surface-container px-space-md py-space-sm rounded-xl flex items-center justify-between">
+<div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-bold">Total Payable</span>
+<p class="font-body-sm text-[11px] text-on-surface-variant">Inclusive of all federal taxes &amp; Razorpay banking charges</p>
+</div>
+<div class="text-right">
+<span class="font-display-hero text-[34px] leading-tight text-on-surface font-bold">₹4,999</span>
+<p class="font-label-sm text-[10px] text-secondary uppercase font-bold tracking-widest">INR Settlement</p>
+</div>
+</div>
+</div>
+<!-- Payment Trigger Actions -->
+<div class="mt-space-xl flex flex-col sm:flex-row items-center gap-space-md">
+<!-- Primary Razorpay CTA -->
+<button class="w-full sm:flex-1 py-space-md px-space-lg bg-primary hover:bg-neutral-800 text-on-primary rounded font-label-lg text-label-lg uppercase tracking-wider flex items-center justify-center gap-space-xs transition-all shadow-md active:scale-[0.99] group" type="button">
+<span class="material-symbols-outlined text-[20px] text-secondary-fixed">shield_lock</span>
+<span>Pay ₹4,999 via Razorpay</span>
+<span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</button>
+<!-- Secondary Back Action -->
+<button class="w-full sm:w-auto py-space-md px-space-lg bg-surface-container hover:bg-surface-container-high text-on-surface rounded font-label-md text-label-md uppercase tracking-wider transition-colors text-center" type="button">
+              Back to Edit
+            </button>
+</div>
+<!-- Razorpay Security Footer Strip -->
+<div class="mt-space-lg pt-space-md bg-surface-container-lowest flex flex-col md:flex-row items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-sm text-[11px]">
+<span class="material-symbols-outlined text-[16px] text-secondary">encrypted</span>
+<span>Protected by Razorpay AES-256 Bit Payment Gateway</span>
+</div>
+<div class="flex items-center gap-space-sm text-on-surface-variant font-label-sm text-[11px]">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Instant CDN Webhook</span>
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Zero-Password Onboarding</span>
+</div>
+</div>
+</div>
+<!-- Micro Feature Badges Row -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-space-sm mt-space-md">
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">bolt</span>
+<div class="min-w-0">
+<p class="font-label-sm text-[11px] font-bold text-on-surface uppercase">Instant Domain</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate">Live at invite-lime.me/ds-26</p>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">history_edu</span>
+<div class="min-w-0">
+<p class="font-label-sm text-[11px] font-bold text-on-surface uppercase">Archival Pledge</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate">Retained through Feb 2027</p>
+</div>
+</div>
+<div class="bg-surface-container-low p-space-sm rounded-lg flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[20px]">share</span>
+<div class="min-w-0">
+<p class="font-label-sm text-[11px] font-bold text-on-surface uppercase">Export Package</p>
+<p class="font-body-sm text-[11px] text-on-surface-variant truncate">Print-ready PDF + Web</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Explainer Reassurance Banner (Guest Flow B Architecture) -->
+<div class="w-full bg-surface-container py-space-xl mt-space-2xl">
+<div class="max-w-7xl mx-auto px-margin">
+<div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-space-lg bg-surface-container-lowest p-space-lg lg:p-space-xl rounded-2xl shadow-sm">
+<div class="flex items-start gap-space-md max-w-3xl">
+<div class="w-12 h-12 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[26px] text-secondary">vpn_key_alert</span>
+</div>
+<div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary font-bold">The Guest Checkout Assurance</span>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-label-sm text-[10px] uppercase font-semibold">No Upfront Password</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mt-1">Effortless Ownership via Passwordless Magic Token</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2 leading-relaxed">
+              Atelier Invite Lime does not compel guests to configure complex user accounts or passwords before checkout. Following successful payment, our transactional engine instantly creates your secure suite vault and issues an authenticated Magic Access Link to <span class="font-semibold text-on-surface">sarah.atelier@gmail.com</span>. You may claim, edit, track guest RSVPs, and view analytics at any hour.
+            </p>
+</div>
+</div>
+<div class="w-full lg:w-auto shrink-0 flex flex-col sm:flex-row lg:flex-col gap-space-xs text-right">
+<div class="flex items-center lg:justify-end gap-space-xs text-on-surface font-label-sm text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>24/7 Concierge Support on WhatsApp</span>
+</div>
+<div class="flex items-center lg:justify-end gap-space-xs text-on-surface font-label-sm text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>100% Full Archival Preservation</span>
+</div>
+<div class="flex items-center lg:justify-end gap-space-xs text-on-surface font-label-sm text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>Encrypted Guest Privacy Vault</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div></main><footer class="w-full bg-surface-container-low"><div class="max-w-7xl mx-auto px-margin pt-space-2xl pb-space-xl"><div class="grid grid-cols-1 md:grid-cols-4 gap-space-xl pb-space-xl"><div class="md:col-span-1"><span class="font-headline-sm text-headline-sm text-on-surface">Invite Lime Atelier</span><p class="font-body-sm text-body-sm text-on-surface-variant mt-space-sm leading-relaxed">Curating bespoke wedding stationery suites and tactile guest experiences for elevated matrimonial celebrations.</p></div><div><span class="font-label-md text-label-md uppercase tracking-widest text-on-surface">Concierge Studio</span><ul class="mt-space-md space-y-space-xs font-body-sm text-body-sm text-on-surface-variant"><li><a class="hover:text-on-surface transition-colors" data-path="concierge-support" href="#">Concierge Support</a></li><li><a class="hover:text-on-surface transition-colors" data-path="bespoke-consultations" href="#">Private Consultations</a></li><li><a class="hover:text-on-surface transition-colors" data-path="paper-sample-kit" href="#">Paper Sample Kits</a></li></ul></div><div><span class="font-label-md text-label-md uppercase tracking-widest text-on-surface">Heritage &amp; Trust</span><ul class="mt-space-md space-y-space-xs font-body-sm text-body-sm text-on-surface-variant"><li><a class="hover:text-on-surface transition-colors" data-path="archival-guarantee" href="#">Archival Guarantee</a></li><li><a class="hover:text-on-surface transition-colors" data-path="craftsmanship-pledge" href="#">Letterpress Craftsmanship</a></li><li><a class="hover:text-on-surface transition-colors" data-path="environmental-charter" href="#">Cotton Rag Charter</a></li></ul></div><div><span class="font-label-md text-label-md uppercase tracking-widest text-on-surface">Privacy &amp; Policy</span><ul class="mt-space-md space-y-space-xs font-body-sm text-body-sm text-on-surface-variant"><li><a class="hover:text-on-surface transition-colors" data-path="privacy-terms" href="#">Privacy Terms</a></li><li><a class="hover:text-on-surface transition-colors" data-path="guest-data-security" href="#">Guest Vault Security</a></li><li><a class="hover:text-on-surface transition-colors" data-path="copyright-terms" href="#">Intellectual Property</a></li></ul></div></div><div class="pt-space-lg flex flex-col md:flex-row items-center justify-between gap-space-sm font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider"><div>© 2025 Invite Lime Atelier Inc. All rights reserved.</div><div class="flex items-center gap-space-md"><span class="flex items-center gap-space-xs"><span class="material-symbols-outlined text-[14px] text-secondary">verified</span> Certified Museum Grade Archival</span></div></div></div></footer></body></html>
+
+<!-- Invite Lime Customer — Payment Success, Invitation Sharing & Email Delivery -->
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..700&amp;family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"error":"#ba1a1a","tertiary":"#000000","secondary-container":"#fed488","primary-fixed-dim":"#c0c6db","on-tertiary":"#ffffff","on-error":"#ffffff","surface-container-highest":"#e6e2db","on-primary-fixed":"#141b2b","on-secondary-container":"#785a1a","primary":"#000000","on-primary-container":"#7d8497","inverse-surface":"#32302c","on-secondary-fixed-variant":"#5d4201","tertiary-fixed-dim":"#b7ccb9","on-surface-variant":"#45464c","primary-container":"#141b2b","surface":"#fef9f2","on-tertiary-fixed":"#0e1f13","on-tertiary-container":"#758978","on-background":"#1d1c18","secondary":"#775a19","surface-bright":"#fef9f2","background":"#fef9f2","surface-container-low":"#f8f3ec","surface-container-high":"#ece7e1","surface-tint":"#575e70","primary-fixed":"#dce2f7","on-secondary":"#ffffff","outline-variant":"#c6c6cd","outline":"#76777d","on-error-container":"#93000a","surface-dim":"#ded9d3","error-container":"#ffdad6","on-surface":"#1d1c18","on-secondary-fixed":"#261900","on-primary":"#ffffff","on-primary-fixed-variant":"#404758","secondary-fixed-dim":"#e9c176","inverse-on-surface":"#f5f0e9","surface-container":"#f2ede6","inverse-primary":"#c0c6db","surface-container-lowest":"#ffffff","tertiary-container":"#0e1f13","secondary-fixed":"#ffdea5","on-tertiary-fixed-variant":"#394b3d","tertiary-fixed":"#d3e8d5","surface-variant":"#e6e2db"},borderRadius:{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},spacing:{"space-sm":"0.5rem","gutter-mobile":"1rem","space-xl":"2.5rem","gutter":"1.5rem","space-lg":"1.75rem","space-xs":"0.25rem","margin":"3rem","space-2xl":"4rem","space-md":"1rem","margin-mobile":"1.25rem"},fontFamily:{"headline-sm":["Playfair Display"],"headline-lg":["Playfair Display"],"headline-lg-mobile":["Playfair Display"],"display-hero":["Playfair Display"],"display-hero-mobile":["Playfair Display"],"headline-md":["Playfair Display"],"body-md":["Plus Jakarta Sans"],"body-sm":["Plus Jakarta Sans"],"label-lg":["Plus Jakarta Sans"],"label-md":["Plus Jakarta Sans"],"label-sm":["Plus Jakarta Sans"],"body-lg":["Plus Jakarta Sans"]},fontSize:{"headline-sm":["20px",{"lineHeight":"28px","fontWeight":"600"}],"headline-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.01em","fontWeight":"500"}],"headline-lg-mobile":["28px",{"lineHeight":"36px","fontWeight":"500"}],"display-hero":["56px",{"lineHeight":"64px","letterSpacing":"-0.02em","fontWeight":"400"}],"display-hero-mobile":["38px",{"lineHeight":"46px","letterSpacing":"-0.01em","fontWeight":"400"}],"headline-md":["26px",{"lineHeight":"34px","fontWeight":"500"}],"body-md":["15px",{"lineHeight":"24px","fontWeight":"400"}],"body-sm":["13px",{"lineHeight":"20px","fontWeight":"400"}],"label-lg":["14px",{"lineHeight":"20px","letterSpacing":"0.04em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.06em","fontWeight":"600"}],"label-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.08em","fontWeight":"700"}],"body-lg":["18px",{"lineHeight":"28px","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-20 max-w-7xl mx-auto px-gutter flex items-center justify-between gap-space-lg"><div class="flex items-center gap-space-lg"><a class="font-headline-sm text-headline-sm text-primary tracking-tight transition-opacity hover:opacity-80" data-path="explore" href="#">Invite Lime Atelier</a><div class="h-4 w-px bg-surface-container-highest hidden sm:block"></div><span class="font-label-sm text-label-sm text-secondary uppercase hidden sm:inline-block tracking-widest">Bespoke Suite</span></div><nav class="hidden md:flex items-center gap-space-sm" data-active-classes="bg-primary text-on-primary rounded-lg shadow-sm"><a class="px-space-md py-space-sm font-label-md text-label-md uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-colors rounded-lg" data-path="explore" href="#">Explore</a><a class="px-space-md py-space-sm font-label-md text-label-md uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-colors rounded-lg flex items-center gap-space-xs" data-path="favorites" href="#"><span>Favorites</span><span class="bg-secondary-container text-on-secondary-container px-space-xs py-0.5 rounded-full font-label-sm text-label-sm leading-none">3</span></a><a aria-current="page" class="px-space-md py-space-sm font-label-md uppercase tracking-wider transition-colors bg-primary text-on-primary rounded-lg shadow-sm" data-path="my-invitations" href="#">My Invitations</a></nav><div class="flex items-center gap-space-md"><div class="hidden lg:flex flex-col text-right"><span class="font-label-md text-label-md text-on-surface font-medium">Sarah &amp; Daniel</span><span class="font-label-sm text-label-sm text-on-surface-variant">Autumn Solstice 2025</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-20 bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<!-- Subtle Ambient Glow Background Ornaments -->
+<div class="relative w-full max-w-7xl mx-auto px-gutter py-space-xl overflow-hidden">
+<div class="absolute -top-32 right-10 w-96 h-96 rounded-full bg-secondary-container/20 blur-3xl pointer-events-none -z-10"></div>
+<div class="absolute top-1/2 -left-32 w-80 h-80 rounded-full bg-tertiary-fixed/30 blur-3xl pointer-events-none -z-10"></div>
+<!-- Top Status / Stepper Breadcrumb -->
+<div class="w-full flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md mb-space-xl pb-space-lg border-b border-surface-container-highest/60">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="font-label-sm text-label-sm tracking-widest text-secondary uppercase bg-secondary-container/40 px-space-sm py-1 rounded-full">Step 05</span>
+<span class="text-on-surface-variant font-label-md text-label-md">/</span>
+<span class="font-headline-sm text-headline-sm text-primary tracking-tight">Order Fulfilled &amp; Published</span>
+</div>
+<div class="flex items-center gap-space-sm bg-surface-container-lowest shadow-sm px-space-md py-space-xs rounded-full">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+</span>
+<span class="font-label-md text-label-md text-on-surface font-medium">Razorpay Verified</span>
+<span class="text-outline-variant text-label-sm">•</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">Order #VC-98421</span>
+</div>
+</div>
+<!-- Main Content 12-Column Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start">
+<!-- Left Column (Desktop 5 cols): Mobile Hardware Frame & Interactive Preview -->
+<div class="lg:col-span-5 flex flex-col items-center">
+<!-- Live Status Floating Strip -->
+<div class="w-full max-w-sm flex items-center justify-between px-space-md py-space-xs mb-space-md bg-surface-container-lowest rounded-full shadow-sm">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface tracking-wider uppercase">Live on Global Edge CDN</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-mono">24ms TTL</span>
+</div>
+<!-- Luxury Smartphone Canvas -->
+<div class="relative w-full max-w-sm rounded-[2.5rem] p-3 bg-surface-container-highest shadow-[0_20px_50px_-10px_rgba(0,0,0,0.12)]">
+<!-- Outer Chassis Border Layer -->
+<div class="relative w-full rounded-[2rem] overflow-hidden bg-surface-container-lowest flex flex-col shadow-inner">
+<!-- Hardware Notch Speaker Pill -->
+<div class="absolute top-3 left-1/2 -translate-x-1/2 w-28 h-4 bg-primary rounded-full z-30 flex items-center justify-center">
+<div class="w-2 h-2 rounded-full bg-surface-variant/30 mr-2"></div>
+<div class="w-8 h-1 rounded-full bg-surface-variant/40"></div>
+</div>
+<!-- Invitation Screen Contents (Scrollable or Pristine Card View) -->
+<div class="relative w-full aspect-[9/18.5] overflow-y-auto pt-10 pb-8 px-6 flex flex-col items-center justify-between text-center bg-gradient-to-b from-[#fdfbf7] via-surface to-[#f7f2ea]">
+<!-- Floral/Mughal Motif Accent SVG -->
+<div class="w-16 h-10 text-secondary opacity-70 mb-2">
+<svg class="w-full h-full" fill="currentColor" viewbox="0 0 100 60">
+<path d="M50 0 C45 20 10 25 10 40 C10 50 30 55 50 35 C70 55 90 50 90 40 C90 25 55 20 50 0 Z" opacity="0.4"></path>
+<circle cx="50" cy="18" fill="currentColor" r="4"></circle>
+<path d="M35 32 C40 38 45 42 50 42 C55 42 60 38 65 32" fill="none" stroke="currentColor" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Typography Headings -->
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm uppercase tracking-[0.25em] text-secondary font-semibold">The Royal Mughal Palace</span>
+<span class="text-xs text-on-surface-variant italic mt-1 font-headline-sm">Together with their families</span>
+<div class="my-4">
+<h3 class="font-headline-lg text-headline-lg text-primary tracking-tight leading-none">Daniel</h3>
+<span class="font-headline-sm text-headline-sm text-secondary italic block my-1">&amp;</span>
+<h3 class="font-headline-lg text-headline-lg text-primary tracking-tight leading-none">Sarah</h3>
+</div>
+<p class="font-label-md text-label-md text-on-surface-variant max-w-[200px] leading-relaxed">
+                  Request the pleasure of your company at the celebration of their auspicious wedding.
+                </p>
+</div>
+<!-- High-Fidelity Architectural Palace Render Placeholder -->
+<div class="w-full my-4 rounded-xl overflow-hidden shadow-md relative group">
+<img class="w-full h-44 object-cover transform transition-transform duration-700 group-hover:scale-105" data-alt="Intricate golden hour view of Taj Falaknuma Palace courtyard in Hyderabad with ivory marble arches, royal fountains, delicate floral arrangements in rose gold urns, and atmospheric ambient evening lanterns." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqfbVa4kK7wKqCouw3Wd-crjUdHZ5_eEv8-8ohz5tYdm4S2KcA1BbL7axF7U9EF4AO6bniVEHt8TT9o7FTNrG2BelDogBjUxKzJ6P-V4MVJGTgkGJgQ11Tyqz8VMIQakIQtZTbK3ztgMOtNoh4kcwnNRaKhQEjNOywK-VNI01yqj_BCrvoF7pC-KFxvdUUtGwbCCD3ddW9OkGmtKIDDcY5w4S5e3OWDi6g-NiD4nr4cpBoXtPVasBY"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-2 left-3 right-3 text-left">
+<span class="text-[10px] text-on-primary font-mono tracking-widest uppercase">Venue</span>
+<p class="font-label-md text-label-md text-on-primary font-medium truncate">Taj Falaknuma Palace, Hyderabad</p>
+</div>
+</div>
+<!-- Ceremony Metadata -->
+<div class="w-full flex flex-col gap-1 items-center pb-2">
+<span class="font-label-sm text-label-sm tracking-widest text-primary uppercase font-bold">15 December 2026</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Half Past Six in the Evening</span>
+<div class="mt-3 px-space-md py-1.5 rounded-full bg-primary text-on-primary text-xs font-label-md uppercase tracking-wider">
+                  Open Digital RSVP Suite
+                </div>
+</div>
+<!-- Subtle Micro-Ornament -->
+<div class="w-full pt-3 border-t border-surface-container-highest/80 flex items-center justify-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">ENCRYPTED GUEST PASS</span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+</div>
+</div>
+</div>
+</div>
+<!-- Audio Soundtrack Indicator & External View Trigger -->
+<div class="w-full max-w-sm mt-space-md flex flex-col gap-space-xs">
+<div class="w-full flex items-center justify-between px-space-md py-space-sm bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="flex items-center gap-space-xs text-on-surface">
+<span class="material-symbols-outlined text-[20px] text-secondary animate-spin" style="animation-duration: 8s;">music_note</span>
+<div class="flex flex-col text-left">
+<span class="font-label-sm text-label-sm font-semibold">Ambient Shehnai Soundtrack</span>
+<span class="text-[11px] text-on-surface-variant leading-none">Autoplay On Gesture · 320kbps AAC</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
+</div>
+<a class="w-full inline-flex items-center justify-center gap-space-xs py-space-sm bg-surface-container-low hover:bg-surface-container text-primary rounded-xl font-label-md text-label-md transition-colors shadow-sm" href="https://invite-lime.com/w/daniel-sarah-2026" rel="noopener noreferrer" target="_blank">
+<span>View Live Invitation</span>
+<span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</a>
+</div>
+</div>
+<!-- Right Column (Desktop 7 cols): Delivery & Multi-Channel Sharing Suite -->
+<div class="lg:col-span-7 flex flex-col gap-space-lg">
+<!-- 1. Primary Success Hero Card -->
+<div class="w-full bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-md relative overflow-hidden">
+<!-- Subtle Decorative Foil Trim -->
+<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary-container via-secondary to-secondary-container"></div>
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary mb-1">Publication Confirmed</span>
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-tight">Your Wedding Invitation is Ready &amp; Live!</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2 max-w-xl">
+                Your bespoke animated invitation suite is published and accessible worldwide on any smartphone, tablet, or modern desktop browser.
+              </p>
+</div>
+<div class="w-12 h-12 rounded-full bg-secondary-container/40 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[26px]" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+</div>
+<!-- Instant Click-to-Copy URL Box -->
+<div class="mt-space-xs p-space-xs bg-surface-container-low rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shadow-inner">
+<div class="flex items-center gap-space-xs px-space-sm py-2 overflow-hidden">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] shrink-0">link</span>
+<span class="font-label-md text-label-md text-primary font-mono select-all truncate" id="invitationUrl">https://invite-lime.com/w/daniel-sarah-2026</span>
+</div>
+<button class="px-space-lg py-space-sm bg-primary hover:bg-surface-variant hover:text-primary text-on-primary rounded-lg font-label-md text-label-md tracking-wider uppercase transition-all duration-200 shrink-0 flex items-center justify-center gap-space-xs shadow-sm" id="copyBtn" onclick="copyInvitationLink()">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+<span id="copyBtnText">Copy Link</span>
+</button>
+</div>
+</div>
+<!-- 2. Primary Sharing Action Deck -->
+<div class="w-full bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-md">
+<div class="flex flex-col">
+<h2 class="font-headline-sm text-headline-sm text-primary">Direct Broadcast &amp; Guest Sharing</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Disseminate to guests individually or broadcast through your celebration channels.</p>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<!-- Share Invitation Button -->
+<button class="w-full px-space-lg py-3.5 bg-primary hover:bg-neutral-800 text-on-primary rounded-lg font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-space-sm shadow-md transition-all" onclick="triggerAtelierShare()">
+<span class="material-symbols-outlined text-[20px]">ios_share</span>
+<span>Share Invitation</span>
+</button>
+<!-- WhatsApp Direct Share Button -->
+<a class="w-full px-space-lg py-3.5 bg-[#128C7E] hover:bg-[#075E54] text-white rounded-lg font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-space-sm shadow-md transition-all" href="https://api.whatsapp.com/send?text=You%27re%20invited%20to%20our%20wedding%21%20View%20our%20invitation%3A%20https%3A%2F%2Finvite-lime.com%2Fw%2Fdaniel-sarah-2026" rel="noopener noreferrer" target="_blank">
+<svg class="w-5 h-5 fill-current" viewbox="0 0 24 24">
+<path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.074-2.18-.541-1.898-.785-3.13-2.73-3.224-2.856-.096-.126-.776-1.031-.776-1.966 0-.936.491-1.396.666-1.587.175-.19.382-.239.51-.239.127 0 .254.002.365.008.117.006.273-.044.428.328.159.382.54 1.319.588 1.415.048.096.08.207.016.334-.064.127-.095.207-.191.318-.095.111-.201.248-.287.333-.095.096-.195.2-.084.391.111.191.493.814 1.057 1.317.727.647 1.339.848 1.53.943.191.095.302.08.414-.048.111-.127.477-.556.604-.746.127-.191.254-.159.429-.095.175.063 1.112.524 1.303.62.191.095.318.143.365.223.048.079.048.461-.096.866zM12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.98-1.397A9.957 9.957 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"></path>
+</svg>
+<span>Share on WhatsApp</span>
+</a>
+</div>
+<!-- Quick Secondary Distribution Channels -->
+<div class="pt-space-xs flex items-center justify-between flex-wrap gap-space-sm">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant">Instant Channels:</span>
+<div class="flex items-center gap-space-xs flex-wrap">
+<button class="px-space-md py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg font-label-sm text-label-sm transition-colors flex items-center gap-1.5" onclick="shareViaTelegram()">
+<span class="material-symbols-outlined text-[16px] text-blue-500">send</span>
+<span>Telegram</span>
+</button>
+<button class="px-space-md py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg font-label-sm text-label-sm transition-colors flex items-center gap-1.5" onclick="shareViaSms()">
+<span class="material-symbols-outlined text-[16px] text-emerald-600">chat</span>
+<span>SMS / iMessage</span>
+</button>
+<button class="px-space-md py-1.5 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg font-label-sm text-label-sm transition-colors flex items-center gap-1.5" onclick="toggleQrModal()">
+<span class="material-symbols-outlined text-[16px] text-secondary">qr_code_2</span>
+<span>Display QR Code</span>
+</button>
+</div>
+</div>
+</div>
+<!-- 3. Automated Email Delivery Confirmation Box -->
+<div class="w-full bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-md">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">mark_email_read</span>
+</div>
+<div class="flex flex-col">
+<h3 class="font-headline-sm text-headline-sm text-primary">Automated Confirmation Dispatched</h3>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Real-time transactional transmission</span>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-emerald-800 bg-emerald-100/70 px-space-sm py-0.5 rounded font-mono">200 OK</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+            The private invitation link, administrative guest RSVP credentials, and attached calendar ICS file have been dispatched to:
+          </p>
+<!-- Email Address Chip & Telemetry -->
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm p-space-md bg-surface-container-low rounded-lg">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-emerald-600 text-[18px]">verified</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">sarah.atelier@gmail.com</span>
+</div>
+<div class="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">cloud_done</span>
+<span>Dispatched 12s ago via Amazon SES (Delivered · 0 bounce)</span>
+</div>
+</div>
+<!-- Transactional Email Preview Simulation Card -->
+<div class="p-space-md bg-surface-container-low/70 rounded-lg flex flex-col gap-2 shadow-inner">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider font-semibold">Email Preview Simulation</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">MIME Type: multipart/alternative</span>
+</div>
+<div class="text-xs text-on-surface font-mono bg-surface-container-lowest p-space-sm rounded">
+<p><strong class="text-primary font-semibold">Subject:</strong> Wedding Invitation Ready — Daniel &amp; Sarah (15 Dec 2026)</p>
+<p class="mt-1"><strong class="text-primary font-semibold">Attachments:</strong> falaknuma-wedding-calendar.ics (12 KB)</p>
+<p class="mt-1 text-on-surface-variant"><strong class="text-primary font-semibold">Body Content:</strong> Formal couple salutation, direct authenticated passkey, and guaranteed archive preservation through 15 February 2027.</p>
+</div>
+</div>
+<!-- Resend Action & Rate Limit Helper -->
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm pt-space-xs">
+<button class="px-space-md py-2 bg-surface-container-low hover:bg-surface-container text-primary rounded-lg font-label-md text-label-md tracking-wider uppercase transition-colors flex items-center gap-space-xs" id="resendEmailBtn" onclick="triggerResendEmail()">
+<span class="material-symbols-outlined text-[16px]">forward_to_inbox</span>
+<span id="resendBtnLabel">Resend Invitation Email</span>
+</button>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono" id="resendRateNotice">
+              Rate limit: 1 resend per 60s. Last sent 12s ago.
+            </span>
+</div>
+</div>
+<!-- 4. Post-Purchase Summary & Validity Card -->
+<div class="w-full bg-surface-container-lowest p-space-lg rounded-xl shadow-md flex flex-col gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-8 h-8 rounded-full bg-secondary-container/50 text-secondary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+</div>
+<div class="flex flex-col">
+<h4 class="font-headline-sm text-headline-sm text-primary">Suite Expiration &amp; Archival Continuity</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 leading-relaxed">
+                Active until <span class="font-semibold text-on-surface">15 February 2027</span> (Wedding Date + 2 Calendar Months). Your canonical public URL remains permanently immutable and will not break when updating itinerary schedules, seating charts, or RSVP guest lists.
+              </p>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-sm border-t border-surface-container-highest/60 flex-wrap gap-space-sm">
+<div class="flex items-center gap-space-md">
+<a class="font-label-md text-label-md text-secondary hover:text-primary transition-colors flex items-center gap-1 font-semibold" data-path="my-invitations" href="#">
+<span>Manage in My Invitations</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors" data-path="explore" href="#">
+                Return to Dashboard
+              </a>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-mono">UUID: 8f9b42-falaknuma-2026</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- QR Code Modal (Hidden by Default) -->
+<div class="fixed inset-0 z-50 bg-primary/40 backdrop-blur-sm hidden items-center justify-center p-gutter" id="qrModal">
+<div class="w-full max-w-sm bg-surface-container-lowest p-space-xl rounded-2xl shadow-2xl flex flex-col items-center text-center relative animate-fade-in">
+<button class="absolute top-4 right-4 text-on-surface-variant hover:text-primary" onclick="toggleQrModal()">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</button>
+<div class="w-12 h-12 rounded-full bg-secondary-container/40 flex items-center justify-center text-secondary mb-space-sm">
+<span class="material-symbols-outlined text-[28px]">qr_code_2</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-primary">Guest Scan &amp; Direct RSVP</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 mb-space-lg">
+        Present this high-density QR code for on-site check-in, stationery print inclusion, or physical bridal hampers.
+      </p>
+<!-- SVG Styled Clean QR Representation -->
+<div class="p-4 bg-surface-container-lowest rounded-xl shadow-inner mb-space-md">
+<svg class="w-48 h-48" fill="none" viewbox="0 0 100 100">
+<!-- Outer Position Markers -->
+<rect fill="#141b2b" height="26" rx="4" width="26" x="5" y="5"></rect>
+<rect fill="#ffffff" height="18" rx="2" width="18" x="9" y="9"></rect>
+<rect fill="#141b2b" height="10" rx="1" width="10" x="13" y="13"></rect>
+<rect fill="#141b2b" height="26" rx="4" width="26" x="69" y="5"></rect>
+<rect fill="#ffffff" height="18" rx="2" width="18" x="73" y="9"></rect>
+<rect fill="#141b2b" height="10" rx="1" width="10" x="77" y="13"></rect>
+<rect fill="#141b2b" height="26" rx="4" width="26" x="5" y="69"></rect>
+<rect fill="#ffffff" height="18" rx="2" width="18" x="9" y="73"></rect>
+<rect fill="#141b2b" height="10" rx="1" width="10" x="13" y="77"></rect>
+<!-- Decorative Matrix Grid Elements -->
+<rect fill="#775a19" height="6" width="6" x="36" y="8"></rect>
+<rect fill="#141b2b" height="6" width="8" x="46" y="8"></rect>
+<rect fill="#775a19" height="6" width="6" x="58" y="12"></rect>
+<rect fill="#141b2b" height="6" width="8" x="36" y="20"></rect>
+<rect fill="#775a19" height="6" width="6" x="48" y="22"></rect>
+<rect fill="#775a19" height="8" width="6" x="8" y="36"></rect>
+<rect fill="#141b2b" height="6" width="6" x="18" y="40"></rect>
+<rect fill="#fed488" height="32" opacity="0.3" rx="4" width="32" x="34" y="34"></rect>
+<text fill="#775a19" font-family="'Playfair Display', serif" font-size="14" font-weight="bold" text-anchor="middle" x="50" y="54">D&amp;S</text>
+<rect fill="#141b2b" height="8" width="8" x="72" y="38"></rect>
+<rect fill="#775a19" height="6" width="8" x="84" y="44"></rect>
+<rect fill="#141b2b" height="6" width="6" x="36" y="72"></rect>
+<rect fill="#775a19" height="6" width="8" x="46" y="76"></rect>
+<rect fill="#141b2b" height="8" width="6" x="58" y="70"></rect>
+<rect fill="#141b2b" height="8" width="8" x="74" y="74"></rect>
+<rect fill="#775a19" height="6" width="6" x="86" y="82"></rect>
+</svg>
+</div>
+<div class="flex items-center gap-space-sm w-full">
+<button class="flex-1 py-2 bg-primary hover:bg-neutral-800 text-on-primary rounded-lg font-label-sm text-label-sm uppercase tracking-wider" onclick="downloadQrSvg()">
+          Download High-Res
+        </button>
+<button class="px-space-md py-2 bg-surface-container-low hover:bg-surface-container text-on-surface rounded-lg font-label-sm text-label-sm" onclick="toggleQrModal()">
+          Dismiss
+        </button>
+</div>
+</div>
+</div>
+<!-- Micro-interaction Toast Notice -->
+<div class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-space-sm bg-primary text-on-primary px-space-lg py-space-md rounded-xl shadow-xl" id="toastNotification">
+<span class="material-symbols-outlined text-emerald-400 text-[20px]" id="toastIcon">check_circle</span>
+<span class="font-label-md text-label-md" id="toastMessage">Action completed successfully</span>
+</div>
+</div>
+<script>
+  function showToast(message, iconName = 'check_circle') {
+    const toast = document.getElementById('toastNotification');
+    const toastMsg = document.getElementById('toastMessage');
+    const toastIcon = document.getElementById('toastIcon');
+    
+    if (toast && toastMsg && toastIcon) {
+      toastMsg.textContent = message;
+      toastIcon.textContent = iconName;
+      toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+      }, 3400);
+    }
+  }
+
+  function copyInvitationLink() {
+    const urlText = document.getElementById('invitationUrl').innerText;
+    navigator.clipboard.writeText(urlText).then(() => {
+      const copyBtnText = document.getElementById('copyBtnText');
+      if (copyBtnText) copyBtnText.innerText = 'Link Copied ✓';
+      showToast('Public invitation link copied to clipboard!');
+      setTimeout(() => {
+        if (copyBtnText) copyBtnText.innerText = 'Copy Link';
+      }, 2500);
+    }).catch(() => {
+      showToast('Link copied to clipboard');
+    });
+  }
+
+  function triggerAtelierShare() {
+    const shareData = {
+      title: 'Daniel & Sarah — Royal Falaknuma Wedding Invitation',
+      text: "You are cordially invited to celebrate our wedding at Taj Falaknuma Palace, Hyderabad.",
+      url: 'https://invite-lime.com/w/daniel-sarah-2026'
+    };
+    if (navigator.share) {
+      navigator.share(shareData).catch(() => {});
+    } else {
+      copyInvitationLink();
+    }
+  }
+
+  function shareViaTelegram() {
+    const url = encodeURIComponent('https://invite-lime.com/w/daniel-sarah-2026');
+    const text = encodeURIComponent("You're invited to celebrate the wedding of Daniel & Sarah at Taj Falaknuma Palace.");
+    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
+  }
+
+  function shareViaSms() {
+    const body = encodeURIComponent("You're invited to celebrate our wedding! View our digital invitation: https://invite-lime.com/w/daniel-sarah-2026");
+    window.open(`sms:?&body=${body}`, '_self');
+  }
+
+  function toggleQrModal() {
+    const modal = document.getElementById('qrModal');
+    if (modal) {
+      modal.classList.toggle('hidden');
+      modal.classList.toggle('flex');
+    }
+  }
+
+  function downloadQrSvg() {
+    showToast('High-resolution Vector QR package initiated download.');
+    toggleQrModal();
+  }
+
+  let resendCountdown = 0;
+  function triggerResendEmail() {
+    if (resendCountdown > 0) return;
+    
+    const resendBtnLabel = document.getElementById('resendBtnLabel');
+    const resendRateNotice = document.getElementById('resendRateNotice');
+    
+    showToast('Fresh email confirmation & calendar ICS dispatched to sarah.atelier@gmail.com');
+    resendCountdown = 60;
+    
+    const interval = setInterval(() => {
+      resendCountdown--;
+      if (resendBtnLabel) resendBtnLabel.innerText = `Wait (${resendCountdown}s)`;
+      if (resendRateNotice) resendRateNotice.innerText = `Cooldown active: ${resendCountdown}s remaining.`;
+      
+      if (resendCountdown <= 0) {
+        clearInterval(interval);
+        if (resendBtnLabel) resendBtnLabel.innerText = 'Resend Invitation Email';
+        if (resendRateNotice) resendRateNotice.innerText = 'Rate limit: 1 resend per 60s. Ready.';
+      }
+    }, 1000);
+  }
+</script></main><footer class="w-full bg-surface-container-low shadow-[0_-1px_8px_rgba(0,0,0,0.02)]"><div class="max-w-7xl mx-auto px-gutter py-space-xl"><div class="grid grid-cols-1 md:grid-cols-12 gap-space-xl items-start pb-space-lg"><div class="md:col-span-5 flex flex-col gap-space-xs"><span class="font-headline-sm text-headline-sm text-primary">Invite Lime Atelier</span><p class="font-body-sm text-body-sm text-on-surface-variant max-w-sm">Crafting timeless couture wedding stationery, monogram suites, and unhurried digital RSVP experiences for milestone ceremonies worldwide.</p></div><div class="md:col-span-3 flex flex-col gap-space-xs"><span class="font-label-sm text-label-sm uppercase text-secondary tracking-widest">Atelier Stationery</span><div class="flex flex-col gap-space-xs font-body-sm text-body-sm text-on-surface-variant"><a class="hover:text-on-surface transition-colors" data-path="explore" href="#">Letterpress Suites</a><a class="hover:text-on-surface transition-colors" data-path="explore" href="#">Handmade Deckle Paper</a><a class="hover:text-on-surface transition-colors" data-path="explore" href="#">Wax Seals &amp; Silk Ribbons</a></div></div><div class="md:col-span-4 flex flex-col gap-space-xs"><span class="font-label-sm text-label-sm uppercase text-secondary tracking-widest">Concierge Support</span><p class="font-body-sm text-body-sm text-on-surface-variant">Private consultations with your dedicated bridal typesetter available Monday through Saturday.</p><div class="pt-space-xs"><a class="inline-flex items-center gap-space-xs font-label-md text-label-md text-on-surface hover:text-secondary transition-colors" data-path="concierge-support" href="#"><span class="material-symbols-outlined text-[16px]">mail</span>atelier@invite-lime.com</a></div></div></div><div class="pt-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm"><p class="font-body-sm text-body-sm text-on-surface-variant">© 2025 Invite Lime Atelier Inc. All rights reserved.</p><div class="flex items-center gap-space-lg font-body-sm text-body-sm text-on-surface-variant"><a class="hover:text-on-surface transition-colors" data-path="privacy-policy" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" data-path="terms-of-service" href="#">Terms of Service</a><a class="hover:text-on-surface transition-colors" data-path="concierge-support" href="#">Concierge Desk</a></div></div></div></footer></body></html>
+
+<!-- Invite Lime Customer — My Invitations Suite & Share Modal (/dashboard/templates/my) -->
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_standard" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..700&amp;family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"error":"#ba1a1a","tertiary":"#000000","secondary-container":"#fed488","primary-fixed-dim":"#c0c6db","on-tertiary":"#ffffff","on-error":"#ffffff","surface-container-highest":"#e6e2db","on-primary-fixed":"#141b2b","on-secondary-container":"#785a1a","primary":"#000000","on-primary-container":"#7d8497","inverse-surface":"#32302c","on-secondary-fixed-variant":"#5d4201","tertiary-fixed-dim":"#b7ccb9","on-surface-variant":"#45464c","primary-container":"#141b2b","surface":"#fef9f2","on-tertiary-fixed":"#0e1f13","on-tertiary-container":"#758978","on-background":"#1d1c18","secondary":"#775a19","surface-bright":"#fef9f2","background":"#fef9f2","surface-container-low":"#f8f3ec","surface-container-high":"#ece7e1","surface-tint":"#575e70","primary-fixed":"#dce2f7","on-secondary":"#ffffff","outline-variant":"#c6c6cd","outline":"#76777d","on-error-container":"#93000a","surface-dim":"#ded9d3","error-container":"#ffdad6","on-surface":"#1d1c18","on-secondary-fixed":"#261900","on-primary":"#ffffff","on-primary-fixed-variant":"#404758","secondary-fixed-dim":"#e9c176","inverse-on-surface":"#f5f0e9","surface-container":"#f2ede6","inverse-primary":"#c0c6db","surface-container-lowest":"#ffffff","tertiary-container":"#0e1f13","secondary-fixed":"#ffdea5","on-tertiary-fixed-variant":"#394b3d","tertiary-fixed":"#d3e8d5","surface-variant":"#e6e2db"},borderRadius:{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},spacing:{"space-sm":"0.5rem","gutter-mobile":"1rem","space-xl":"2.5rem","gutter":"1.5rem","space-lg":"1.75rem","space-xs":"0.25rem","margin":"3rem","space-2xl":"4rem","space-md":"1rem","margin-mobile":"1.25rem"},fontFamily:{"headline-sm":["Playfair Display"],"headline-lg":["Playfair Display"],"headline-lg-mobile":["Playfair Display"],"display-hero":["Playfair Display"],"display-hero-mobile":["Playfair Display"],"headline-md":["Playfair Display"],"body-md":["Plus Jakarta Sans"],"body-sm":["Plus Jakarta Sans"],"label-lg":["Plus Jakarta Sans"],"label-md":["Plus Jakarta Sans"],"label-sm":["Plus Jakarta Sans"],"body-lg":["Plus Jakarta Sans"]},fontSize:{"headline-sm":["20px",{"lineHeight":"28px","fontWeight":"600"}],"headline-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.01em","fontWeight":"500"}],"headline-lg-mobile":["28px",{"lineHeight":"36px","fontWeight":"500"}],"display-hero":["56px",{"lineHeight":"64px","letterSpacing":"-0.02em","fontWeight":"400"}],"display-hero-mobile":["38px",{"lineHeight":"46px","letterSpacing":"-0.01em","fontWeight":"400"}],"headline-md":["26px",{"lineHeight":"34px","fontWeight":"500"}],"body-md":["15px",{"lineHeight":"24px","fontWeight":"400"}],"body-sm":["13px",{"lineHeight":"20px","fontWeight":"400"}],"label-lg":["14px",{"lineHeight":"20px","letterSpacing":"0.04em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.06em","fontWeight":"600"}],"label-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.08em","fontWeight":"700"}],"body-lg":["18px",{"lineHeight":"28px","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-20 max-w-7xl mx-auto px-gutter flex items-center justify-between gap-space-lg"><div class="flex items-center gap-space-lg"><a class="font-headline-sm text-headline-sm text-primary tracking-tight transition-opacity hover:opacity-80" data-path="explore" href="#">Invite Lime Atelier</a><div class="h-4 w-px bg-surface-container-highest hidden sm:block"></div><span class="font-label-sm text-label-sm text-secondary uppercase hidden sm:inline-block tracking-widest">Bespoke Suite</span></div><nav class="hidden md:flex items-center gap-space-sm" data-active-classes="bg-primary text-on-primary rounded-lg shadow-sm"><a class="px-space-md py-space-sm font-label-md text-label-md uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-colors rounded-lg" data-path="explore" href="#">Explore</a><a class="px-space-md py-space-sm font-label-md text-label-md uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-colors rounded-lg flex items-center gap-space-xs" data-path="favorites" href="#"><span>Favorites</span><span class="bg-secondary-container text-on-secondary-container px-space-xs py-0.5 rounded-full font-label-sm text-label-sm leading-none">3</span></a><a aria-current="page" class="px-space-md py-space-sm font-label-md uppercase tracking-wider transition-colors bg-primary text-on-primary rounded-lg shadow-sm" data-path="my-invitations" href="#">My Invitations</a></nav><div class="flex items-center gap-space-md"><div class="hidden lg:flex flex-col text-right"><span class="font-label-md text-label-md text-on-surface font-medium">Sarah &amp; Daniel</span><span class="font-label-sm text-label-sm text-on-surface-variant">Autumn Solstice 2025</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="w-full pt-20 bg-surface min-h-[calc(100vh-80px)]"><div class="flex flex-col w-full">
+<div class="relative w-full overflow-hidden pb-space-2xl">
+<div class="absolute -top-32 right-10 w-96 h-96 rounded-full bg-secondary-fixed/30 blur-3xl pointer-events-none"></div>
+<div class="absolute top-80 -left-20 w-80 h-80 rounded-full bg-tertiary-fixed/40 blur-3xl pointer-events-none"></div>
+<div class="max-w-7xl mx-auto px-gutter relative z-10 pt-space-lg">
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-lg pb-space-xl">
+<div class="flex flex-col gap-space-xs max-w-2xl">
+<div class="inline-flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary">Atelier Digital Client Vault</span>
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Archival Edition</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-primary tracking-tight">My Wedding Invitations &amp; Suites</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">
+            Manage your active purchased stationery, share live links with family and friends, monitor RSVPs, and edit event details.
+          </p>
+<div class="flex flex-wrap items-center gap-space-sm pt-space-xs">
+<div class="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-full bg-surface-container shadow-sm text-on-surface font-label-md text-label-md">
+<span class="w-2 h-2 rounded-full bg-[#397249] animate-pulse"></span>
+<span>2 Active Suites</span>
+</div>
+<div class="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-full bg-surface-container shadow-sm text-on-surface font-label-md text-label-md">
+<span class="material-symbols-outlined text-[15px] text-secondary">schedule</span>
+<span>1 Expiring in 14 Days</span>
+</div>
+<div class="inline-flex items-center gap-space-xs px-space-md py-1.5 rounded-full bg-surface-container shadow-sm text-on-surface font-label-md text-label-md">
+<span class="material-symbols-outlined text-[15px] text-secondary">mark_email_read</span>
+<span class="font-semibold text-primary">412</span>
+<span>Total RSVPs Logged</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-space-md flex-shrink-0">
+<button class="group relative inline-flex items-center gap-space-xs px-space-lg py-space-sm bg-primary text-on-primary rounded-lg shadow-md hover:bg-neutral-800 transition-all duration-300 focus:outline-none" type="button">
+<span class="material-symbols-outlined text-[20px] transition-transform duration-300 group-hover:rotate-90">add</span>
+<span class="font-label-lg text-label-lg tracking-wider uppercase">Create New Invitation</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl">
+<div class="lg:col-span-8 flex flex-col gap-space-xl">
+<div class="relative bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden group">
+<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary-fixed via-secondary to-primary"></div>
+<div class="p-space-xl flex flex-col md:flex-row gap-space-xl">
+<div class="relative md:w-5/12 w-full flex-shrink-0">
+<div class="relative aspect-[3/4] w-full rounded-lg overflow-hidden shadow-md bg-surface-container-high">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Close up archival shot of Daniel and Sarah luxury wedding stationery suite in royal ivory cotton rag with Mughal arch gold foil debossing and calligraphy envelope." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCPlK47SF9UP2dlqjnMXXapQEre63LqlDxH6ch6m7dCzT3iqSU2ij25UPSBoDQMhMtRTtS0Wrqf7wLoOd7-XloBDzzOHfjXt6sA5wKsWk4l_6SEZVS07ZDCkch6-kI7VfdU0fjc4hkeHbskNYMqdCYJ_iz1wTwNjXarKpCXkRuQNU_EuIPhv9Jb1t3EbPlzEnTPsZtFtJgeQOJ2LxF4Hwl9ir-2AjDHrZ6UiKzpa6j26q4Os3i3Zii"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 via-primary/20 to-transparent flex flex-col justify-end p-space-md">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary-fixed">Couture Letterpress</span>
+<span class="font-headline-sm text-headline-sm text-on-primary">Daniel &amp; Sarah</span>
+</div>
+</div>
+<div class="absolute top-3 left-3 px-space-xs py-0.5 rounded-full bg-surface/90 backdrop-blur-md shadow-sm flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-[#397249]"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface">LIVE / ACTIVE</span>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-grow gap-space-md">
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary">Royal Mughal Palace — Archival Gold Foil</span>
+<span class="material-symbols-outlined text-secondary text-[20px]">workspace_premium</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-primary tracking-tight">Daniel &amp; Sarah</h2>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-body-md text-body-md">
+<span class="material-symbols-outlined text-[18px] text-secondary">calendar_today</span>
+<span>15 Dec 2026</span>
+<span class="text-surface-container-highest">•</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">location_on</span>
+<span>Taj Falaknuma, Hyderabad</span>
+</div>
+</div>
+<div class="p-space-md rounded-lg bg-surface-container-low shadow-sm flex flex-col gap-1">
+<div class="flex items-center gap-space-xs text-secondary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+<span class="font-medium">Validity Period</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                    Active until <strong>15 February 2027</strong> (Ceremony Date + 2 Calendar Months)
+                  </p>
+</div>
+<div class="flex flex-col gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Live Public Link</span>
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface shadow-inner font-body-sm text-body-sm text-on-surface overflow-hidden">
+<span class="truncate font-mono text-[13px] text-primary">https://invite-lime.com/w/daniel-sarah-2026</span>
+<button class="p-1 text-on-surface-variant hover:text-primary transition-colors flex items-center" onclick="navigator.clipboard.writeText('https://invite-lime.com/w/daniel-sarah-2026'); alert('URL Copied to Clipboard!');" title="Copy URL" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs pt-space-xs">
+<a class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-neutral-800 shadow-sm transition-all" href="#">
+<span>View Live</span>
+<span class="material-symbols-outlined text-[16px]">north_east</span>
+</a>
+<button class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Edit Suite</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-secondary-container text-on-secondary-container font-label-md text-label-md hover:opacity-90 transition-opacity shadow-sm" onclick="document.getElementById('shareModal').classList.remove('hidden')" type="button">
+<span class="material-symbols-outlined text-[16px]">ios_share</span>
+<span>Share Invitation</span>
+</button>
+<button class="p-2 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" onclick="navigator.clipboard.writeText('https://invite-lime.com/w/daniel-sarah-2026'); alert('Invitation Link Copied!');" title="Copy URL" type="button">
+<span class="material-symbols-outlined text-[18px]">copy_all</span>
+</button>
+<button class="p-2 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" onclick="alert('Digital invitation and dispatch summary sent to sarah.atelier@gmail.com');" title="Resend Notification Email" type="button">
+<span class="material-symbols-outlined text-[18px]">cached</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="relative bg-surface-container-lowest rounded-xl shadow-md overflow-hidden group">
+<div class="p-space-xl flex flex-col md:flex-row gap-space-xl">
+<div class="relative md:w-5/12 w-full flex-shrink-0">
+<div class="relative aspect-[3/4] w-full rounded-lg overflow-hidden shadow-sm bg-surface-container-high">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Minimalist botanical wedding stationery layout on Lake Como backdrop with delicate eucalyptus sprigs and warm champagne typography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFb-2tvfSJFYinONDA6YA9JDLsaaui_wGgrfThqjspK56-Dzrk3UqG7Db1T12YoaEuNfLE8wBndiRtTkizVIw6yr5pcRWvPVhcGb1OJwhf5JfaZs2_o5WREf6LI-1rDFuOEdJeoAK_HvjX2EDCkFI6FVML65Hpmq1AKpR3u_SnDP8pwSzutvyZ-bDSOzeibZcwfp6is_DpkI6hsZI-onpOnzU88hCXhQ5Hq9_7yVQAvq9Gk2tI7JPL"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 via-primary/20 to-transparent flex flex-col justify-end p-space-md">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary-fixed">Botanical Minimalist</span>
+<span class="font-headline-sm text-headline-sm text-on-primary">Alayna &amp; Zayn</span>
+</div>
+</div>
+<div class="absolute top-3 left-3 px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container shadow-sm flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">timer</span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider font-semibold">14 DAYS LEFT</span>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-grow gap-space-md">
+<div class="flex flex-col gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary">Botanical Minimalist — Vellum Overlay</span>
+<h2 class="font-headline-lg text-headline-lg text-primary tracking-tight">Alayna &amp; Zayn</h2>
+<div class="flex items-center gap-space-xs text-on-surface-variant font-body-md text-body-md">
+<span class="material-symbols-outlined text-[18px] text-secondary">calendar_today</span>
+<span>24 Oct 2026</span>
+<span class="text-surface-container-highest">•</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">location_on</span>
+<span>Lake Como, Italy</span>
+</div>
+</div>
+<div class="p-space-md rounded-lg bg-surface-container-low shadow-sm flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-error flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">warning</span>
+                      Expires 24 Dec 2026
+                    </span>
+<span class="font-label-sm text-label-sm uppercase tracking-widest px-2 py-0.5 rounded bg-surface-container text-on-surface">412 RSVPs Logged</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                    Guest submission window automatically seals upon expiration. Concierge archive preservation enabled.
+                  </p>
+</div>
+<div class="flex flex-col gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Public URL</span>
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface shadow-inner font-body-sm text-body-sm text-on-surface overflow-hidden">
+<span class="truncate font-mono text-[13px] text-primary">https://invite-lime.com/w/alayna-zayn-como</span>
+<button class="p-1 text-on-surface-variant hover:text-primary transition-colors flex items-center" onclick="navigator.clipboard.writeText('https://invite-lime.com/w/alayna-zayn-como'); alert('URL Copied to Clipboard!');" title="Copy URL" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs pt-space-xs">
+<a class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-neutral-800 shadow-sm transition-all" href="#">
+<span>View Live</span>
+<span class="material-symbols-outlined text-[16px]">north_east</span>
+</a>
+<button class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Edit Suite</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors shadow-sm" onclick="document.getElementById('shareModal').classList.remove('hidden')" type="button">
+<span class="material-symbols-outlined text-[16px]">share</span>
+<span>Share</span>
+</button>
+<button class="p-2 rounded-lg bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" onclick="navigator.clipboard.writeText('https://invite-lime.com/w/alayna-zayn-como'); alert('Invitation Link Copied!');" title="Copy URL" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="rounded-xl bg-surface-container shadow-sm overflow-hidden">
+<button class="w-full p-space-lg flex items-center justify-between text-left hover:bg-surface-container-high transition-colors" onclick="document.getElementById('archiveContent').classList.toggle('hidden'); document.getElementById('archiveChevron').classList.toggle('rotate-180')" type="button">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[22px]">inventory_2</span>
+<span class="font-headline-sm text-headline-sm text-primary">Archive / Expired Suites (1)</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant transition-transform duration-300" id="archiveChevron">expand_more</span>
+</button>
+<div class="hidden p-space-lg pt-0" id="archiveContent">
+<div class="p-space-lg rounded-lg bg-surface-container-lowest shadow-sm flex flex-col md:flex-row items-center justify-between gap-space-md opacity-80">
+<div class="flex items-center gap-space-md">
+<div class="w-14 h-18 rounded bg-surface-container-high flex-shrink-0 overflow-hidden shadow-inner">
+<img class="w-full h-full object-cover filter grayscale" data-alt="Monochrome sepia archived vintage wedding invitation for Matteo and Claire with Tuscan olive motif and wax stamp impression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB6hOyc-uiBi0M2OYu_N4rBgLQ5JrFwCH_haO0YwFMuUFxliZVQYAsG5ivAG_cY55I4gPkASOWz3ZIO8OZszjZOo8NrDgjsC458hqFZ49zwecAw5z2jQKJOtEV4JpakuWXCnN0Ni4BnirPC884wduaRWqaZfewKAgwcYmXcyjRzwbwRccepLhO_DNjpZxVQElkt7l-O4xt5uyH4UzigeiHZFYtHOQlRdlw5FGEKmvfX3XPkMbIySxHZ"/>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-headline-sm text-primary">Tuscan Olive — Matteo &amp; Claire</h3>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm font-semibold">EXPIRED</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Expired on 10 Aug 2026 • Public access safely retired</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="px-space-md py-1.5 rounded bg-surface-container text-on-surface-variant font-label-md text-label-md cursor-not-allowed opacity-50" disabled="" title="Link expired on 10 Aug 2026" type="button">
+                    Link Expired
+                  </button>
+<button class="px-space-md py-1.5 rounded bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors" type="button">
+                    Download Guest CSV
+                  </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="lg:col-span-4 flex flex-col gap-space-xl">
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-lg flex flex-col gap-space-lg relative overflow-hidden">
+<div class="absolute -right-8 -bottom-8 w-36 h-36 rounded-full bg-secondary-fixed/20 pointer-events-none"></div>
+<div class="flex flex-col gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary">Concierge Performance</span>
+<h3 class="font-headline-md text-headline-md text-primary">RSVP Engagement</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Real-time breakdown of guest replies across your active digital celebrations.</p>
+</div>
+<div class="flex items-center justify-center py-space-sm">
+<div class="relative w-44 h-44 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 36 36">
+<path class="text-surface-container-highest" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+<path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="72, 100" stroke-linecap="round" stroke-width="3"></path>
+<path class="text-secondary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="18, 100" stroke-dashoffset="-72" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="font-display-hero text-headline-lg font-light text-primary">412</span>
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider">Responses</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-space-xs font-body-sm text-body-sm">
+<div class="flex items-center justify-between p-space-xs rounded hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-xs">
+<span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
+<span class="text-on-surface">Joyfully Attending</span>
+</div>
+<span class="font-semibold text-primary">298 (72%)</span>
+</div>
+<div class="flex items-center justify-between p-space-xs rounded hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-xs">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+<span class="text-on-surface">Regretfully Declining</span>
+</div>
+<span class="font-semibold text-primary">74 (18%)</span>
+</div>
+<div class="flex items-center justify-between p-space-xs rounded hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-space-xs">
+<span class="w-2.5 h-2.5 rounded-full bg-surface-container-highest"></span>
+<span class="text-on-surface">Awaiting Confirmation</span>
+</div>
+<span class="font-semibold text-primary">40 (10%)</span>
+</div>
+</div>
+<button class="w-full py-space-sm px-space-md rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors text-center uppercase tracking-wider" type="button">
+              Download Guest Masterlist (.XLS)
+            </button>
+</div>
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-md">
+<div class="flex items-center gap-space-xs text-secondary">
+<span class="material-symbols-outlined text-[20px]">print</span>
+<span class="font-label-sm text-label-sm uppercase tracking-widest">Physical &amp; Print Add-on</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-primary">Wax Seals &amp; Paper Inserts</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Every digital stationery suite comes bundled with complimentary high-resolution vector QR inserts for your mailed paper invitations.
+            </p>
+<a class="inline-flex items-center justify-between font-label-md text-label-md text-primary font-medium group hover:text-secondary transition-colors pt-space-xs" href="#">
+<span>Order Matching Cotton Print Cards</span>
+<span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md bg-inverse-surface/40 transition-opacity duration-300" id="shareModal">
+<div class="relative w-full max-w-2xl bg-surface-container-lowest rounded-xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col animate-[fadeIn_0.2s_ease-out]">
+<div class="h-1.5 w-full bg-gradient-to-r from-secondary-fixed via-secondary to-primary flex-shrink-0"></div>
+<div class="p-space-xl overflow-y-auto flex flex-col gap-space-lg">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex flex-col gap-1">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-secondary">Instant Guest Distribution</span>
+<h2 class="font-headline-lg text-headline-lg text-primary tracking-tight">Share Invitation — Daniel &amp; Sarah</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Share your bespoke animated invitation link with your relatives and guests. The link works seamlessly on all mobile phones and browsers.
+            </p>
+</div>
+<button class="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors flex-shrink-0" onclick="document.getElementById('shareModal').classList.add('hidden')" title="Close Dialog" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-xs">
+<label class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Permanent Invitation Web Link</label>
+<div class="flex items-center gap-space-xs p-1.5 rounded-lg bg-surface-container-low shadow-sm">
+<div class="px-space-sm flex-grow truncate font-mono text-[13px] text-primary" id="modalUrlText">
+              https://invite-lime.com/w/daniel-sarah-2026
+            </div>
+<button class="px-space-md py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-neutral-800 transition-all flex items-center gap-1.5 flex-shrink-0 shadow-sm" id="modalCopyBtn" onclick="handleCopyLink()" type="button">
+<span class="material-symbols-outlined text-[16px]" id="modalCopyIcon">content_copy</span>
+<span id="modalCopyLabel">Copy Link</span>
+</button>
+</div>
+</div>
+<button class="w-full py-space-sm px-space-md rounded-lg bg-secondary-container text-on-secondary-container font-label-md text-label-md flex items-center justify-center gap-space-xs hover:opacity-90 shadow-sm transition-opacity" onclick="handleNativeShare()" type="button">
+<span class="material-symbols-outlined text-[18px]">share</span>
+<span class="uppercase tracking-wider">Open Device Native Share Sheet</span>
+</button>
+<div class="flex flex-col gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Direct Messaging Channels</span>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
+<a class="p-space-md rounded-lg bg-surface-container flex flex-col items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high transition-colors shadow-sm text-center" href="https://api.whatsapp.com/send?text=You%27re%20warmly%20invited%20to%20Daniel%20%26%20Sarah%27s%20Wedding.%20View%20invitation:%20https://invite-lime.com/w/daniel-sarah-2026" target="_blank">
+<span class="material-symbols-outlined text-[24px] text-[#25D366]">chat</span>
+<span class="font-label-sm text-label-sm font-semibold">WhatsApp</span>
+</a>
+<a class="p-space-md rounded-lg bg-surface-container flex flex-col items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high transition-colors shadow-sm text-center" href="https://t.me/share/url?url=https://invite-lime.com/w/daniel-sarah-2026&amp;text=Daniel%20%26%20Sarah%27s%20Wedding%20Invitation" target="_blank">
+<span class="material-symbols-outlined text-[24px] text-[#229ED9]">send</span>
+<span class="font-label-sm text-label-sm font-semibold">Telegram</span>
+</a>
+<a class="p-space-md rounded-lg bg-surface-container flex flex-col items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high transition-colors shadow-sm text-center" href="sms:?&amp;body=You%27re%20invited%20to%20Daniel%20%26%20Sarah%27s%20Wedding%20Invitation:%20https://invite-lime.com/w/daniel-sarah-2026">
+<span class="material-symbols-outlined text-[24px] text-primary">sms</span>
+<span class="font-label-sm text-label-sm font-semibold">iMessage / SMS</span>
+</a>
+<button class="p-space-md rounded-lg bg-surface-container flex flex-col items-center justify-center gap-1.5 text-on-surface hover:bg-surface-container-high transition-colors shadow-sm text-center" onclick="alert('Print-ready High-Resolution Vector QR Package downloaded for Daniel &amp; Sarah.');" type="button">
+<span class="material-symbols-outlined text-[24px] text-secondary">qr_code_2</span>
+<span class="font-label-sm text-label-sm font-semibold">Print QR Code</span>
+</button>
+</div>
+</div>
+<div class="p-space-md rounded-lg bg-surface-container-low shadow-sm flex flex-col gap-space-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary">Registered Account Dispatch</span>
+<span class="font-body-md text-body-md font-medium text-primary">sarah.atelier@gmail.com</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Status: Delivered on Oct 24, 2025 at 14:32 UTC</span>
+</div>
+<button class="inline-flex items-center gap-1.5 px-space-md py-2 rounded-lg bg-surface-container-highest text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors shadow-sm self-start sm:self-center flex-shrink-0" id="resendEmailBtn" onclick="handleResendEmail()" type="button">
+<span class="material-symbols-outlined text-[16px]" id="resendIcon">sync</span>
+<span id="resendLabel">Resend Invitation Email</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Resending will dispatch the full invitation link, guest passcode, and event details directly to your email inbox.
+          </p>
+</div>
+<div class="flex items-center justify-between p-space-sm rounded-lg bg-surface font-label-md text-label-md text-on-surface-variant">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-secondary">verified_user</span>
+<span>Link Security: Active until 15 February 2027</span>
+</div>
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-primary font-bold">Encrypted SSL</span>
+</div>
+</div>
+<div class="p-space-md bg-surface-container-low flex justify-end gap-space-sm flex-shrink-0 shadow-inner">
+<button class="px-space-xl py-space-sm rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-neutral-800 transition-colors uppercase tracking-wider shadow-sm" onclick="document.getElementById('shareModal').classList.add('hidden')" type="button">
+          Done / Close
+        </button>
+</div>
+</div>
+</div>
+<script>
+    function handleCopyLink() {
+      const url = "https://invite-lime.com/w/daniel-sarah-2026";
+      navigator.clipboard.writeText(url).then(() => {
+        const copyLabel = document.getElementById('modalCopyLabel');
+        const copyIcon = document.getElementById('modalCopyIcon');
+        copyLabel.textContent = "Copied!";
+        copyIcon.textContent = "done";
+        setTimeout(() => {
+          copyLabel.textContent = "Copy Link";
+          copyIcon.textContent = "content_copy";
+        }, 3000);
+      });
+    }
+
+    function handleNativeShare() {
+      if (navigator.share) {
+        navigator.share({
+          title: "Daniel & Sarah's Wedding Invitation",
+          text: "You're invited to our wedding. View our wedding invitation:",
+          url: "https://invite-lime.com/w/daniel-sarah-2026"
+        }).catch(() => {});
+      } else {
+        handleCopyLink();
+        alert("Web Share API is not supported on this browser. Link copied to clipboard!");
+      }
+    }
+
+    function handleResendEmail() {
+      const btn = document.getElementById('resendEmailBtn');
+      const label = document.getElementById('resendLabel');
+      const icon = document.getElementById('resendIcon');
+      
+      icon.classList.add('animate-spin');
+      label.textContent = "Dispatching...";
+      
+      setTimeout(() => {
+        icon.classList.remove('animate-spin');
+        icon.textContent = "done";
+        label.textContent = "Sent to sarah.atelier@gmail.com ✓";
+        btn.classList.add('bg-secondary-container', 'text-on-secondary-container');
+        setTimeout(() => {
+          icon.textContent = "sync";
+          label.textContent = "Resend Invitation Email";
+          btn.classList.remove('bg-secondary-container', 'text-on-secondary-container');
+        }, 5000);
+      }, 1000);
+    }
+  </script>
+</div></main><footer class="w-full bg-surface-container-low shadow-[0_-1px_8px_rgba(0,0,0,0.02)]"><div class="max-w-7xl mx-auto px-gutter py-space-xl"><div class="grid grid-cols-1 md:grid-cols-12 gap-space-xl items-start pb-space-lg"><div class="md:col-span-5 flex flex-col gap-space-xs"><span class="font-headline-sm text-headline-sm text-primary">Invite Lime Atelier</span><p class="font-body-sm text-body-sm text-on-surface-variant max-w-sm">Crafting timeless couture wedding stationery, monogram suites, and unhurried digital RSVP experiences for milestone ceremonies worldwide.</p></div><div class="md:col-span-3 flex flex-col gap-space-xs"><span class="font-label-sm text-label-sm uppercase text-secondary tracking-widest">Atelier Stationery</span><div class="flex flex-col gap-space-xs font-body-sm text-body-sm text-on-surface-variant"><a class="hover:text-on-surface transition-colors" data-path="explore" href="#">Letterpress Suites</a><a class="hover:text-on-surface transition-colors" data-path="explore" href="#">Handmade Deckle Paper</a><a class="hover:text-on-surface transition-colors" data-path="explore" href="#">Wax Seals &amp; Silk Ribbons</a></div></div><div class="md:col-span-4 flex flex-col gap-space-xs"><span class="font-label-sm text-label-sm uppercase text-secondary tracking-widest">Concierge Support</span><p class="font-body-sm text-body-sm text-on-surface-variant">Private consultations with your dedicated bridal typesetter available Monday through Saturday.</p><div class="pt-space-xs"><a class="inline-flex items-center gap-space-xs font-label-md text-label-md text-on-surface hover:text-secondary transition-colors" data-path="concierge-support" href="#"><span class="material-symbols-outlined text-[16px]">mail</span>atelier@invite-lime.com</a></div></div></div><div class="pt-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm"><p class="font-body-sm text-body-sm text-on-surface-variant">© 2025 Invite Lime Atelier Inc. All rights reserved.</p><div class="flex items-center gap-space-lg font-body-sm text-body-sm text-on-surface-variant"><a class="hover:text-on-surface transition-colors" data-path="privacy-policy" href="#">Privacy Policy</a><a class="hover:text-on-surface transition-colors" data-path="terms-of-service" href="#">Terms of Service</a><a class="hover:text-on-surface transition-colors" data-path="concierge-support" href="#">Concierge Desk</a></div></div></div></footer></body></html>

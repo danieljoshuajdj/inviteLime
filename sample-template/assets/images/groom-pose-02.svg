@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" role="img" aria-label="Illustrated groom silhouette in sherwani">
+  <defs>
+    <linearGradient id="gp2bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c3a5e"/>
+      <stop offset="0.6" stop-color="#4a0630"/>
+      <stop offset="1" stop-color="#1a0818"/>
+    </linearGradient>
+    <radialGradient id="gp2glow" cx="0.5" cy="0.3" r="0.6">
+      <stop offset="0" stop-color="#f9a8d4" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#f9a8d4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="400" height="500" fill="url(#gp2bg)"/>
+  <rect width="400" height="500" fill="url(#gp2glow)"/>
+  <g fill="#f9a8d4" fill-opacity="0.65">
+    <circle cx="322" cy="98" r="2.2"/>
+    <circle cx="72" cy="132" r="2"/>
+    <circle cx="200" cy="54" r="1.6"/>
+    <circle cx="346" cy="300" r="1.6"/>
+    <circle cx="54" cy="286" r="1.6"/>
+  </g>
+  <rect x="16" y="16" width="368" height="468" fill="none" stroke="#d4909a" stroke-opacity="0.55"/>
+
+  <path d="M200 340 C142 340 104 388 96 474 L304 474 C296 388 258 340 200 340 Z" fill="#2b0720"/>
+  <path d="M184 234 h32 v72 h-32 z" fill="#2b0720"/>
+  <ellipse cx="200" cy="186" rx="52" ry="62" fill="#2b0720"/>
+
+  <path d="M200 116 C164 116 148 144 149 184 C150 202 152 212 154 220 C144 206 140 174 144 152
+           C152 122 174 108 200 108 C226 108 248 122 256 152 C260 174 256 206 246 220 C248 212 250 202 251 184 C252 144 236 116 200 116 Z"
+        fill="#1f0517"/>
+
+  <path d="M200 306 l-30 -34 h60 z" fill="#1a0818"/>
+  <path d="M170 272 h60" stroke="#d4909a" stroke-opacity="0.75" stroke-width="2.5"/>
+  <path d="M200 306 v160" stroke="#d4909a" stroke-opacity="0.55" stroke-width="2"/>
+  <g fill="#d4909a">
+    <circle cx="200" cy="336" r="4"/>
+    <circle cx="200" cy="368" r="4"/>
+    <circle cx="200" cy="400" r="4"/>
+    <circle cx="200" cy="432" r="4"/>
+  </g>
+
+  <g fill="none" stroke="#f9d5e9" stroke-opacity="0.5" stroke-width="2.4" stroke-linecap="round">
+    <path d="M172 178 q12 -9 24 0"/>
+    <path d="M204 178 q12 -9 24 0"/>
+    <path d="M186 222 q14 10 28 0"/>
+  </g>
+  <path d="M150 210 q10 26 30 40" fill="none" stroke="#1f0517" stroke-width="10" stroke-linecap="round"/>
+
+  <path d="M118 474 h164" stroke="#d4909a" stroke-opacity="0.7" stroke-width="2"/>
+</svg>

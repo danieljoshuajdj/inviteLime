@@ -1,0 +1,305 @@
+@import "tailwindcss";
+
+@theme {
+  /* Core fonts */
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-icons: "Material Symbols Outlined";
+
+  /* Typography families. The public site, builder and runtime pair these with
+     the `font-<group>-<size>` utilities declared at the bottom of this file. */
+  --font-body: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-label: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  /* Public site (forest green & violet) */
+  --color-ink: #0f172a;
+  --color-brand: #0d2b1f;
+  --color-brand-600: #123b2a;
+  --color-brand-light: #174a35;
+
+  /* Public site surfaces — warm ivory ramp (50 = page ivory, 950 = ink) */
+  --color-ivory-50: #fef9f2;
+  --color-ivory-100: #f8f3ec;
+  --color-ivory-200: #f2ede6;
+  --color-ivory-300: #e6e2db;
+  --color-ivory-400: #cfc9c0;
+  --color-ivory-500: #a8a29a;
+  --color-ivory-600: #767168;
+  --color-ivory-700: #45464c;
+  --color-ivory-800: #32302c;
+  --color-ivory-900: #141b2b;
+  --color-ivory-950: #0f172a;
+
+  /* Public site ink — navy (slate) ramp for copy, borders and dark sections */
+  --color-navy-50: #f8fafc;
+  --color-navy-100: #f1f5f9;
+  --color-navy-200: #e2e8f0;
+  --color-navy-300: #cbd5e1;
+  --color-navy-400: #94a3b8;
+  --color-navy-500: #64748b;
+  --color-navy-600: #475569;
+  --color-navy-700: #334155;
+  --color-navy-800: #1e293b;
+  --color-navy-900: #0f172a;
+  --color-navy-950: #020617;
+
+  /* Public site brand — forest green ramp (brand green #174A35).
+     These tokens keep the historical `sapphire` name so existing
+     `*-sapphire-*` utility classes resolve without a mass rename. */
+  --color-sapphire-50: #ebf9f3;
+  --color-sapphire-100: #d0f1e3;
+  --color-sapphire-200: #a9e5cc;
+  --color-sapphire-300: #6bd1a7;
+  --color-sapphire-400: #36b07d;
+  --color-sapphire-500: #247553;
+  --color-sapphire-600: #174a35;
+  --color-sapphire-700: #123b2a;
+  --color-sapphire-800: #0d2b1f;
+  --color-sapphire-900: #0a1f16;
+  --color-sapphire-950: #06140e;
+
+  /* Public site accent — couture gold (amber) ramp */
+  --color-gold-50: #fffbeb;
+  --color-gold-100: #fef3c7;
+  --color-gold-200: #fde68a;
+  --color-gold-300: #fcd34d;
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+  --color-gold-700: #b45309;
+  --color-gold-800: #92400e;
+  --color-gold-900: #78350f;
+
+  /* Status colours used by badges and inline notices */
+  --color-warning: #d97706;
+  --color-warning-strong: #92400e;
+  --color-on-success: #05603a;
+
+  /* Atelier surfaces (ivory) */
+  --color-surface: #fef9f2;
+  --color-background: #fef9f2;
+  --color-surface-bright: #fef9f2;
+  --color-surface-lowest: #ffffff;
+  --color-surface-low: #f8f3ec;
+  --color-surface-container: #f2ede6;
+  --color-surface-high: #ece7e1;
+  --color-surface-highest: #e6e2db;
+  --color-surface-dim: #ded9d3;
+  --color-surface-variant: #e6e2db;
+
+  /* Atelier ink / primary */
+  --color-primary: #000000;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #141b2b;
+  --color-on-primary-container: #7d8497;
+  --color-inverse-surface: #32302c;
+  --color-inverse-on-surface: #f5f0e9;
+
+  /* Atelier gold / secondary */
+  --color-secondary: #775a19;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #fed488;
+  --color-on-secondary-container: #785a1a;
+  --color-secondary-fixed: #ffdea5;
+  --color-secondary-fixed-dim: #e9c176;
+  --color-on-secondary-fixed: #261900;
+  --color-on-secondary-fixed-variant: #5d4201;
+
+  /* Atelier green / tertiary */
+  --color-tertiary-container: #0e1f13;
+  --color-tertiary-fixed: #d3e8d5;
+  --color-tertiary-fixed-dim: #b7ccb9;
+  --color-on-tertiary-container: #758978;
+  --color-on-tertiary-fixed-variant: #394b3d;
+
+  /* Text + outline */
+  --color-on-surface: #1d1c18;
+  --color-on-surface-variant: #45464c;
+  --color-outline: #76777d;
+  --color-outline-variant: #c6c6cd;
+
+  /* Error / success */
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-success: #0e7a3d;
+
+  /* Spacing scale from Stitch */
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-lg: 1.75rem;
+  --spacing-space-xl: 2.5rem;
+  --spacing-space-2xl: 4rem;
+  --spacing-gutter: 1.5rem;
+  --spacing-gutter-mobile: 1rem;
+  --spacing-margin: 3rem;
+  --spacing-margin-mobile: 1.25rem;
+
+  /* Font size scale from Stitch */
+  --text-label-sm: 10px;
+  --text-label-md: 12px;
+  --text-label-lg: 14px;
+  --text-body-sm: 13px;
+  --text-body-md: 15px;
+  --text-body-lg: 18px;
+  --text-headline-sm: 20px;
+  --text-headline-md: 26px;
+  --text-headline-lg: 36px;
+  --text-display-hero: 56px;
+  --text-display-hero-mobile: 38px;
+  --text-headline-lg-mobile: 28px;
+
+  /* Shadows */
+  --shadow-gold-focus: 0 0 0 2px #775a19;
+
+  /* Loading indicator: four dots that rise and fall in sequence. */
+  --animate-dot-wave: dot-wave 1.2s ease-in-out infinite;
+
+  @keyframes dot-wave {
+    0%,
+    70%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.4;
+    }
+    35% {
+      transform: translateY(-10px);
+      opacity: 1;
+    }
+  }
+}
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-surface);
+  }
+
+  body {
+    overscroll-behavior: none;
+    color: var(--color-on-surface);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  ::selection {
+    background: var(--color-secondary-fixed);
+    color: var(--color-on-secondary-fixed);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Typography utilities
+   The `--text-*` scale in `@theme` only carries font sizes, while the public
+   site, builder and runtime use `font-<group>-<size>` classes to pick a family
+   and a size together (e.g. `font-heading-3xl`, `font-body-sm`). These
+   utilities keep that pairing in one place. Heading sizes are fluid: the
+   design's mobile tokens are the lower bound, the desktop tokens the upper.
+--------------------------------------------------------------------------- */
+@utility font-heading-sm {
+  font-family: var(--font-heading);
+  font-size: var(--text-headline-sm);
+  line-height: 1.35;
+}
+
+@utility font-heading-md {
+  font-family: var(--font-heading);
+  font-size: var(--text-headline-md);
+  line-height: 1.3;
+}
+
+@utility font-heading-lg {
+  font-family: var(--font-heading);
+  font-size: clamp(28px, 3.4vw, var(--text-headline-lg));
+  line-height: 1.2;
+}
+
+@utility font-heading-xl {
+  font-family: var(--font-heading);
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.15;
+}
+
+@utility font-heading-2xl {
+  font-family: var(--font-heading);
+  font-size: clamp(32px, 4.5vw, 48px);
+  line-height: 1.1;
+}
+
+@utility font-heading-3xl {
+  font-family: var(--font-heading);
+  font-size: clamp(38px, 6vw, var(--text-display-hero));
+  line-height: 1.05;
+}
+
+@utility font-body-xs {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@utility font-body-sm {
+  font-family: var(--font-body);
+  font-size: var(--text-body-sm);
+  line-height: 1.55;
+}
+
+@utility font-body-md {
+  font-family: var(--font-body);
+  font-size: var(--text-body-md);
+  line-height: 1.6;
+}
+
+@utility font-body-lg {
+  font-family: var(--font-body);
+  font-size: var(--text-body-lg);
+  line-height: 1.65;
+}
+
+@utility font-label-sm {
+  font-family: var(--font-label);
+  font-size: var(--text-label-sm);
+  line-height: 1.4;
+}
+
+@utility font-label-md {
+  font-family: var(--font-label);
+  font-size: var(--text-label-md);
+  line-height: 1.4;
+}
+
+@utility font-label-lg {
+  font-family: var(--font-label);
+  font-size: var(--text-label-lg);
+  line-height: 1.4;
+}
