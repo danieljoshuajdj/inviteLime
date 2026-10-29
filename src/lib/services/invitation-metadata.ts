@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 
 import { invitationUrl } from "@/lib/services/weddings";
+import { formDefinition, formTypeOrDefault, isBirthdayForm } from "@/lib/builder/forms";
 
 export interface InvitationMetadataInput {
   slug: string;
-  brideName: string;
-  groomName: string;
+  brideName?: string | null;
+  groomName?: string | null;
+  celebrantName?: string | null;
+  formType?: string | null;
   brandName: string | null;
 }
 
@@ -18,14 +21,28 @@ export interface InvitationMetadataInput {
  * invitations.
  */
 export function buildInvitationMetadata(input: InvitationMetadataInput): Metadata {
-  const couple = `${input.groomName} & ${input.brideName}`;
+  const formType = formTypeOrDefault(input.formType);
+  const definition = formDefinition(formType);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+  const couple = [input.groomName?.trim(), input.brideName?.trim()].filter(Boolean).join(" & ");
+  const person = birthday
+    ? input.celebrantName?.trim() || "Birthday Star"
+    : couple || "Our Invitation";
   const brandName = input.brandName?.trim() || null;
   const title = brandName
-    ? `${couple} — Wedding Invitation by ${brandName}`
-    : `${couple} — Wedding Invitation`;
+    ? `${person} — ${definition.invitationLabel} by ${brandName}`
+    : `${person} — ${definition.invitationLabel}`;
+  const occasion = wishes
+    ? "and send them your birthday wishes"
+    : birthday
+      ? "as they celebrate their birthday"
+      : formType === "engagement"
+        ? "as they celebrate their engagement"
+        : "as they celebrate their wedding";
   const description = brandName
-    ? `Join ${couple} as they celebrate their wedding. Presented by ${brandName}.`
-    : `Join ${couple} as they celebrate their wedding.`;
+    ? `Join ${person} ${occasion}. Presented by ${brandName}.`
+    : `Join ${person} ${occasion}.`;
   const url = invitationUrl(input.slug);
 
   return {

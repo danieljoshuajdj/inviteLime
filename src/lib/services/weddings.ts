@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Json } from "@/types/database";
+import type { EventFormType, Json } from "@/types/database";
 import type { Supabase } from "@/lib/services/helpers";
 import { migrateDraftMediaToWedding } from "@/lib/services/media-migration";
 import {
@@ -15,9 +15,11 @@ export type WeddingStatus = "draft" | "active" | "expired" | "cancelled";
 export interface NewWeddingInput {
   templateId: string;
   templateVersionId: string;
-  brideName: string;
-  groomName: string;
-  weddingDate: string;
+  formType?: EventFormType;
+  brideName?: string;
+  groomName?: string;
+  celebrantName?: string;
+  weddingDate?: string;
   guestSessionId?: string | null;
   userId?: string | null;
   productId: string;
@@ -34,8 +36,10 @@ export interface PublishedInvitation {
   template_id: string | null;
   template_version_id: string | null;
   expiration_date: string | null;
+  form_type: EventFormType;
   bride_name: string | null;
   groom_name: string | null;
+  celebrant_name: string | null;
   wedding_date: string | null;
   email: string | null;
 }
@@ -70,10 +74,36 @@ export async function generateUniqueSlug(supabase: Supabase, base: string): Prom
 }
 
 /** Creates the wedding record in draft status (before payment). */
+function slugPart(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, "-").toLowerCase();
+}
+
 export async function createDraftWedding(input: NewWeddingInput): Promise<{ id: string; slug: string }> {
   const supabase = createAdminClient();
-  const base = `${input.groomName.replace(/\s+/g, "-").toLowerCase()}-weds-${input.brideName.replace(/\s+/g, "-").toLowerCase()}`;
-  const slug = await generateUniqueSlug(supabase, base);
+  const formType = input.formType ?? "wedding";
+  const isBirthday =
+    formType === "birthday_celebration" || formType === "birthday_wishes";
+  // The checkout body is validated against the template's form, so its values
+  // are authoritative. Fold them into the stored blob as well as the columns:
+  // template packages read the blob, and an autosave that was still in flight
+  // must not be able to leave the two disagreeing.
+  const weddingData = {
+    ...(input.weddingData ?? {}),
+    formType,
+    ...(input.brideName ? { brideName: input.brideName } : {}),
+    ...(input.groomName ? { groomName: input.groomName } : {}),
+    ...(input.celebrantName ? { celebrantName: input.celebrantName } : {}),
+    // A wish has no event date; never carry a stray one into the runtime blob.
+    ...(formType === "birthday_wishes"
+      ? { weddingDate: "" }
+      : input.weddingDate
+        ? { weddingDate: input.weddingDate }
+        : {}),
+  };
+  const base = isBirthday
+    ? `${slugPart(input.celebrantName) || "birthday"}-birthday`
+    : `${slugPart(input.groomName)}-weds-${slugPart(input.brideName)}`;
+  const slug = await generateUniqueSlug(supabase, base || "invitation");
   const rsvpEnabled =
     typeof input.weddingData?.rsvpEnabled === "boolean" ? input.weddingData.rsvpEnabled : false;
 
@@ -84,15 +114,17 @@ export async function createDraftWedding(input: NewWeddingInput): Promise<{ id: 
       template_id: input.templateId,
       template_version_id: input.templateVersionId,
       product_id: input.productId,
-      bride_name: input.brideName,
-      groom_name: input.groomName,
-      wedding_date: input.weddingDate,
+      form_type: formType,
+      bride_name: input.brideName?.trim() || null,
+      groom_name: input.groomName?.trim() || null,
+      celebrant_name: input.celebrantName?.trim() || null,
+      wedding_date: input.weddingDate || null,
       status: "draft",
       guest_session_id: input.guestSessionId ?? null,
       user_id: input.userId ?? null,
       email: input.email ?? null,
       rsvp_toggle: rsvpEnabled,
-      wedding_data: (input.weddingData as never) ?? {},
+      wedding_data: weddingData as never,
       planner_id: input.plannerId ?? null,
       planner_subscription_id: input.plannerSubscriptionId ?? null,
       billing_source: input.billingSource ?? "one_time",
@@ -111,7 +143,7 @@ export async function publishWedding(weddingId: string): Promise<PublishedInvita
   const { data: wedding, error } = await supabase
     .from("weddings")
     .select(
-      "id, slug, template_id, template_version_id, wedding_date, status, email, bride_name, groom_name, expiration_date, guest_session_id, wedding_data, planner_id, planner_subscription_id, billing_source, planner_brand_snapshot"
+      "id, slug, template_id, template_version_id, form_type, wedding_date, status, email, bride_name, groom_name, celebrant_name, expiration_date, guest_session_id, wedding_data, planner_id, planner_subscription_id, billing_source, planner_brand_snapshot"
     )
     .eq("id", weddingId)
     .single();
@@ -173,7 +205,7 @@ export async function publishWedding(weddingId: string): Promise<PublishedInvita
       ...(brandSnapshotJson ? { planner_brand_snapshot: brandSnapshotJson } : {}),
     })
     .eq("id", weddingId)
-    .select("id, slug, template_id, template_version_id, expiration_date, bride_name, groom_name, wedding_date, email")
+    .select("id, slug, template_id, template_version_id, expiration_date, form_type, bride_name, groom_name, celebrant_name, wedding_date, email")
     .single();
 
   if (updateError) throw updateError;
@@ -211,8 +243,10 @@ function toPublishedInvitation(w: {
   template_id: string | null;
   template_version_id: string | null;
   expiration_date: string | null;
+  form_type: EventFormType;
   bride_name: string | null;
   groom_name: string | null;
+  celebrant_name: string | null;
   wedding_date: string | null;
   email: string | null;
 }): PublishedInvitation {
@@ -223,8 +257,10 @@ function toPublishedInvitation(w: {
     template_id: w.template_id,
     template_version_id: w.template_version_id,
     expiration_date: w.expiration_date,
+    form_type: w.form_type ?? "wedding",
     bride_name: w.bride_name,
     groom_name: w.groom_name,
+    celebrant_name: w.celebrant_name,
     wedding_date: w.wedding_date,
     email: w.email,
   };
@@ -233,9 +269,11 @@ function toPublishedInvitation(w: {
 export interface PublicWeddingRecord {
   id: string;
   slug: string;
-  bride_name: string;
-  groom_name: string;
-  wedding_date: string;
+  form_type: EventFormType;
+  bride_name: string | null;
+  groom_name: string | null;
+  celebrant_name: string | null;
+  wedding_date: string | null;
   venue: string | null;
   address: string | null;
   maps_url: string | null;
@@ -273,7 +311,7 @@ export async function getPublicWedding(supabase: Supabase, slug: string): Promis
   const { data, error } = await supabase
     .from("weddings")
     .select(
-      "id, slug, bride_name, groom_name, wedding_date, venue, address, maps_url, template_id, template_version_id, wedding_data, expiration_date, rsvp_toggle, rsvp_deadline, status, planner_id, planner_brand_snapshot, billing_source"
+      "id, slug, form_type, bride_name, groom_name, celebrant_name, wedding_date, venue, address, maps_url, template_id, template_version_id, wedding_data, expiration_date, rsvp_toggle, rsvp_deadline, status, planner_id, planner_brand_snapshot, billing_source"
     )
     .eq("slug", slug)
     .maybeSingle();

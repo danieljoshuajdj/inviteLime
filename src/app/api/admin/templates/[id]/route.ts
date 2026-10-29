@@ -15,6 +15,7 @@ import { deleteMediaPack } from "@/lib/services/media-packs";
 import { deleteDemoDetailPack } from "@/lib/services/demo-details";
 import { deleteMusicTrack } from "@/lib/services/music-library";
 import { getObjectStorage, TEMPLATE_BUCKET } from "@/lib/services/storage";
+import { type FormType } from "@/lib/builder/forms";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,8 @@ const patchSchema = z
     media_pack_id: z.string().uuid().nullable().optional(),
     demo_detail_pack_id: z.string().uuid().nullable().optional(),
     music_track_id: z.string().uuid().nullable().optional(),
+    // Replacing the single event category also re-derives the template's form.
+    category_ids: z.array(z.string().uuid()).length(1, "Select exactly one event category").optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
 interface RouteContext {
@@ -63,7 +66,32 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       if (priceErr) return Response.json({ error: priceErr.message }, { status: 500 });
     }
 
+    let derivedFormType: FormType | null = null;
+    if (parsed.data.category_ids !== undefined) {
+      const { data: category } = await adminClient
+        .from("categories")
+        .select("id, form_type")
+        .eq("id", parsed.data.category_ids[0])
+        .maybeSingle();
+      if (!category) {
+        return Response.json({ error: "The selected category no longer exists" }, { status: 400 });
+      }
+      derivedFormType = category.form_type;
+
+      const { error: unlinkError } = await adminClient
+        .from("template_categories")
+        .delete()
+        .eq("template_id", id);
+      if (unlinkError) return Response.json({ error: unlinkError.message }, { status: 500 });
+
+      const { error: linkError } = await adminClient
+        .from("template_categories")
+        .insert({ template_id: id, category_id: category.id });
+      if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
+    }
+
     const update = {
+      ...(derivedFormType ? { form_type: derivedFormType } : {}),
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
       ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
       ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),

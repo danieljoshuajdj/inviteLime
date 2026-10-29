@@ -27,6 +27,12 @@ import {
   isPlannerBrandComplete,
   normalizeMapsUrl,
 } from "@/lib/services/planner-branding";
+import {
+  categorySlugForFormType,
+  formTypeOrDefault,
+  isBirthdayForm,
+} from "@/lib/builder/forms";
+import { musicTrackInCategory } from "@/lib/library-media";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -107,11 +113,16 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
   //   details → who/what the demo is about (names, venue, events, dress code)
   //   media   → photos for the bride/groom/couple and gallery slots
   //   music   → one background song from the shared library
-  // A failed lookup (or content deleted since assignment) degrades to the
-  // stock demo rather than breaking the page.
-  const [packMedia, detailPack, track] = await Promise.all([
+  // A layer authored for a different category is ignored: a birthday demo must
+  // never render a wedding pack, and a track offered only in another category
+  // must not leak into this category's demo. A failed lookup (or content
+  // deleted since assignment) degrades to the stock demo rather than breaking
+  // the page.
+  const formType = formTypeOrDefault(template.form_type);
+  const categorySlug = template.categories[0]?.slug ?? categorySlugForFormType(formType);
+  const [packMedia, detailCandidate, trackCandidate] = await Promise.all([
     template.media_pack_id
-      ? getPackDemoMedia(template.media_pack_id).catch(() => null)
+      ? getPackDemoMedia(template.media_pack_id, formType).catch(() => null)
       : Promise.resolve(null),
     template.demo_detail_pack_id
       ? getDemoDetailPack(template.demo_detail_pack_id).catch(() => null)
@@ -120,10 +131,30 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
       ? getMusicTrack(template.music_track_id).catch(() => null)
       : Promise.resolve(null),
   ]);
+  const detailPack = detailCandidate?.formType === formType ? detailCandidate : null;
+  const track =
+    trackCandidate && musicTrackInCategory(trackCandidate, categorySlug) ? trackCandidate : null;
 
   const baseData = detailPack ? demoDetailsToWeddingData(detailPack) : DEMO_WEDDING_DATA;
   const withPhotos = packMedia ? withPackMedia(baseData, packMedia) : baseData;
-  const demoData = track ? withDemoMusic(withPhotos, track) : withPhotos;
+  const layered = track ? withDemoMusic(withPhotos, track) : withPhotos;
+
+  // The template's category decides which form the demo shows. A birthday
+  // template reuses the stock demo photos as its main image and has no RSVP.
+  const birthday = isBirthdayForm(formType);
+  const demoData = birthday
+    ? {
+        ...layered,
+        formType,
+        celebrantName: layered.celebrantName || "Ananya",
+        birthdayNumber:
+          formType === "birthday_wishes" ? layered.birthdayNumber ?? 21 : layered.birthdayNumber,
+        specialMessage:
+          layered.specialMessage ||
+          "Wishing you a day filled with laughter, cake and everyone who loves you.",
+        mainPhoto: layered.mainPhoto ?? layered.couplePhoto ?? null,
+      }
+    : { ...layered, formType };
 
   // Demo detail packs author their own designations and dress-code swatches.
   // Layer them over the builder-shaped data only in demo mode; live payloads
@@ -146,7 +177,7 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
       (url) => absolutizeMediaUrl(url, appUrl)
     ),
     rsvp: {
-      enabled: true,
+      enabled: !birthday,
       preview: true,
       deadline: detailPack?.rsvpDeadline ?? null,
       attendingCount: 0,

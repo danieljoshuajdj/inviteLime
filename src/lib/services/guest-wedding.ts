@@ -50,6 +50,8 @@ export interface SyncedGuestWedding {
   id: string;
   slug: string | null;
   data: Record<string, unknown>;
+  /** Live data before this save; used to find objects that were replaced. */
+  previousData: Record<string, unknown>;
 }
 
 /**
@@ -102,5 +104,10 @@ export async function syncActiveWeddingFromDraft(input: {
     }
   }
 
-  return { id: active.id, slug: active.slug, data };
+  return {
+    id: active.id,
+    slug: active.slug,
+    data,
+    previousData: active.wedding_data,
+  };
 }

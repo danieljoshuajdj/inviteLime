@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
-import { Icon } from "@/components/shared/Icon";
+import { Icon, type IconName } from "@/components/shared/Icon";
 import { TextInput, Select, Textarea, MultiSelect } from "@/components/shared/Field";
 import { Modal } from "@/components/shared/Modal";
 import { cn, formatPrice, slugify } from "@/lib/utils";
@@ -13,10 +13,19 @@ import { toast } from "@/components/account/toast";
 // client (and its `server-only` guard) into the browser bundle.
 import {
   demoDetailPackCouple,
+  mediaPackMatchesForm,
+  musicTrackInCategory,
   type DemoDetailPack,
   type MediaPack,
   type MusicTrack,
 } from "@/lib/library-media";
+import {
+  categorySlugForFormType,
+  formDefinition,
+  formTypeFromCategorySlug,
+  formTypeOrDefault,
+  type FormType,
+} from "@/lib/builder/forms";
 
 interface ValidationCheck {
   name: string;
@@ -71,6 +80,8 @@ interface TemplatesManagerProps {
     slug: string;
     description: string | null;
     status: "active" | "disabled" | "draft";
+    /** Event form derived from the template's single category. */
+    formType?: string;
     thumbnailUrl: string | null;
     product: { id: string; name: string; pricePaise: number; currency: string; active: boolean } | null;
     currentVersion: string | null;
@@ -105,16 +116,47 @@ function musicTrackLabel(track: { title: string; artist: string | null } | null 
   return track.artist ? `${track.title} — ${track.artist}` : track.title;
 }
 
-const STEPS = [
-  { key: "info", label: "Basic Info", icon: "info" },
-  { key: "pricing", label: "Pricing", icon: "dashboard" },
-  { key: "categories", label: "Categories", icon: "category" },
-  { key: "package", label: "Package", icon: "inventory_2" },
-  { key: "media", label: "Demo Content", icon: "auto_awesome" },
-  { key: "preview", label: "Preview", icon: "visibility" },
-] as const;
+/** The builder form of a category, or null for one outside the fixed taxonomy. */
+function formTypeForCategoryId(
+  categoryId: string | null,
+  categories: Category[]
+): FormType | null {
+  if (!categoryId) return null;
+  return formTypeFromCategorySlug(categories.find((category) => category.id === categoryId)?.slug);
+}
 
-type StepKey = (typeof STEPS)[number]["key"];
+/** One titled block of the single add-template form. */
+function FormSection({
+  id,
+  title,
+  description,
+  icon,
+  children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  icon: IconName;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      id={`template-section-${id}`}
+      className="scroll-mt-4 rounded-xl border border-outline-variant bg-surface-container-lowest p-4"
+    >
+      <div className="mb-3 flex items-start gap-2">
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon name={icon} size="sm" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="font-body-sm font-semibold text-on-surface">{title}</h3>
+          <p className="mt-0.5 font-body-xs text-on-surface-variant">{description}</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">{children}</div>
+    </section>
+  );
+}
 
 interface FormData {
   name: string;
@@ -125,13 +167,44 @@ interface FormData {
   product_id: string | null;
   price_paise: number | null;
   currency: string;
-  category_ids: string[];
+  category_id: string | null;
   zip: File | null;
   thumbnail: File | null;
   media_pack_id: string | null;
   demo_detail_pack_id: string | null;
   music_track_id: string | null;
 }
+
+/** A blank add-template form. */
+function emptyWizardData(): FormData {
+  return {
+    name: "",
+    slug: "",
+    description: "",
+    status: "draft",
+    tags: [],
+    product_id: null,
+    price_paise: null,
+    currency: "INR",
+    category_id: null,
+    zip: null,
+    thumbnail: null,
+    media_pack_id: null,
+    demo_detail_pack_id: null,
+    music_track_id: null,
+  };
+}
+
+/** The section a failed field lives in, used to scroll the form to it. */
+const ERROR_SECTION: Partial<Record<keyof FormData, string>> = {
+  name: "basic-info",
+  slug: "basic-info",
+  price_paise: "pricing",
+  currency: "pricing",
+  category_id: "categories",
+  zip: "package",
+  thumbnail: "package",
+};
 
 export function TemplatesManager({
   templates,
@@ -146,83 +219,100 @@ export function TemplatesManager({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [thumbnailUploading, setThumbnailUploading] = useState<string | null>(null);
   // Selected demo sources in the manage panel, for the single expanded row.
   const [mediaDraft, setMediaDraft] = useState<string>("");
   const [detailDraft, setDetailDraft] = useState<string>("");
   const [musicDraft, setMusicDraft] = useState<string>("");
   const [demoSaving, setDemoSaving] = useState(false);
-const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState<StepKey>("info");
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardLoading, setWizardLoading] = useState(false);
-  const [wizardSubmitted, setWizardSubmitted] = useState(false);
-  const [wizardData, setWizardData] = useState<FormData>({
-    name: "",
-    slug: "",
-    description: "",
-    status: "draft",
-    tags: [],
-    product_id: null,
-    price_paise: null,
-    currency: "INR",
-    category_ids: [],
-    zip: null,
-    thumbnail: null,
-    media_pack_id: null,
-    demo_detail_pack_id: null,
-    music_track_id: null,
-  });
+  const [wizardData, setWizardData] = useState<FormData>(emptyWizardData());
   const [wizardErrors, setWizardErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [createdTemplateId, setCreatedTemplateId] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<{ templateId: string; result: UploadResponse } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<(typeof templates)[number] | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const currentStepIndex = STEPS.findIndex((s) => s.key === wizardStep);
-  const canGoBack = currentStepIndex > 0;
-  const canGoNext = currentStepIndex < STEPS.length - 1;
-  const isLastStep = currentStepIndex === STEPS.length - 1;
+  // Demo content is category-specific: only songs offered in the selected
+  // category and detail packs authored for its form are available.
+  const wizardFormType = formTypeForCategoryId(wizardData.category_id, categories);
+  const wizardCategorySlug = wizardFormType ? categorySlugForFormType(wizardFormType) : null;
+  const wizardMusicTracks = wizardCategorySlug
+    ? musicTracks.filter((track) => musicTrackInCategory(track, wizardCategorySlug))
+    : [];
+  const wizardDetailPacks = wizardFormType
+    ? detailPacks.filter((pack) => pack.formType === wizardFormType)
+    : [];
+  const wizardMediaPacks = wizardFormType
+    ? mediaPacks.filter((pack) => mediaPackMatchesForm(pack, wizardFormType))
+    : [];
 
-  function validateStep(step: StepKey): boolean {
+  /** Clears a field error as soon as the admin starts fixing that field. */
+  function clearError(key: keyof FormData) {
+    setWizardErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
+  }
+
+  /** Validates every section at once — there are no more per-step gates. */
+  function validateForm(): boolean {
     const errors: Partial<Record<keyof FormData, string>> = {};
-    if (step === "info") {
-      if (!wizardData.name.trim()) errors.name = "Template name is required";
-      if (!wizardData.slug.trim()) errors.slug = "Slug is required";
-      else if (!/^[a-z0-9-]+$/.test(wizardData.slug)) errors.slug = "Slug must be lowercase letters, numbers, and dashes only";
+
+    const name = wizardData.name.trim();
+    if (!name) errors.name = "Template name is required";
+    else if (name.length < 2) errors.name = "Template name must be at least 2 characters";
+
+    const slug = wizardData.slug.trim();
+    if (!slug) errors.slug = "Slug is required";
+    else if (slug.length < 2) errors.slug = "Slug must be at least 2 characters";
+    else if (!/^[a-z0-9-]+$/.test(slug)) {
+      errors.slug = "Slug must be lowercase letters, numbers, and dashes only";
     }
-    if (step === "pricing") {
-      if (!wizardData.product_id && (wizardData.price_paise === null || wizardData.price_paise < 0)) {
-        errors.price_paise = "Enter a price or select an existing product";
-      }
+
+    if (!wizardData.product_id && wizardData.price_paise === null) {
+      errors.price_paise = "Enter a price or select an existing product";
+    } else if (wizardData.price_paise !== null && wizardData.price_paise < 0) {
+      errors.price_paise = "Price cannot be negative";
     }
-    if (step === "categories") {
-      if (wizardData.category_ids.length === 0) errors.category_ids = "Select at least one category";
+    if (!/^[A-Z]{3}$/.test(wizardData.currency)) {
+      errors.currency = "Currency must be a 3-letter code, e.g. INR";
     }
-    if (step === "package") {
-      if (!wizardData.zip) errors.zip = "A .zip package is required";
-      else if (!wizardData.zip.name.toLowerCase().endsWith(".zip")) errors.zip = "Package must be a .zip file";
-      else if (wizardData.zip.size > 60 * 1024 * 1024) errors.zip = "Package exceeds 60 MB limit";
+
+    if (!wizardData.category_id) errors.category_id = "Select an event category";
+
+    if (!wizardData.zip) errors.zip = "A .zip package is required";
+    else if (!wizardData.zip.name.toLowerCase().endsWith(".zip")) {
+      errors.zip = "Package must be a .zip file";
+    } else if (wizardData.zip.size > 60 * 1024 * 1024) {
+      errors.zip = "Package exceeds 60 MB limit";
     }
+
+    if (wizardData.thumbnail && !/^image\/(png|jpe?g|webp)$/.test(wizardData.thumbnail.type)) {
+      errors.thumbnail = "Thumbnail must be PNG, JPEG, or WebP";
+    }
+
     setWizardErrors(errors);
+    const firstError = (Object.keys(errors) as (keyof FormData)[]).find(
+      (key) => ERROR_SECTION[key]
+    );
+    if (firstError) {
+      const sectionId = `template-section-${ERROR_SECTION[firstError]}`;
+      requestAnimationFrame(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      toast("Check the form", "Fix the highlighted fields before creating the template.");
+    }
     return Object.keys(errors).length === 0;
-  }
-
-  function handleBack() {
-    if (canGoBack) setWizardStep(STEPS[currentStepIndex - 1].key);
-  }
-
-  async function handleNext() {
-    if (!validateStep(wizardStep)) return;
-    if (canGoNext) setWizardStep(STEPS[currentStepIndex + 1].key);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!validateStep(wizardStep)) return;
+    if (wizardLoading) return;
+    if (!validateForm()) return;
 
     setWizardLoading(true);
     try {
-      // Step 1: Create the template (reuse the id from a previous attempt in
-      // this wizard so fixing a rejected package doesn't hit a slug conflict)
+      // Create the template once per attempt. Reusing its id on a retry means
+      // fixing a rejected package never hits a slug conflict.
       let templateId: string;
       if (createdTemplateId) {
         templateId = createdTemplateId;
@@ -239,7 +329,7 @@ const [wizardOpen, setWizardOpen] = useState(false);
             price_paise: wizardData.price_paise,
             currency: wizardData.currency.toUpperCase(),
             tags: wizardData.tags,
-            category_ids: wizardData.category_ids,
+            category_ids: wizardData.category_id ? [wizardData.category_id] : [],
             media_pack_id: wizardData.media_pack_id,
             demo_detail_pack_id: wizardData.demo_detail_pack_id,
             music_track_id: wizardData.music_track_id,
@@ -253,7 +343,8 @@ const [wizardOpen, setWizardOpen] = useState(false);
         appendTemplateRow(templateId, json.template.product_id ?? null);
       }
 
-      // Step 2: Upload package
+      // Upload the package. A 422 keeps the form open so the package can be
+      // fixed and submitted again; the template draft is already created.
       const fd = new FormData();
       fd.append("file", wizardData.zip!);
       if (wizardData.thumbnail) fd.append("thumbnail", wizardData.thumbnail);
@@ -262,18 +353,17 @@ const [wizardOpen, setWizardOpen] = useState(false);
 
       if (uploadRes.status === 422 && uploadJson.validation) {
         setValidationResult({ templateId, result: uploadJson });
-        toast("Validation failed", "Fix errors before publishing");
-        setWizardStep("preview");
+        toast("Validation failed", "Fix the package errors, then submit again");
         return;
       }
       if (!uploadRes.ok) throw new Error(uploadJson.error ?? "Upload failed");
 
-      // Success
+      // Success: close the form and leave the validation report on screen so
+      // the admin can review it and publish the new version.
       setValidationResult({ templateId, result: uploadJson });
       setRows((rs) => rs.map((r) => (r.id === templateId ? { ...r, versionCount: r.versionCount + 1 } : r)));
-      setWizardSubmitted(true);
       toast(`v${uploadJson.version} uploaded as draft`, "Review validation results, then publish");
-      setWizardStep("preview");
+      finishWizard();
     } catch (err) {
       toast("Create failed", (err as Error).message);
     } finally {
@@ -304,15 +394,16 @@ const [wizardOpen, setWizardOpen] = useState(false);
           slug: wizardData.slug.trim().toLowerCase(),
           description: wizardData.description.trim() || null,
           status: wizardData.status,
+          formType: wizardFormType ?? undefined,
           thumbnailUrl: null,
           product,
           currentVersion: null,
           versionCount: 0,
           activeInvitations: 0,
           totalInvitations: 0,
-          categories: wizardData.category_ids
-            .map((cid) => categories.find((c) => c.id === cid)?.name ?? "")
-            .filter(Boolean),
+          categories: categories
+            .filter((category) => category.id === wizardData.category_id)
+            .map((category) => category.name),
           mediaPackId: wizardData.media_pack_id,
           mediaPackName: wizardData.media_pack_id
             ? mediaPacks.find((p) => p.id === wizardData.media_pack_id)?.name ?? null
@@ -331,19 +422,22 @@ const [wizardOpen, setWizardOpen] = useState(false);
     });
   }
 
-  function closeWizard() {
+  /** Clears the add form but leaves the page state untouched. */
+  function resetWizard() {
     setWizardOpen(false);
-    setWizardStep("info");
-    setWizardSubmitted(false);
     setCreatedTemplateId(null);
-    setValidationResult(null);
-    setWizardData({
-      name: "", slug: "", description: "", status: "draft", tags: [],
-      product_id: null, price_paise: null, currency: "INR",
-      category_ids: [], zip: null, thumbnail: null, media_pack_id: null,
-      demo_detail_pack_id: null, music_track_id: null,
-    });
+    setWizardData(emptyWizardData());
     setWizardErrors({});
+  }
+
+  function closeWizard() {
+    resetWizard();
+    setValidationResult(null);
+  }
+
+  /** Successful submit: close the form but keep its validation report open. */
+  function finishWizard() {
+    resetWizard();
   }
 
   // --- Existing template management functions ---
@@ -459,6 +553,31 @@ const [wizardOpen, setWizardOpen] = useState(false);
     finally { setUploading(null); }
   }
 
+  async function uploadThumbnail(id: string, file: File) {
+    setThumbnailUploading(id);
+    try {
+      const fd = new FormData();
+      fd.append("thumbnail", file);
+      const res = await fetch(`/api/admin/templates/${id}/thumbnail`, {
+        method: "POST",
+        body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Thumbnail upload failed");
+
+      setRows((rs) =>
+        rs.map((r) =>
+          r.id === id ? { ...r, thumbnailUrl: json.thumbnailUrl ?? r.thumbnailUrl } : r
+        )
+      );
+      toast("Thumbnail updated", "The new image now appears on the template cards");
+    } catch (e) {
+      toast("Thumbnail upload failed", (e as Error).message);
+    } finally {
+      setThumbnailUploading(null);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -498,7 +617,7 @@ const [wizardOpen, setWizardOpen] = useState(false);
     wizardData.product_id !== null ||
     wizardData.price_paise !== null ||
     wizardData.currency !== "INR" ||
-    wizardData.category_ids.length > 0 ||
+    wizardData.category_id !== null ||
     wizardData.zip !== null ||
     wizardData.thumbnail !== null ||
     wizardData.media_pack_id !== null ||
@@ -520,37 +639,15 @@ const [wizardOpen, setWizardOpen] = useState(false);
         </div>
       </div>
 
-      {/* Add Template Wizard */}
+      {/* Add Template form */}
       <Modal open={wizardOpen} onClose={closeWizard} title="Add Template" icon="add_circle" size="xl" blockBackdropClose={wizardDirty}>
-        <div className="flex flex-col h-full">
-          {/* Step indicator */}
-          <div className="flex items-center gap-1 mb-4 p-2 bg-surface-container-low rounded-lg overflow-x-auto">
-            {STEPS.map((step, idx) => (
-              <div key={step.key} className="flex items-center gap-1 flex-shrink-0">
-                <div className={cn(
-                  "flex items-center justify-center w-8 h-8 rounded-full text-xs font-medium transition-all",
-                  idx < currentStepIndex
-                    ? "bg-success text-on-success"
-                    : idx === currentStepIndex
-                    ? "bg-primary text-on-primary"
-                    : "bg-surface-container-highest text-on-surface-variant"
-                )}>
-                  {idx < currentStepIndex ? "✓" : <Icon name={step.icon} size="sm" />}
-                </div>
-                <span className={cn(
-                  "hidden sm:block font-body-xs font-medium px-2",
-                  idx === currentStepIndex ? "text-primary" : "text-on-surface-variant"
-                )}>
-                  {step.label}
-                </span>
-                {idx < STEPS.length - 1 && <span className={cn("hidden sm:block w-8 border-t-2", idx < currentStepIndex ? "border-success" : "border-outline-variant")} />}
-              </div>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-            {/* Step: Basic Info */}
-            {wizardStep === "info" && (
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+          <FormSection
+            id="basic-info"
+            title="Basic Info"
+            description="Name, slug, description, status, and tags shown in the library."
+            icon="info"
+          >
               <div className="flex flex-col gap-4">
                 <TextInput
                   label="Name"
@@ -565,6 +662,7 @@ const [wizardOpen, setWizardOpen] = useState(false);
                       // (meaning the user hasn't manually edited it)
                       slug: p.slug === slugify(p.name) ? slugify(newName) : p.slug,
                     }));
+                    clearError("name");
                   }}
                   placeholder="e.g. Royal Mughal Palace"
                   required
@@ -574,7 +672,10 @@ const [wizardOpen, setWizardOpen] = useState(false);
                   label="Slug"
                   name="slug"
                   value={wizardData.slug}
-                  onChange={(e) => setWizardData((p) => ({ ...p, slug: (e.target as HTMLInputElement).value.toLowerCase() }))}
+                  onChange={(e) => {
+                    setWizardData((p) => ({ ...p, slug: (e.target as HTMLInputElement).value.toLowerCase() }));
+                    clearError("slug");
+                  }}
                   placeholder="auto-generated from name"
                   hint="Lowercase letters, numbers, and dashes only"
                   required
@@ -610,20 +711,24 @@ const [wizardOpen, setWizardOpen] = useState(false);
                   />
                 </div>
               </div>
-            )}
+          </FormSection>
 
-            {/* Step: Pricing */}
-            {wizardStep === "pricing" && (
+          <FormSection
+            id="pricing"
+            title="Pricing"
+            description="Link an existing product or create one from a new price."
+            icon="dashboard"
+          >
               <div className="flex flex-col gap-4">
-                <p className="font-body-sm text-on-surface-variant">
-                  Link an existing pricing product or enter a new price to create one automatically.
-                </p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Select
                     label="Existing Product (optional)"
                     name="product_id"
                     value={wizardData.product_id ?? ""}
-                    onChange={(e) => setWizardData((p) => ({ ...p, product_id: (e.target as HTMLSelectElement).value || null, price_paise: null }))}
+                    onChange={(e) => {
+                      setWizardData((p) => ({ ...p, product_id: (e.target as HTMLSelectElement).value || null, price_paise: null }));
+                      clearError("price_paise");
+                    }}
                     options={productOptions}
                     placeholder="Select a product"
                   />
@@ -636,6 +741,7 @@ const [wizardOpen, setWizardOpen] = useState(false);
                     onChange={(e) => {
                       const n = Number((e.target as HTMLInputElement).value);
                       setWizardData((p) => ({ ...p, price_paise: Number.isNaN(n) ? null : Math.round(n * 100), product_id: null }));
+                      clearError("price_paise");
                     }}
                     placeholder="e.g. 1499"
                     error={wizardErrors.price_paise}
@@ -643,34 +749,79 @@ const [wizardOpen, setWizardOpen] = useState(false);
                   <TextInput
                     label="Currency"
                     value={wizardData.currency}
-                    onChange={(e) => setWizardData((p) => ({ ...p, currency: (e.target as HTMLInputElement).value.toUpperCase() }))}
+                    onChange={(e) => {
+                      setWizardData((p) => ({ ...p, currency: (e.target as HTMLInputElement).value.toUpperCase() }));
+                      clearError("currency");
+                    }}
                     maxLength={3}
+                    error={wizardErrors.currency}
                   />
                 </div>
               </div>
-            )}
+          </FormSection>
 
-            {/* Step: Categories */}
-            {wizardStep === "categories" && (
+          <FormSection
+            id="categories"
+            title="Categories"
+            description="Choose the single event category that decides which builder form customers fill in."
+            icon="category"
+          >
               <div className="flex flex-col gap-4">
-                <p className="font-body-sm text-on-surface-variant">Select one or more categories for this template.</p>
-                <MultiSelect
-                  label="Categories"
-                  value={wizardData.category_ids}
-                  onChange={(v: string[]) => setWizardData((p) => ({ ...p, category_ids: v }))}
+                <Select
+                  label="Event category"
+                  value={wizardData.category_id ?? ""}
+                  onChange={(e) => {
+                    const value = (e.target as HTMLSelectElement).value || null;
+                    const nextForm = formTypeForCategoryId(value, categories);
+                    const nextSlug = nextForm ? categorySlugForFormType(nextForm) : null;
+                    setWizardData((p) => {
+                      // Keep the current demo picks only when they still belong
+                      // to the newly selected category.
+                      const track = p.music_track_id
+                        ? musicTracks.find((item) => item.id === p.music_track_id)
+                        : null;
+                      const detailPack = p.demo_detail_pack_id
+                        ? detailPacks.find((item) => item.id === p.demo_detail_pack_id)
+                        : null;
+                      const mediaPack = p.media_pack_id
+                        ? mediaPacks.find((item) => item.id === p.media_pack_id)
+                        : null;
+                      return {
+                        ...p,
+                        category_id: value,
+                        music_track_id:
+                          track && nextSlug && musicTrackInCategory(track, nextSlug)
+                            ? p.music_track_id
+                            : null,
+                        demo_detail_pack_id:
+                          detailPack && nextForm && detailPack.formType === nextForm
+                            ? p.demo_detail_pack_id
+                            : null,
+                        media_pack_id:
+                          mediaPack && mediaPackMatchesForm(mediaPack, nextForm)
+                            ? p.media_pack_id
+                            : null,
+                      };
+                    });
+                    if (value) clearError("category_id");
+                  }}
                   options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                  placeholder="Select categories..."
-                  error={wizardErrors.category_ids}
+                  placeholder="Select an event category"
+                  error={wizardErrors.category_id}
+                  hint="Demo photos, songs and sample details are filtered to this category."
                   required
                 />
               </div>
-            )}
+          </FormSection>
 
-            {/* Step: Package */}
-            {wizardStep === "package" && (
+          <FormSection
+            id="package"
+            title="Package"
+            description="Upload the template ZIP and an optional thumbnail."
+            icon="inventory_2"
+          >
               <div className="flex flex-col gap-4">
-                <p className="font-body-sm text-on-surface-variant">
-                  Upload the template package (.zip) and an optional thumbnail.
+                <p className="font-body-xs text-on-surface-variant">
                   The package must contain <code className="font-mono">index.html</code> and <code className="font-mono">manifest.json</code> at its root.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -680,7 +831,10 @@ const [wizardOpen, setWizardOpen] = useState(false);
                       type="file"
                       accept=".zip"
                       className="mt-1 block w-full cursor-pointer rounded-lg border border-outline-variant bg-surface p-2 text-sm"
-                      onChange={(e) => setWizardData((p) => ({ ...p, zip: e.target.files?.[0] ?? null }))}
+                      onChange={(e) => {
+                        setWizardData((p) => ({ ...p, zip: e.target.files?.[0] ?? null }));
+                        clearError("zip");
+                      }}
                     />
                     {wizardErrors.zip && <p className="mt-1 font-body-xs text-error">{wizardErrors.zip}</p>}
                     {wizardData.zip && <p className="mt-1 font-body-xs text-success">Selected: {wizardData.zip.name} ({Math.round(wizardData.zip.size / 1024)} KB)</p>}
@@ -691,24 +845,25 @@ const [wizardOpen, setWizardOpen] = useState(false);
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
                       className="mt-1 block w-full cursor-pointer rounded-lg border border-outline-variant bg-surface p-2 text-sm"
-                      onChange={(e) => setWizardData((p) => ({ ...p, thumbnail: e.target.files?.[0] ?? null }))}
+                      onChange={(e) => {
+                        setWizardData((p) => ({ ...p, thumbnail: e.target.files?.[0] ?? null }));
+                        clearError("thumbnail");
+                      }}
                     />
+                    {wizardErrors.thumbnail && <p className="mt-1 font-body-xs text-error">{wizardErrors.thumbnail}</p>}
                     {wizardData.thumbnail && <p className="mt-1 font-body-xs text-success">Selected: {wizardData.thumbnail.name}</p>}
                   </label>
                 </div>
               </div>
-            )}
+          </FormSection>
 
-            {/* Step: Demo Content */}
-            {wizardStep === "media" && (
+          <FormSection
+            id="demo-content"
+            title="Demo Content"
+            description="Pick the sample photos, details, and background song the demo renders. Live invitations always show the customer's own content."
+            icon="auto_awesome"
+          >
               <div className="flex flex-col gap-4">
-                <p className="font-body-sm text-on-surface-variant">
-                  Choose the sample content this template&apos;s demo should render: photos, a
-                  sample wedding and a background song. Each is uploaded once in the library
-                  and reused by every template assigned to it, so nothing needs to be bundled
-                  into the ZIP. Live invitations always show the customer&apos;s own content.
-                </p>
-
                 <p className="font-body-sm font-semibold text-on-surface">Sample photos</p>
 
                 <button
@@ -737,20 +892,27 @@ const [wizardOpen, setWizardOpen] = useState(false);
                   )}
                 </button>
 
-                {mediaPacks.length === 0 ? (
+                {!wizardFormType ? (
                   <p className="rounded-xl border border-dashed border-outline-variant p-4 font-body-sm text-on-surface-variant">
-                    No media packs yet. Create one in the Media tab (Library → Media), upload
-                    its photos, then come back to assign it.
+                    Select an event category above to see its media packs.
+                  </p>
+                ) : wizardMediaPacks.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-outline-variant p-4 font-body-sm text-on-surface-variant">
+                    No {formDefinition(wizardFormType).label.toLowerCase()} media packs yet.
+                    Create one in the Media tab (Library → Media), upload its photos, then come
+                    back to assign it.
                   </p>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {mediaPacks.map((pack) => {
+                    {wizardMediaPacks.map((pack) => {
                       const selected = wizardData.media_pack_id === pack.id;
                       const counts = { bride: 0, groom: 0, couple: 0, gallery: 0 };
                       for (const item of pack.items) counts[item.role]++;
                       const previewUrls = (["groom", "bride", "couple"] as const)
                         .map((role) => pack.items.find((i) => i.role === role)?.url)
                         .filter(Boolean) as string[];
+                      const coupleFormPack =
+                        pack.formType === "wedding" || pack.formType === "engagement";
                       return (
                         <button
                           key={pack.id}
@@ -779,9 +941,16 @@ const [wizardOpen, setWizardOpen] = useState(false);
                               {pack.name}
                             </span>
                             <span className="mt-0.5 block font-body-xs text-on-surface-variant">
-                              {counts.groom ? "groom" : "no groom"} · {counts.bride ? "bride" : "no bride"} ·{" "}
-                              {counts.couple ? "couple" : "no couple"} ·{" "}
-                              {counts.gallery} gallery photo{counts.gallery === 1 ? "" : "s"}
+                              {coupleFormPack ? (
+                                <>
+                                  {counts.groom ? "groom" : "no groom"} ·{" "}
+                                  {counts.bride ? "bride" : "no bride"} ·{" "}
+                                  {counts.couple ? "couple" : "no couple"}
+                                </>
+                              ) : (
+                                <>{counts.couple ? "main photo" : "no main photo"}</>
+                              )}{" "}
+                              · {counts.gallery} gallery photo{counts.gallery === 1 ? "" : "s"}
                             </span>
                           </span>
                           {selected && <Icon name="check_circle" size="sm" className="text-primary" />}
@@ -795,13 +964,18 @@ const [wizardOpen, setWizardOpen] = useState(false);
                 <div className="border-t border-outline-variant pt-4">
                   <p className="font-body-sm font-semibold text-on-surface">Background song</p>
                   <p className="mt-1 font-body-xs text-on-surface-variant">
-                    Adds a music control to the demo. Upload songs in the Music tab; the song
-                    can be changed later without re-uploading the template package.
+                    Adds a music control to the demo. Only songs offered in the selected category
+                    appear here; manage them in the Music tab.
                   </p>
-                  {musicTracks.length === 0 ? (
+                  {!wizardFormType ? (
                     <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-4 font-body-sm text-on-surface-variant">
-                      No songs yet. Upload one in the Music tab (Library → Music), then come
-                      back to assign it.
+                      Select an event category first to see the songs offered for it.
+                    </p>
+                  ) : wizardMusicTracks.length === 0 ? (
+                    <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-4 font-body-sm text-on-surface-variant">
+                      No songs are offered for {formDefinition(wizardFormType).label} templates
+                      yet. Upload one in the Music tab (Library → Music), then come back to assign
+                      it.
                     </p>
                   ) : (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2 sm:items-end">
@@ -816,14 +990,14 @@ const [wizardOpen, setWizardOpen] = useState(false);
                         }
                         options={[
                           { value: "", label: "None — silent demo" },
-                          ...musicTracks.map((track) => ({
+                          ...wizardMusicTracks.map((track) => ({
                             value: track.id,
                             label: musicTrackLabel(track) ?? track.title,
                           })),
                         ]}
                       />
                       {(() => {
-                        const selected = musicTracks.find(
+                        const selected = wizardMusicTracks.find(
                           (track) => track.id === wizardData.music_track_id
                         );
                         if (!selected) return null;
@@ -843,8 +1017,8 @@ const [wizardOpen, setWizardOpen] = useState(false);
                 <div className="border-t border-outline-variant pt-4">
                   <p className="font-body-sm font-semibold text-on-surface">Sample details</p>
                   <p className="mt-1 font-body-xs text-on-surface-variant">
-                    The couple, venue, ceremonies, dress colours and RSVP contact shown in the
-                    demo. Manage packs in the Details tab.
+                    Only packs authored for the selected category appear here. Manage packs in the
+                    Details tab.
                   </p>
 
                   <button
@@ -865,7 +1039,8 @@ const [wizardOpen, setWizardOpen] = useState(false);
                         None — use the stock demo details
                       </span>
                       <span className="mt-0.5 block font-body-xs text-on-surface-variant">
-                        Generic couple and venue copy from the platform, not a real customer.
+                        Generic {wizardFormType ? formDefinition(wizardFormType).label.toLowerCase() : "event"} copy
+                        from the platform, not a real customer.
                       </span>
                     </span>
                     {wizardData.demo_detail_pack_id === null && (
@@ -873,14 +1048,18 @@ const [wizardOpen, setWizardOpen] = useState(false);
                     )}
                   </button>
 
-                  {detailPacks.length === 0 ? (
+                  {!wizardFormType ? (
                     <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-4 font-body-sm text-on-surface-variant">
-                      No details packs yet. Create one in the Details tab (Library → Details),
-                      then come back to assign it.
+                      Select an event category first to see the details packs authored for it.
+                    </p>
+                  ) : wizardDetailPacks.length === 0 ? (
+                    <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-4 font-body-sm text-on-surface-variant">
+                      No {formDefinition(wizardFormType).label} details packs yet. Create one in the
+                      Details tab (Library → Details), then come back to assign it.
                     </p>
                   ) : (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {detailPacks.map((pack) => {
+                      {wizardDetailPacks.map((pack) => {
                         const selected = wizardData.demo_detail_pack_id === pack.id;
                         return (
                           <button
@@ -919,105 +1098,22 @@ const [wizardOpen, setWizardOpen] = useState(false);
                   )}
                 </div>
               </div>
-            )}
+          </FormSection>
 
-            {/* Step: Preview */}
-            {wizardStep === "preview" && (() => {
-              const linkedProduct = availableProducts.find((p) => p.id === wizardData.product_id);
-              const priceDisplay = wizardData.product_id
-                ? linkedProduct
-                  ? `${formatPrice(linkedProduct.pricePaise, linkedProduct.currency)} (linked)`
-                  : "Linked product"
-                : wizardData.price_paise !== null
-                ? `${formatPrice(wizardData.price_paise, wizardData.currency)} (new)`
-                : "—";
-              const categoryNames = categories
-                .filter((c) => wizardData.category_ids.includes(c.id))
-                .map((c) => c.name)
-                .join(", ") || "—";
-              const mediaPackName = wizardData.media_pack_id
-                ? mediaPacks.find((p) => p.id === wizardData.media_pack_id)?.name ?? "Selected pack"
-                : "Package images (none selected)";
-              const detailPackName = wizardData.demo_detail_pack_id
-                ? detailPacks.find((p) => p.id === wizardData.demo_detail_pack_id)?.name ?? "Selected pack"
-                : "Stock demo details (none selected)";
-              const musicTrackName = wizardData.music_track_id
-                ? musicTrackLabel(musicTracks.find((t) => t.id === wizardData.music_track_id)) ?? "Selected song"
-                : "Silent demo (no song)";
-
-              return (
-                <div className="flex flex-col gap-4">
-                  <p className="font-body-sm text-on-surface-variant">
-                    Review the template details before creating.
-                  </p>
-                  <dl className="grid gap-2 sm:grid-cols-2 text-sm">
-                    <dt className="text-on-surface-variant">Name</dt>
-                    <dd className="font-medium">{wizardData.name}</dd>
-                    <dt className="text-on-surface-variant">Slug</dt>
-                    <dd className="font-mono">{wizardData.slug}</dd>
-                    <dt className="text-on-surface-variant">Status</dt>
-                    <dd>
-                      <Badge
-                        tone={
-                          wizardData.status === "active"
-                            ? "success"
-                            : wizardData.status === "disabled"
-                            ? "danger"
-                            : "default"
-                        }
-                      >
-                        {wizardData.status}
-                      </Badge>
-                    </dd>
-                    <dt className="text-on-surface-variant">Price</dt>
-                    <dd>{priceDisplay}</dd>
-                    <dt className="text-on-surface-variant">Categories</dt>
-                    <dd>{categoryNames}</dd>
-                    <dt className="text-on-surface-variant">Tags</dt>
-                    <dd>{wizardData.tags.join(", ") || "—"}</dd>
-                    <dt className="text-on-surface-variant">Media source</dt>
-                    <dd>{mediaPackName}</dd>
-                    <dt className="text-on-surface-variant">Details source</dt>
-                    <dd>{detailPackName}</dd>
-                    <dt className="text-on-surface-variant">Background song</dt>
-                    <dd>{musicTrackName}</dd>
-                    <dt className="text-on-surface-variant">Package</dt>
-                    <dd className={wizardData.zip ? "text-success" : "text-error"}>
-                      {wizardData.zip ? wizardData.zip.name : "Not selected"}
-                    </dd>
-                    <dt className="text-on-surface-variant">Thumbnail</dt>
-                    <dd>{wizardData.thumbnail ? wizardData.thumbnail.name : "—"}</dd>
-                  </dl>
-                  {validationResult && <ValidationReport result={validationResult.result} />}
-                </div>
-              );
-            })()}
-
-            {/* Navigation */}
-            <div className="flex items-center justify-between pt-4 border-t border-outline-variant mt-auto">
-              <Button type="button" variant="outline" onClick={handleBack} disabled={!canGoBack || wizardLoading}>
-                <Icon name="arrow_back" size="sm" /> Back
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-outline-variant pt-4">
+            <p className="font-body-xs text-on-surface-variant">
+              Required fields are validated when you submit.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={closeWizard} disabled={wizardLoading}>
+                Cancel
               </Button>
-              <div className="flex items-center gap-2">
-                {isLastStep ? (
-                  wizardSubmitted ? (
-                    <Button type="button" onClick={closeWizard} icon="check">
-                      Done
-                    </Button>
-                  ) : (
-                    <Button type="submit" loading={wizardLoading} icon="save">
-                      Create Template
-                    </Button>
-                  )
-                ) : (
-                  <Button type="button" onClick={handleNext} icon="arrow_forward" disabled={wizardLoading}>
-                    Next
-                  </Button>
-                )}
-              </div>
+              <Button type="submit" loading={wizardLoading} icon="save">
+                Create Template
+              </Button>
             </div>
-          </form>
-        </div>
+          </div>
+        </form>
       </Modal>
 
       {/* Validation Result Modal (existing flow) */}
@@ -1116,7 +1212,35 @@ const [wizardOpen, setWizardOpen] = useState(false);
       </Modal>
 
       <div className="mt-6 flex flex-col gap-4">
-        {rows.map((t) => (
+        {rows.map((t) => {
+          const rowFormType = formTypeOrDefault(t.formType);
+          const rowCategorySlug = categorySlugForFormType(rowFormType);
+          const rowMusicTracks = musicTracks.filter((track) =>
+            musicTrackInCategory(track, rowCategorySlug)
+          );
+          const rowDetailPacks = detailPacks.filter((pack) => pack.formType === rowFormType);
+          const rowMediaPacks = mediaPacks.filter((pack) =>
+            mediaPackMatchesForm(pack, rowFormType)
+          );
+          // Keep an already-assigned item visible even if it belongs to another
+          // category, so the picker never looks empty by accident.
+          const currentDetail = detailPacks.find((pack) => pack.id === detailDraft);
+          const detailOptions =
+            currentDetail && !rowDetailPacks.some((pack) => pack.id === currentDetail.id)
+              ? [currentDetail, ...rowDetailPacks]
+              : rowDetailPacks;
+          const currentMedia = mediaPacks.find((pack) => pack.id === mediaDraft);
+          const mediaOptions =
+            currentMedia && !rowMediaPacks.some((pack) => pack.id === currentMedia.id)
+              ? [currentMedia, ...rowMediaPacks]
+              : rowMediaPacks;
+          const currentTrack = musicTracks.find((track) => track.id === musicDraft);
+          const trackOptions =
+            currentTrack && !rowMusicTracks.some((track) => track.id === currentTrack.id)
+              ? [currentTrack, ...rowMusicTracks]
+              : rowMusicTracks;
+
+          return (
           <div key={t.id} className="rounded-2xl border border-outline-variant bg-surface p-5">
             <div className="flex flex-wrap items-center gap-4">
               {t.thumbnailUrl ? (
@@ -1250,7 +1374,13 @@ const [wizardOpen, setWizardOpen] = useState(false);
                       }}
                       options={[
                         { value: "", label: "None — package images" },
-                        ...mediaPacks.map((p) => ({ value: p.id, label: p.name })),
+                        ...mediaOptions.map((p) => ({
+                          value: p.id,
+                          label:
+                            p.formType === rowFormType
+                              ? p.name
+                              : `${p.name} (different category)`,
+                        })),
                       ]}
                     />
                     <Select
@@ -1264,7 +1394,13 @@ const [wizardOpen, setWizardOpen] = useState(false);
                       }}
                       options={[
                         { value: "", label: "None — stock demo details" },
-                        ...detailPacks.map((p) => ({ value: p.id, label: p.name })),
+                        ...detailOptions.map((p) => ({
+                          value: p.id,
+                          label:
+                            p.formType === rowFormType
+                              ? p.name
+                              : `${p.name} (different category)`,
+                        })),
                       ]}
                     />
                     <Select
@@ -1278,28 +1414,53 @@ const [wizardOpen, setWizardOpen] = useState(false);
                       }}
                       options={[
                         { value: "", label: "None — silent demo" },
-                        ...musicTracks.map((track) => ({
+                        ...trackOptions.map((track) => ({
                           value: track.id,
-                          label: musicTrackLabel(track) ?? track.title,
+                          label:
+                            (musicTrackLabel(track) ?? track.title) +
+                            (rowMusicTracks.some((item) => item.id === track.id)
+                              ? ""
+                              : " (different category)"),
                         })),
                       ]}
                     />
                   </div>
                   <p className="mt-2 font-body-xs text-on-surface-variant">
-                    The demo updates as soon as you change these; the published package itself is
+                    Showing {formDefinition(rowFormType).label} photos, songs and details only. The
+                    demo updates as soon as you change these; the published package itself is
                     unchanged. Live invitations always show the customer&apos;s own content.
                   </p>
+                  {rowMediaPacks.length === 0 && (
+                    <p className="mt-1 font-body-xs text-on-surface-variant">
+                      No {formDefinition(rowFormType).label} media packs exist yet. Create one in
+                      the Media tab.
+                    </p>
+                  )}
+                  {rowDetailPacks.length === 0 && (
+                    <p className="mt-1 font-body-xs text-on-surface-variant">
+                      No {formDefinition(rowFormType).label} details packs exist yet. Create one in
+                      the Details tab.
+                    </p>
+                  )}
+                  {rowMusicTracks.length === 0 && (
+                    <p className="mt-1 font-body-xs text-on-surface-variant">
+                      No songs are offered for {formDefinition(rowFormType).label} templates yet.
+                      Add one in the Music tab.
+                    </p>
+                  )}
                 </div>
 
                 <PackageUpload
                   onUpload={(zip, thumb) => void uploadPackage(t.id, { zip, thumbnail: thumb })}
-                  uploading={uploading === t.id}
+                  onThumbnail={(thumb) => void uploadThumbnail(t.id, thumb)}
+                  uploading={uploading === t.id || thumbnailUploading === t.id}
                   currentVersion={t.currentVersion}
                 />
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1370,10 +1531,12 @@ function ValidationReport({ result }: { result: UploadResponse }) {
 
 function PackageUpload({
   onUpload,
+  onThumbnail,
   uploading,
   currentVersion,
 }: {
   onUpload: (zip: File | undefined, thumbnail: File | undefined) => void;
+  onThumbnail: (thumbnail: File) => void;
   uploading: boolean;
   currentVersion: string | null;
 }) {
@@ -1388,7 +1551,8 @@ function PackageUpload({
       <p className="mt-1 font-body-xs text-on-surface-variant">
         Upload a ZIP of the template package (HTML/CSS/JS/assets + manifest.json). The package is validated
         and saved as a <strong>draft</strong>. You can review validation results before publishing.
-        Current published version: {currentVersion ? `v${currentVersion}` : "none"}.
+        Current published version: {currentVersion ? `v${currentVersion}` : "none"}. To replace only the
+        thumbnail, select an image below and save — no package upload is needed.
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block">
@@ -1413,15 +1577,19 @@ function PackageUpload({
       <p className={cn("mt-2 font-body-xs", zip ? "text-success" : "text-on-surface-variant")}>
         {zip ? `Selected: ${zip.name} (${Math.round(zip.size / 1024)} KB)` : "No package selected"}
       </p>
+      {thumb && <p className="mt-1 font-body-xs text-success">Selected thumbnail: {thumb.name}</p>}
       <Button
         className="mt-3"
         size="sm"
-        icon="cloud_upload"
+        icon={zip ? "cloud_upload" : "save"}
         loading={uploading}
-        onClick={() => onUpload(zip ?? undefined, thumb ?? undefined)}
-        disabled={!zip}
+        onClick={() => {
+          if (zip) onUpload(zip, thumb ?? undefined);
+          else if (thumb) onThumbnail(thumb);
+        }}
+        disabled={!zip && !thumb}
       >
-        Upload & validate
+        {zip ? "Upload & validate" : "Save thumbnail"}
       </Button>
     </div>
   );

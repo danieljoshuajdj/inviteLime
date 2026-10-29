@@ -138,3 +138,89 @@ describe("normalizeDemoDetailPackInput", () => {
     expect(pack.events).toEqual([]);
   });
 });
+
+describe("normalizeDemoDetailPackInput — birthday forms", () => {
+  const celebration = {
+    name: "Ananya's 21st",
+    formType: "birthday_celebration",
+    celebrantName: "  Ananya  ",
+    weddingDate: "2027-03-20",
+    weddingTime: "18:30",
+    venue: " Bayview Terrace ",
+    address: "Besant Nagar, Chennai",
+    // Couple-only content must be discarded, not stored on a birthday pack.
+    brideName: "Ignored",
+    events: [{ name: "Dinner" }],
+    dressBrideColor: "#c2647a",
+  };
+
+  it("normalises a birthday celebration and drops couple-only fields", () => {
+    const pack = normalizeDemoDetailPackInput(celebration);
+
+    expect(pack.formType).toBe("birthday_celebration");
+    expect(pack.celebrantName).toBe("Ananya");
+    expect(pack.weddingDate).toBe("2027-03-20");
+    expect(pack.weddingTime).toBe("18:30");
+    expect(pack.venue).toBe("Bayview Terrace");
+    expect(pack.brideName).toBeNull();
+    expect(pack.groomName).toBeNull();
+    expect(pack.dressBrideColor).toBeNull();
+    expect(pack.events).toEqual([]);
+  });
+
+  it("requires the birthday person, date and venue for a celebration", () => {
+    expect(() =>
+      normalizeDemoDetailPackInput({ ...celebration, celebrantName: "  " })
+    ).toThrow("Birthday person's name is required");
+    expect(() =>
+      normalizeDemoDetailPackInput({ ...celebration, weddingDate: "" })
+    ).toThrow("Celebration date is required");
+    expect(() => normalizeDemoDetailPackInput({ ...celebration, venue: "" })).toThrow(
+      "Venue is required"
+    );
+  });
+
+  it("normalises birthday wishes and discards date and venue", () => {
+    const pack = normalizeDemoDetailPackInput({
+      name: "Wishes for Meera",
+      formType: "birthday_wishes",
+      celebrantName: " Meera ",
+      birthdayNumber: "30",
+      specialMessage: "  Wishing you a wonderful year.  ",
+      weddingDate: "2027-03-20",
+      venue: "Ignored",
+      events: [{ name: "Ignored" }],
+    });
+
+    expect(pack.formType).toBe("birthday_wishes");
+    expect(pack.celebrantName).toBe("Meera");
+    expect(pack.birthdayNumber).toBe(30);
+    expect(pack.specialMessage).toBe("Wishing you a wonderful year.");
+    expect(pack.weddingDate).toBeNull();
+    expect(pack.venue).toBeNull();
+    expect(pack.events).toEqual([]);
+  });
+
+  it("requires an age between 1 and 150 and a message for birthday wishes", () => {
+    const wishes = {
+      name: "Wishes for Meera",
+      formType: "birthday_wishes",
+      celebrantName: "Meera",
+      birthdayNumber: 30,
+      specialMessage: "Happy birthday",
+    };
+
+    expect(() =>
+      normalizeDemoDetailPackInput({ ...wishes, birthdayNumber: 0 })
+    ).toThrow("Birthday number must be a whole number between 1 and 150");
+    expect(() =>
+      normalizeDemoDetailPackInput({ ...wishes, birthdayNumber: 151 })
+    ).toThrow("Birthday number must be a whole number between 1 and 150");
+    expect(() =>
+      normalizeDemoDetailPackInput({ ...wishes, birthdayNumber: "" })
+    ).toThrow("Birthday number must be a whole number between 1 and 150");
+    expect(() =>
+      normalizeDemoDetailPackInput({ ...wishes, specialMessage: "  " })
+    ).toThrow("Special message is required");
+  });
+});

@@ -67,6 +67,8 @@ describe("built-in invitation runtime planner branding", () => {
     slug: "meera-weds-aarav",
     bride_name: "Meera",
     groom_name: "Aarav",
+    celebrant_name: null,
+    form_type: "wedding",
     wedding_date: "2027-02-14",
     venue: null,
     address: null,

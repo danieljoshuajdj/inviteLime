@@ -1,3 +1,5 @@
+import { formTypeOrDefault, type FormType } from "./forms";
+
 export interface BuilderEvent {
   id?: string;
   name: string;
@@ -40,6 +42,16 @@ export function validDressColor(value: unknown): string | null {
 }
 
 export interface WeddingData {
+  /** Which form this invitation uses. Derived from its template's category. */
+  formType: FormType;
+  /** Person being celebrated by a birthday form. */
+  celebrantName: string;
+  /** Age being marked by a birthday-wishes invitation, 1–150. */
+  birthdayNumber: number | null;
+  /** Birthday-wishes message shown on the invitation. */
+  specialMessage: string;
+  /** Birthday main image; stored under the existing `couple` upload role. */
+  mainPhoto: string | null;
   brideName: string;
   groomName: string;
   brideBio: string;
@@ -69,6 +81,11 @@ export interface WeddingData {
 
 export function defaultWeddingData(partial: Partial<WeddingData> = {}): WeddingData {
   return {
+    formType: "wedding",
+    celebrantName: "",
+    birthdayNumber: null,
+    specialMessage: "",
+    mainPhoto: null,
     brideName: "",
     groomName: "",
     brideBio: "",
@@ -115,9 +132,22 @@ function normalizeDress(value: unknown): BuilderDressCode | null {
   };
 }
 
+function normalizeBirthdayNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+    return Number(value);
+  }
+  return null;
+}
+
 export function normalizeWeddingData(raw: unknown): WeddingData {
   const r = (raw ?? {}) as Record<string, unknown>;
   return defaultWeddingData({
+    formType: formTypeOrDefault(r.formType),
+    celebrantName: String(r.celebrantName ?? ""),
+    birthdayNumber: normalizeBirthdayNumber(r.birthdayNumber),
+    specialMessage: String(r.specialMessage ?? ""),
+    mainPhoto: r.mainPhoto ? String(r.mainPhoto) : null,
     brideName: String(r.brideName ?? ""),
     groomName: String(r.groomName ?? ""),
     brideBio: String(r.brideBio ?? ""),
@@ -159,9 +189,16 @@ export function weddingDataForDb(data: WeddingData): Record<string, unknown> {
     if (
       key === "brideDesignation" ||
       key === "groomDesignation" ||
-      key === "rsvpWhatsapp"
+      key === "rsvpWhatsapp" ||
+      key === "celebrantName" ||
+      key === "specialMessage" ||
+      key === "mainPhoto"
     ) {
-      if (typeof v !== "string") delete out[key];
+      if (typeof v !== "string" && v !== null) delete out[key];
+      continue;
+    }
+    if (key === "birthdayNumber") {
+      if (v !== null && typeof v !== "number") delete out[key];
       continue;
     }
     if (v === null || v === undefined || v === "") delete out[key];

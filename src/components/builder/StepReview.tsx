@@ -9,6 +9,8 @@ import { TextInput } from "@/components/shared/Field";
 import { Icon } from "@/components/shared/Icon";
 import { cn, formatPrice } from "@/lib/utils";
 import type { WeddingData } from "@/lib/builder/defaults";
+import { coverTitle, formDefinition, formTypeOf, isBirthdayForm, ordinal } from "@/lib/builder/forms";
+import { validateDetails } from "@/lib/builder/validation";
 import { PaymentConfirmationModal } from "@/components/builder/PaymentConfirmationModal";
 
 interface Props {
@@ -86,8 +88,10 @@ export function StepReview({
   const [devState, setDevState] = useState<"idle" | "publishing" | "done">("idle");
   const [devResult, setDevResult] = useState<DevPublishResult | null>(null);
 
-  const coverTitle =
-    data.brideName && data.groomName ? `${data.groomName.split(" ")[0]} & ${data.brideName.split(" ")[0]}` : "Your names here";
+  const formType = formTypeOf(data);
+  const birthday = isBirthdayForm(formType);
+  const definition = formDefinition(formType);
+  const invitationTitle = coverTitle(data);
   // Mirrors the server's eligibility check. A planner without a live plan, a
   // free slot or complete brand details buys a normal one-time invitation.
   const plannerPlanCovers = Boolean(
@@ -95,8 +99,14 @@ export function StepReview({
   );
 
   const beginCheckout = useCallback(async () => {
-    if (!data.brideName || !data.groomName || !data.weddingDate) {
-      setError("Please ensure names and the wedding date are filled in above.");
+    const issue = validateDetails(data, formType);
+    if (issue) {
+      setError(issue.message);
+      return;
+    }
+    const emailError = planner ? null : publishEmailError(email);
+    if (emailError) {
+      setError(emailError);
       return;
     }
     setError(null);
@@ -116,10 +126,11 @@ export function StepReview({
           token,
           templateId: template.id,
           templateVersionId: template.versionId,
-          brideName: data.brideName,
-          groomName: data.groomName,
-          weddingDate: data.weddingDate,
-          email: email || null,
+          ...(birthday
+            ? { celebrantName: data.celebrantName }
+            : { brideName: data.brideName, groomName: data.groomName }),
+          ...(formType === "birthday_wishes" ? {} : { weddingDate: data.weddingDate }),
+          email: email?.trim() || null,
         }),
       });
       const json = (await res.json()) as {
@@ -154,7 +165,7 @@ export function StepReview({
       setError(err instanceof Error ? err.message : "Could not create order. Try again.");
       setPayState("idle");
     }
-  }, [token, template.id, template.versionId, template.currency, data.brideName, data.groomName, data.weddingDate, email, onSaved, router]);
+  }, [token, template.id, template.versionId, template.currency, data, formType, birthday, email, onSaved, planner, router]);
 
   const handlePaymentConfirm = useCallback(() => {
     if (!orderData || !window.Razorpay) {
@@ -170,7 +181,7 @@ export function StepReview({
       amount: orderData.amountPaise,
       currency: orderData.currency,
       name: "Invite Lime Atelier",
-      description: `${template.name} · wedding website license`,
+      description: `${template.name} · ${definition.label.toLowerCase()} invitation license`,
       order_id: orderData.orderId,
       handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
         setPayState("verifying");
@@ -201,7 +212,7 @@ export function StepReview({
       theme: { color: "#000000" },
       prefill: { email: email ?? undefined },
     }).open();
-  }, [orderData, template.name, email, router]);
+  }, [orderData, template.name, email, router, definition.label]);
 
   const handlePaymentCancel = useCallback(() => {
     setShowPaymentModal(false);
@@ -213,8 +224,14 @@ export function StepReview({
   // The server still enforces the DEV_BYPASS_PAYMENT flag, so this button
   // simply disappears once the flag is off.
   const devPublish = useCallback(async () => {
-    if (!data.brideName || !data.groomName || !data.weddingDate) {
-      setError("Please ensure names and the wedding date are filled in above.");
+    const issue = validateDetails(data, formType);
+    if (issue) {
+      setError(issue.message);
+      return;
+    }
+    const emailError = planner ? null : publishEmailError(email);
+    if (emailError) {
+      setError(emailError);
       return;
     }
     setError(null);
@@ -242,7 +259,7 @@ export function StepReview({
       setError(err instanceof Error ? err.message : "Dev publish failed. Try again.");
       setDevState("idle");
     }
-  }, [token, data.brideName, data.groomName, data.weddingDate, onSaved]);
+  }, [token, data, formType, email, onSaved, planner]);
 
   return (
     <section aria-labelledby="step-review-title">
@@ -312,7 +329,7 @@ export function StepReview({
           </div>
         )}
 
-        <PreviewBoard data={data} coverTitle={coverTitle} />
+        <PreviewBoard data={data} invitationTitle={invitationTitle} />
 
         <div className="mt-8 rounded-2xl border border-outline-variant bg-surface-container-low p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -344,12 +361,17 @@ export function StepReview({
           <div className="mt-5 border-t border-outline-variant pt-5">
             <TextInput
               label="Email for your receipt & live link"
-              hint="We never spam. This is where you'll get your invoice and shareable URL."
+              hint={
+                planner
+                  ? "We never spam. This is where you'll get your invoice and shareable URL."
+                  : "Required to publish. We'll send your invoice and shareable URL here."
+              }
               type="email"
               value={email ?? ""}
               onChange={(e) => onEmailChange(e.target.value || null)}
               icon="mail"
               placeholder="you@example.com"
+              required={!planner}
             />
           </div>
 
@@ -450,14 +472,26 @@ function RazorpayScript() {
   return <Script id="razorpay-checkout" src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />;
 }
 
-function PreviewBoard({ data, coverTitle }: { data: WeddingData; coverTitle: string }) {
+function PreviewBoard({ data, invitationTitle }: { data: WeddingData; invitationTitle: string }) {
+  const formType = formTypeOf(data);
+  const birthday = isBirthdayForm(formType);
+  const definition = formDefinition(formType);
+  const wishes = formType === "birthday_wishes";
+
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
       <div className="overflow-hidden rounded-3xl border border-gold-500/40 bg-ivory-950 text-ivory-50 shadow-xl">
         <div className="relative flex aspect-[4/5] flex-col items-center justify-center gap-4 p-8 text-center">
           <span className="h-px w-24 bg-gold-400" />
-          <p className="font-body-xs uppercase tracking-[0.45em] text-gold-300">Wedding Invitation</p>
-          <h2 className="font-heading-2xl !font-display !text-ivory-50">{coverTitle}</h2>
+          <p className="font-body-xs uppercase tracking-[0.45em] text-gold-300">
+            {definition.invitationLabel}
+          </p>
+          <h2 className="font-heading-2xl !font-display !text-ivory-50">{invitationTitle}</h2>
+          {wishes && typeof data.birthdayNumber === "number" && (
+            <p className="font-body-sm uppercase tracking-[0.3em] text-gold-300">
+              {ordinal(data.birthdayNumber)} Birthday
+            </p>
+          )}
           <div className="flex flex-col gap-1 text-ivory-300">
             {data.weddingDate && (
               <p className="flex items-center justify-center gap-2 font-body-sm">
@@ -481,15 +515,49 @@ function PreviewBoard({ data, coverTitle }: { data: WeddingData; coverTitle: str
         <div className="rounded-2xl border border-outline-variant bg-surface p-5">
           <h3 className="font-heading-md font-semibold !text-on-surface">Your invitation</h3>
           <dl className="mt-3 space-y-2.5 font-body-sm">
-            <Row label="Groom" value={data.groomName || "—"} />
-            <Row label="Bride" value={data.brideName || "—"} />
-            <Row label="Ceremony cards" value={`${data.events.length}`} />
-            <Row label="Gallery" value={`${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`} />
-            <Row label="Soundtrack" value={data.music ? "Selected" : "None yet"} />
+            {birthday ? (
+              <>
+                <Row label="Birthday person" value={data.celebrantName || "—"} />
+                <Row
+                  label="Birthday"
+                  value={
+                    typeof data.birthdayNumber === "number"
+                      ? ordinal(data.birthdayNumber)
+                      : "—"
+                  }
+                />
+                {!wishes && (
+                  <Row
+                    label={definition.dateLabel}
+                    value={data.weddingDate ? formatDateLong(data.weddingDate) : "—"}
+                  />
+                )}
+                {!wishes && <Row label="Venue" value={data.venue || "—"} />}
+                <Row label="Gallery" value={`${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`} />
+                <Row label="Main image" value={data.mainPhoto ? "Selected" : "None yet"} />
+              </>
+            ) : (
+              <>
+                <Row label="Groom" value={data.groomName || "—"} />
+                <Row label="Bride" value={data.brideName || "—"} />
+                <Row label="Ceremony cards" value={`${data.events.length}`} />
+                <Row label="Gallery" value={`${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`} />
+                <Row label="Soundtrack" value={data.music ? "Selected" : "None yet"} />
+              </>
+            )}
           </dl>
         </div>
 
-        {data.events.length > 0 && (
+        {wishes && data.specialMessage.trim() && (
+          <div className="rounded-2xl border border-outline-variant bg-surface p-5">
+            <h3 className="font-heading-md font-semibold !text-on-surface">Special message</h3>
+            <p className="mt-3 whitespace-pre-line font-body-sm text-on-surface-variant">
+              {data.specialMessage}
+            </p>
+          </div>
+        )}
+
+        {!birthday && data.events.length > 0 && (
           <div className="rounded-2xl border border-outline-variant bg-surface p-5">
             <h3 className="font-heading-md font-semibold !text-on-surface">Ceremonies</h3>
             <ul className="mt-3 space-y-2.5">
@@ -518,6 +586,17 @@ function Row({ label, value }: { label: string; value: string }) {
       <dd className={cn("text-end font-medium !text-on-surface", !value || value === "—" ? "font-normal text-on-surface-variant" : "")}>{value}</dd>
     </div>
   );
+}
+
+function publishEmailError(email: string | null): string | null {
+  const value = (email ?? "").trim();
+  if (!value) return "Please enter your email address to publish.";
+  // The server re-validates with zod; this catches the common typo before a
+  // checkout attempt and keeps the field's own error slot empty.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return "Please enter a valid email address to publish.";
+  }
+  return null;
 }
 
 function formatDateLong(date: string): string {

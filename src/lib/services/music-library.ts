@@ -1,10 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { MusicTrack } from "@/lib/library-media";
+import type { MusicTrack, MusicTrackCategory } from "@/lib/library-media";
 
-import { MAX_MUSIC_BYTES as CLIENT_MAX_MUSIC_BYTES, libraryMusicKey } from "./media-access";
+import { MAX_MUSIC_BYTES as CLIENT_MAX_MUSIC_BYTES, UUID_RE, libraryMusicKey } from "./media-access";
 import { MAX_AUDIO_BYTES, WEDDING_BUCKET, getObjectStorage } from "./storage";
 
-export type { MusicTrack };
+export type { MusicTrack, MusicTrackCategory };
+
 
 /**
  * Shared music library: admin-uploaded audio a guest can choose instead of
@@ -65,7 +66,22 @@ interface RawTrackRow {
   created_at: string;
 }
 
-function mapTrack(row: RawTrackRow): MusicTrack {
+interface RawTrackCategoryRow {
+  music_track_id: string;
+  category_id: string;
+}
+
+interface RawCategoryRow {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+function mapCategory(row: RawCategoryRow): MusicTrackCategory {
+  return { id: row.id, name: row.name, slug: row.slug };
+}
+
+function mapTrack(row: RawTrackRow, categories: MusicTrackCategory[]): MusicTrack {
   return {
     id: row.id,
     title: row.title,
@@ -75,12 +91,88 @@ function mapTrack(row: RawTrackRow): MusicTrack {
     sizeBytes: row.size_bytes,
     durationMs: row.duration_ms,
     isActive: row.is_active,
+    categories,
     createdAt: row.created_at,
   };
 }
 
 const COLUMNS =
   "id, title, artist, public_url, mime_type, size_bytes, duration_ms, is_active, created_at";
+
+/** Categories for the given track ids, grouped by track. */
+async function categoriesByTrack(
+  trackIds: string[]
+): Promise<Map<string, MusicTrackCategory[]>> {
+  const grouped = new Map<string, MusicTrackCategory[]>();
+  if (trackIds.length === 0) return grouped;
+
+  const admin = createAdminClient();
+  const { data: links, error: linkError } = await admin
+    .from("music_track_categories")
+    .select("music_track_id, category_id")
+    .in("music_track_id", trackIds);
+  if (linkError) throw new Error(linkError.message);
+
+  const categoryIds = Array.from(
+    new Set(((links ?? []) as RawTrackCategoryRow[]).map((link) => link.category_id))
+  );
+  if (categoryIds.length === 0) return grouped;
+
+  const { data: categoryRows, error: categoryError } = await admin
+    .from("categories")
+    .select("id, name, slug")
+    .in("id", categoryIds);
+  if (categoryError) throw new Error(categoryError.message);
+
+  const categories = new Map(
+    ((categoryRows ?? []) as RawCategoryRow[]).map((row) => [row.id, mapCategory(row)])
+  );
+
+  for (const link of (links ?? []) as RawTrackCategoryRow[]) {
+    const category = categories.get(link.category_id);
+    if (!category) continue;
+    const list = grouped.get(link.music_track_id) ?? [];
+    list.push(category);
+    grouped.set(link.music_track_id, list);
+  }
+
+  for (const list of grouped.values()) {
+    list.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  return grouped;
+}
+
+/**
+ * Validates an admin category selection: at least one real category, no
+ * duplicates. Returns the stored category rows in name order.
+ */
+export async function resolveMusicCategories(raw: unknown): Promise<MusicTrackCategory[]> {
+  const values = Array.isArray(raw) ? raw : [];
+  const ids = Array.from(
+    new Set(
+      values.filter(
+        (value): value is string => typeof value === "string" && UUID_RE.test(value.trim())
+      ).map((value) => value.trim())
+    )
+  );
+  if (ids.length === 0) {
+    throw new MusicValidationError("INVALID_CATEGORY", "Select at least one category");
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("categories").select("id, name, slug").in("id", ids);
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as RawCategoryRow[];
+  if (rows.length !== ids.length) {
+    throw new MusicValidationError(
+      "INVALID_CATEGORY",
+      "One or more selected categories no longer exist"
+    );
+  }
+  return rows.map(mapCategory).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 
 /** Magic bytes that identify a format that is definitively not audio. */
 const NON_AUDIO_SIGNATURES: ReadonlyArray<{
@@ -160,10 +252,15 @@ export function sniffAudioMime(head: Uint8Array): string | null {
   return null;
 }
 
-/** Raised for a rejected upload; `code` maps onto an HTTP status. */
+/** Raised for a rejected upload or category selection; `code` maps onto an HTTP status. */
 export class MusicValidationError extends Error {
   constructor(
-    readonly code: "UNSUPPORTED_FILE_TYPE" | "FILE_TOO_LARGE" | "MISSING_FILE" | "INVALID_TITLE",
+    readonly code:
+      | "UNSUPPORTED_FILE_TYPE"
+      | "FILE_TOO_LARGE"
+      | "MISSING_FILE"
+      | "INVALID_TITLE"
+      | "INVALID_CATEGORY",
     message: string
   ) {
     super(message);
@@ -234,14 +331,26 @@ export function musicKeyFor(randomSuffix: string, ext: string): string {
 }
 
 /** Lists library tracks. `includeHidden` is for the admin view only. */
-export async function listMusicTracks(includeHidden = false): Promise<MusicTrack[]> {
+export async function listMusicTracks(
+  includeHidden = false,
+  filter?: { categorySlug?: string | null }
+): Promise<MusicTrack[]> {
   const admin = createAdminClient();
   let query = admin.from("music_tracks").select(COLUMNS).order("title");
   if (!includeHidden) query = query.eq("is_active", true);
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as RawTrackRow[]).map(mapTrack);
+
+  const rows = (data ?? []) as unknown as RawTrackRow[];
+  const grouped = await categoriesByTrack(rows.map((row) => row.id));
+  const tracks = rows.map((row) => mapTrack(row, grouped.get(row.id) ?? []));
+
+  const categorySlug = filter?.categorySlug;
+  if (!categorySlug) return tracks;
+  return tracks.filter((track) =>
+    track.categories.some((category) => category.slug === categorySlug)
+  );
 }
 
 /**
@@ -258,7 +367,10 @@ export async function getMusicTrack(id: string): Promise<MusicTrack | null> {
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? mapTrack(data as unknown as RawTrackRow) : null;
+  if (!data) return null;
+
+  const grouped = await categoriesByTrack([id]);
+  return mapTrack(data as unknown as RawTrackRow, grouped.get(id) ?? []);
 }
 
 /** Uploads an object into the library folder and records the row. */
@@ -269,9 +381,14 @@ export async function createMusicTrack(input: {
   title: string;
   artist: string | null;
   durationMs: number | null;
+  categoryIds: unknown;
   randomSuffix: string;
 }): Promise<MusicTrack> {
   const validated = validateMusicUpload(input);
+  // Resolve categories before writing the object so a bad selection cannot
+  // leave an orphaned upload behind.
+  const categories = await resolveMusicCategories(input.categoryIds);
+
   const key = musicKeyFor(input.randomSuffix, validated.ext);
   const body = Buffer.from(input.buffer);
 
@@ -305,7 +422,54 @@ export async function createMusicTrack(input: {
     throw new Error(error.message);
   }
 
-  return mapTrack((data as unknown) as RawTrackRow);
+  const { error: categoryError } = await admin
+    .from("music_track_categories")
+    .insert(categories.map((category) => ({ music_track_id: data.id, category_id: category.id })));
+
+  if (categoryError) {
+    // Roll back both the row and the object: a track with no category would be
+    // invisible everywhere.
+    await admin.from("music_tracks").delete().eq("id", data.id);
+    await storage.delete(WEDDING_BUCKET, key).catch(() => {});
+    throw new Error(categoryError.message);
+  }
+
+  return mapTrack((data as unknown) as RawTrackRow, categories);
+}
+
+/**
+ * Replaces a track's category assignments.
+ *
+ * New links are written before old ones are removed, so a failed write cannot
+ * leave the track with no categories.
+ */
+export async function setMusicTrackCategories(id: string, categoryIds: unknown): Promise<void> {
+  const categories = await resolveMusicCategories(categoryIds);
+  const admin = createAdminClient();
+
+  const { data: track, error: trackError } = await admin
+    .from("music_tracks")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (trackError) throw new Error(trackError.message);
+  if (!track) throw new Error("Track not found");
+
+  const ids = categories.map((category) => category.id);
+  const { error: upsertError } = await admin
+    .from("music_track_categories")
+    .upsert(
+      ids.map((categoryId) => ({ music_track_id: id, category_id: categoryId })),
+      { onConflict: "music_track_id,category_id" }
+    );
+  if (upsertError) throw new Error(upsertError.message);
+
+  const { error: pruneError } = await admin
+    .from("music_track_categories")
+    .delete()
+    .eq("music_track_id", id)
+    .not("category_id", "in", `(${ids.join(",")})`);
+  if (pruneError) throw new Error(pruneError.message);
 }
 
 /** Toggles whether a track is offered to guests. */

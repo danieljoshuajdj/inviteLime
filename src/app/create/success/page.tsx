@@ -6,7 +6,7 @@ import { resolveInvitationPlannerBrand } from "@/lib/services/planner-branding";
 
 export const metadata: Metadata = {
   title: "Invitation Published",
-  description: "Your wedding invitation is live and ready to share.",
+  description: "Your invitation is live and ready to share.",
 };
 
 interface PageProps {
@@ -19,8 +19,11 @@ interface SuccessWeddingData {
   template_id: string | null;
   template_version_id: string | null;
   templateName: string | null;
+  formType: string | null;
   brideName: string | null;
   groomName: string | null;
+  celebrantName: string | null;
+  birthdayNumber: number | null;
   brideBio: string | null;
   groomBio: string | null;
   coupleBio: string | null;
@@ -52,7 +55,7 @@ export default async function SuccessPage({ searchParams }: PageProps) {
   const { data: wedding, error } = await supabase
     .from("weddings")
     .select(
-      "id, slug, template_id, template_version_id, bride_name, groom_name, couple_bio, story, wedding_date, wedding_time, venue, address, maps_url, latitude, longitude, email, expiration_date, status, billing_source, planner_id, planner_brand_snapshot, wedding_data, rsvp_toggle, rsvp_deadline"
+      "id, slug, template_id, template_version_id, form_type, bride_name, groom_name, celebrant_name, couple_bio, story, wedding_date, wedding_time, venue, address, maps_url, latitude, longitude, email, expiration_date, status, billing_source, planner_id, planner_brand_snapshot, wedding_data, rsvp_toggle, rsvp_deadline"
     )
     .eq("id", weddingId)
     .single();
@@ -76,14 +79,20 @@ export default async function SuccessPage({ searchParams }: PageProps) {
 
   const plannerBrand = await resolveInvitationPlannerBrand(wedding).catch(() => null);
 
+  const birthdayNumber =
+    typeof weddingDataJson.birthdayNumber === "number" ? weddingDataJson.birthdayNumber : null;
+
   const weddingData = {
     id: wedding.id,
     slug: wedding.slug,
     template_id: wedding.template_id,
     template_version_id: wedding.template_version_id,
     templateName,
+    formType: wedding.form_type,
     brideName: wedding.bride_name,
     groomName: wedding.groom_name,
+    celebrantName: wedding.celebrant_name,
+    birthdayNumber,
     brideBio: null,
     groomBio: null,
     coupleBio: wedding.couple_bio,

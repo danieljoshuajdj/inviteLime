@@ -5,6 +5,7 @@ import { requireAdmin, readBody } from "@/lib/services/helpers";
 import { adminApiError, logAdminAction } from "@/lib/services/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeRateLimit } from "@/lib/services/ops";
+import { formTypeFromCategorySlug, type FormType } from "@/lib/builder/forms";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +29,23 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (!parsed.success) return Response.json({ error: "Invalid category", details: parsed.error.flatten() }, { status: 400 });
 
     const adminClient = createAdminClient();
+    let formType: FormType | undefined;
     if (parsed.data.slug) {
+      const derived = formTypeFromCategorySlug(parsed.data.slug);
+      if (!derived) {
+        return Response.json(
+          { error: "Categories are fixed to the four event forms." },
+          { status: 400 }
+        );
+      }
+      formType = derived;
       const { data: clash } = await adminClient.from("categories").select("id").eq("slug", parsed.data.slug).neq("id", id).maybeSingle();
       if (clash) return Response.json({ error: "Slug already in use" }, { status: 409 });
     }
 
     const { data, error } = await adminClient
       .from("categories")
-      .update({ ...parsed.data })
+      .update({ ...parsed.data, ...(formType ? { form_type: formType } : {}) })
       .eq("id", id)
       .select("*")
       .single();
@@ -61,7 +71,13 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     });
     if (!limit.allowed) return Response.json({ error: "Too many admin operations. Please slow down." }, { status: 429 });
     const adminClient = createAdminClient();
-    const { data } = await adminClient.from("categories").select("name").eq("id", id).maybeSingle();
+    const { data } = await adminClient.from("categories").select("name, slug").eq("id", id).maybeSingle();
+    if (data?.slug && formTypeFromCategorySlug(data.slug)) {
+      return Response.json(
+        { error: "Built-in event categories cannot be deleted — they define the available invitation forms." },
+        { status: 409 }
+      );
+    }
     const { error } = await adminClient.from("categories").delete().eq("id", id);
     if (error) return Response.json({ error: error.message }, { status: 500 });
     await logAdminAction(admin.user.id, "category.delete", "category", id, data ? { name: data.name } : {});

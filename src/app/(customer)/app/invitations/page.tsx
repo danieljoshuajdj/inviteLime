@@ -14,12 +14,15 @@ export const metadata: Metadata = {
 interface InvitationRow {
   id: string;
   slug: string | null;
+  form_type: string | null;
   bride_name: string | null;
   groom_name: string | null;
+  celebrant_name: string | null;
   wedding_date: string | null;
   venue: string | null;
   status: string | null;
   expiration_date: string | null;
+  wedding_data: Record<string, unknown> | null;
   template: { name: string } | Array<{ name: string }> | null;
   views?: number;
   attending?: number;
@@ -39,7 +42,7 @@ export default async function InvitationsPage() {
         supabase
           .from("weddings")
           .select(
-            `id, slug, bride_name, groom_name, wedding_date, venue, status, expiration_date, created_at,
+            `id, slug, form_type, bride_name, groom_name, celebrant_name, wedding_date, venue, status, expiration_date, created_at, wedding_data,
              template:template_id(id, name, slug)`
           )
           .eq("user_id", user.id)
@@ -78,7 +81,7 @@ export default async function InvitationsPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">My invitations</p>
-          <h1 className="mt-1 font-heading-2xl !text-on-surface">Your published & draft wedding websites</h1>
+          <h1 className="mt-1 font-heading-2xl !text-on-surface">Your published & draft invitation websites</h1>
         </div>
       </div>
 
@@ -90,6 +93,12 @@ export default async function InvitationsPage() {
             slug: w.slug ?? "",
             bride: w.bride_name ?? "",
             groom: w.groom_name ?? "",
+            celebrant: w.celebrant_name ?? "",
+            birthdayNumber:
+              typeof w.wedding_data?.birthdayNumber === "number"
+                ? w.wedding_data.birthdayNumber
+                : null,
+            formType: w.form_type,
             date: w.wedding_date ?? "",
             venue: w.venue ?? "",
             status: (w.status ?? "draft") as InvitationItem["status"],

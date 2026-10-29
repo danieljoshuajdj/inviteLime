@@ -166,20 +166,20 @@ describe("sample template runtime ingestion", () => {
     });
     expect(mapped.events).toEqual([
       {
-        id: "event-wedding",
-        name: "The Wedding",
-        date: "2027-02-14",
-        time: "19:00",
-        location: { name: "Demo Palace Gardens", address: "Sample address", mapsUrl: null },
-        description: null,
-      },
-      {
         id: "event-1",
         name: "Mehendi",
         date: "2027-02-12",
         time: "16:00",
         location: { name: "Courtyard", address: null, mapsUrl: null },
         description: "demo event",
+      },
+      {
+        id: "event-wedding",
+        name: "The Wedding",
+        date: "2027-02-14",
+        time: "19:00",
+        location: { name: "Demo Palace Gardens", address: "Sample address", mapsUrl: null },
+        description: null,
       },
     ]);
     expect(mapped.rsvp).toEqual({
@@ -243,10 +243,63 @@ describe("sample template runtime ingestion", () => {
     )!;
 
     expect((mapped.events as Array<{ name: string }>).map((event) => event.name)).toEqual([
-      "Wedding Ceremony",
       "Mehendi",
+      "Wedding Ceremony",
     ]);
-    expect((mapped.events as Array<{ description: string | null }>)[0].description).toBe("Our vows");
+    expect((mapped.events as Array<{ description: string | null }>)[1].description).toBe("Our vows");
+  });
+
+  it("numbers Save-the-dates events by date and time", () => {
+    const mapped = helpers.fromRuntime(
+      demoPayload({
+        events: [
+          {
+            name: "Reception",
+            date: "2027-02-14",
+            time: "21:00",
+            venue: "Ballroom",
+            address: null,
+            mapsUrl: null,
+            description: null,
+          },
+          {
+            name: "Haldi",
+            date: "2027-02-12",
+            time: "10:00",
+            venue: "Courtyard",
+            address: null,
+            mapsUrl: null,
+            description: null,
+          },
+          {
+            name: "Undated",
+            date: null,
+            time: null,
+            venue: null,
+            address: null,
+            mapsUrl: null,
+            description: null,
+          },
+          {
+            name: "Mehendi",
+            date: "2027-02-12",
+            time: "16:00",
+            venue: "Courtyard",
+            address: null,
+            mapsUrl: null,
+            description: null,
+          },
+        ],
+      })
+    )!;
+
+    expect((mapped.events as Array<{ name: string }>).map((event) => event.name)).toEqual([
+      "Haldi",
+      "Mehendi",
+      "The Wedding",
+      "Reception",
+      "Undated",
+    ]);
   });
 
   it("keeps the template's hero film in live mode", () => {

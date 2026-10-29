@@ -11,6 +11,8 @@ import { Toggle } from "@/components/shared/Field";
 import { DownloadQrCardButton } from "@/components/account/DownloadQrCardButton";
 import { DeleteInvitationButton } from "@/components/account/DeleteInvitationButton";
 import { toast } from "@/components/account/toast";
+import { formDefinition, formTypeOrDefault, isBirthdayForm } from "@/lib/builder/forms";
+import { cn } from "@/lib/utils";
 
 export interface InvitationDetail {
   id: string;
@@ -20,6 +22,7 @@ export interface InvitationDetail {
   venue: string;
   status: string;
   templateName: string;
+  formType?: string | null;
   views: number;
   attendingCount: number;
   rsvpCount: number;
@@ -53,6 +56,10 @@ export function ManageInvitation({
   const [toggling, setToggling] = useState(false);
   const [resending, setResending] = useState(false);
 
+  const formType = formTypeOrDefault(invitation.formType);
+  const definition = formDefinition(formType);
+  const birthday = isBirthdayForm(formType);
+
   async function updateRsvp(value: boolean) {
     setToggling(true);
     setRsvpToggle(value);
@@ -84,11 +91,14 @@ export function ManageInvitation({
     }
   }
 
-  const waText = `${encodeURIComponent(`Wedding Invitation — ${invitation.couple}
-${invitation.date}
-${invitation.venue}
-${invitation.url ?? ""}
-Tap to open your invitation 💌`)}`;
+  const waLines = [
+    `${definition.invitationLabel} — ${invitation.couple}`,
+    invitation.date,
+    invitation.venue,
+    invitation.url ?? "",
+    "Tap to open your invitation 💌",
+  ].filter((line) => line.trim() !== "");
+  const waText = `${encodeURIComponent(waLines.join("\n"))}`;
   const waLink = `https://wa.me/?text=${waText}`;
 
   return (
@@ -98,7 +108,7 @@ Tap to open your invitation 💌`)}`;
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">{invitation.templateName}</p>
           <h1 className="mt-1 font-heading-3xl !text-on-surface">{invitation.couple}</h1>
           <p className="mt-1 font-body text-on-surface-variant">
-            {invitation.date}· {invitation.venue || "Venue TBD"}
+            {[invitation.date, invitation.venue].filter(Boolean).join(" · ") || "Details coming soon"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -112,10 +122,10 @@ Tap to open your invitation 💌`)}`;
       </div>
 
       {/* Stats */}
-      <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
+      <div className={cn("mt-6 grid grid-cols-1 gap-2.5 sm:gap-3", birthday ? "sm:grid-cols-1" : "sm:grid-cols-3")}>
         <Stat label="Invitation views" value={invitation.views} icon="visibility" />
-        <Stat label="Attending guests" value={invitation.attendingCount} icon="celebration" />
-        <Stat label="Responses" value={invitation.rsvpCount} icon="group" />
+        {!birthday && <Stat label="Attending guests" value={invitation.attendingCount} icon="celebration" />}
+        {!birthday && <Stat label="Responses" value={invitation.rsvpCount} icon="group" />}
       </div>
 
       {/* Controls */}
@@ -157,7 +167,7 @@ Tap to open your invitation 💌`)}`;
             <Link href={`/app/invitations/${invitation.id}/edit`} className="inline-flex">
               <Button size="sm" icon="settings">Edit content</Button>
             </Link>
-            <Button variant="danger" size="sm" icon="download">Export RSVPs</Button>
+            {!birthday && <Button variant="danger" size="sm" icon="download">Export RSVPs</Button>}
             {canDelete && (
               <DeleteInvitationButton
                 weddingId={invitation.id}
@@ -169,59 +179,63 @@ Tap to open your invitation 💌`)}`;
           </div>
         </div>
 
-        <div className="mt-5 border-t border-outline-variant pt-5">
-          <Toggle
-            label="Accept new RSVPs"
-            description="Turns the RSVP form on the published invitation on or off."
-            checked={rsvpToggle}
-            disabled={toggling}
-            onChange={(v) => void updateRsvp(v)}
-          />
-        </div>
-      </div>
-
-      {/* RSVP roster */}
-      <div className="mt-6 rounded-2xl border border-outline-variant bg-surface p-5">
-        <h2 className="font-heading-md font-semibold !text-on-surface">Guest responses</h2>
-        {rsvps.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-8 text-center font-body-sm text-on-surface-variant">
-            No responses yet. Share your invitation to start collecting confirmations.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-start font-body-sm">
-              <thead>
-                <tr className="border-b border-outline-variant text-start font-body-xs uppercase tracking-wider text-on-surface-variant">
-                  <th className="py-2 pr-4 text-start font-semibold">Guest</th>
-                  <th className="py-2 pr-4 text-start font-semibold">Response</th>
-                  <th className="py-2 pr-4 text-start font-semibold">Guests</th>
-                  <th className="py-2 text-start font-semibold">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant">
-                {rsvps.map((r, i) => (
-                  <tr key={i}>
-                    <td className="py-3 pr-4">
-                      <p className="font-semibold !text-on-surface">{r.name}</p>
-                      {r.email && <p className="font-body-xs text-on-surface-variant">{r.email}</p>}
-                      {r.phone && <p className="font-body-xs text-on-surface-variant">{r.phone}</p>}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <Badge tone={r.attendance === "attending" ? "success" : "danger"}>
-                        {r.attendance === "attending" ? "Attending" : "Declined"}
-                      </Badge>
-                    </td>
-                    <td className="py-3 pr-4 text-on-surface">{r.guests}</td>
-                    <td className="py-3 text-on-surface-variant">
-                      {r.dietary ? `Dietary: ${r.dietary}` : r.message ? <em>“{r.message}”</em> : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {!birthday && (
+          <div className="mt-5 border-t border-outline-variant pt-5">
+            <Toggle
+              label="Accept new RSVPs"
+              description="Turns the RSVP form on the published invitation on or off."
+              checked={rsvpToggle}
+              disabled={toggling}
+              onChange={(v) => void updateRsvp(v)}
+            />
           </div>
         )}
       </div>
+
+      {/* RSVP roster */}
+      {!birthday && (
+        <div className="mt-6 rounded-2xl border border-outline-variant bg-surface p-5">
+          <h2 className="font-heading-md font-semibold !text-on-surface">Guest responses</h2>
+          {rsvps.length === 0 ? (
+            <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-8 text-center font-body-sm text-on-surface-variant">
+              No responses yet. Share your invitation to start collecting confirmations.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[560px] text-start font-body-sm">
+                <thead>
+                  <tr className="border-b border-outline-variant text-start font-body-xs uppercase tracking-wider text-on-surface-variant">
+                    <th className="py-2 pr-4 text-start font-semibold">Guest</th>
+                    <th className="py-2 pr-4 text-start font-semibold">Response</th>
+                    <th className="py-2 pr-4 text-start font-semibold">Guests</th>
+                    <th className="py-2 text-start font-semibold">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant">
+                  {rsvps.map((r, i) => (
+                    <tr key={i}>
+                      <td className="py-3 pr-4">
+                        <p className="font-semibold !text-on-surface">{r.name}</p>
+                        {r.email && <p className="font-body-xs text-on-surface-variant">{r.email}</p>}
+                        {r.phone && <p className="font-body-xs text-on-surface-variant">{r.phone}</p>}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <Badge tone={r.attendance === "attending" ? "success" : "danger"}>
+                          {r.attendance === "attending" ? "Attending" : "Declined"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 pr-4 text-on-surface">{r.guests}</td>
+                      <td className="py-3 text-on-surface-variant">
+                        {r.dietary ? `Dietary: ${r.dietary}` : r.message ? <em>“{r.message}”</em> : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="Share invitation" icon="share">
         <div className="flex flex-col gap-3">
@@ -241,7 +255,7 @@ Tap to open your invitation 💌`)}`;
               icon="share"
               onClick={() => {
                 void navigator
-                  .share({ title: `Wedding invitation — ${invitation.couple}`, url: invitation.url! })
+                  .share({ title: `${definition.invitationLabel} — ${invitation.couple}`, url: invitation.url! })
                   .catch(() => {});
               }}
             >

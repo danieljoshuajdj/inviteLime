@@ -11,6 +11,7 @@
  */
 
 import { createBindingScript } from "./binding";
+import { ordinal, type FormType } from "@/lib/builder/forms";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { templatePackageBaseUrl } from "@/lib/services/storage/urls";
 
@@ -57,8 +58,16 @@ export interface RuntimePayload {
   wedding: {
     id: string;
     slug: string;
+    /** Event form, so a template can vary its own copy/sections. */
+    formType: FormType;
     brideName: string;
     groomName: string;
+    /** Birthday person's name; null for couple-based forms. */
+    celebrantName: string | null;
+    /** Birthday age and its display form (e.g. 21 / "21st"). */
+    birthdayNumber: number | null;
+    birthdayOrdinal: string | null;
+    specialMessage: string | null;
     brideBio: string;
     groomBio: string;
     coupleBio: string;
@@ -72,7 +81,13 @@ export interface RuntimePayload {
     longitude: number | null;
     events: RuntimeEvent[];
     gallery: RuntimeGalleryItem[];
-    photos: { bride: string | null; groom: string | null; couple: string | null };
+    photos: {
+      bride: string | null;
+      groom: string | null;
+      couple: string | null;
+      /** Birthday main image; null on couple-based forms. */
+      main: string | null;
+    };
     music: RuntimeGalleryItem | null;
     /**
      * Richer demo content. Null on live invitations until the builder collects
@@ -117,8 +132,12 @@ export interface RuntimePayload {
 export interface RuntimeWeddingInput {
   id: string;
   slug: string;
+  formType?: FormType;
   brideName: string;
   groomName: string;
+  celebrantName?: string | null;
+  birthdayNumber?: number | null;
+  specialMessage?: string | null;
   date: string;
   time: string | null;
   venue: string;
@@ -132,7 +151,12 @@ export interface RuntimeWeddingInput {
   story: string;
   events: RuntimeEvent[];
   gallery: RuntimeGalleryItem[];
-  photos: { bride: string | null; groom: string | null; couple: string | null };
+  photos: {
+    bride: string | null;
+    groom: string | null;
+    couple: string | null;
+    main?: string | null;
+  };
   music: RuntimeGalleryItem | null;
   brideDesignation?: string | null;
   groomDesignation?: string | null;
@@ -165,6 +189,20 @@ export function buildRuntimePayload(input: {
     mode: input.mode,
     wedding: {
       ...input.wedding,
+      formType: input.wedding.formType ?? "wedding",
+      celebrantName: input.wedding.celebrantName?.trim() || null,
+      birthdayNumber: input.wedding.birthdayNumber ?? null,
+      birthdayOrdinal:
+        typeof input.wedding.birthdayNumber === "number"
+          ? ordinal(input.wedding.birthdayNumber)
+          : null,
+      specialMessage: input.wedding.specialMessage?.trim() || null,
+      photos: {
+        bride: input.wedding.photos.bride ?? null,
+        groom: input.wedding.photos.groom ?? null,
+        couple: input.wedding.photos.couple ?? null,
+        main: input.wedding.photos.main ?? null,
+      },
       brideDesignation: input.wedding.brideDesignation ?? null,
       groomDesignation: input.wedding.groomDesignation ?? null,
       dress: input.wedding.dress ?? null,

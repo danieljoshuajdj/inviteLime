@@ -5,6 +5,13 @@ import { QRCodeSVG } from "qrcode.react";
 import { useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
+import {
+  firstName,
+  formDefinition,
+  formTypeOrDefault,
+  isBirthdayForm,
+  ordinal,
+} from "@/lib/builder/forms";
 
 interface SuccessWeddingData {
   id: string;
@@ -12,8 +19,11 @@ interface SuccessWeddingData {
   template_id: string | null;
   template_version_id: string | null;
   templateName?: string | null;
+  formType?: string | null;
   brideName: string | null;
   groomName: string | null;
+  celebrantName?: string | null;
+  birthdayNumber?: number | null;
   brideBio: string | null;
   groomBio: string | null;
   coupleBio: string | null;
@@ -82,21 +92,38 @@ export function SuccessContent({
   const invitationPath = `/w/${wedding.slug}`;
   const invitationUrl = `${origin}${invitationPath}`;
   const absoluteInvitationUrl = () => `${window.location.origin}${invitationPath}`;
-  const coverTitle =
-    wedding.brideName && wedding.groomName
-      ? `${wedding.groomName.split(" ")[0]} & ${wedding.brideName.split(" ")[0]}`
+
+  const formType = formTypeOrDefault(wedding.formType);
+  const definition = formDefinition(formType);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+
+  const displayName = birthday
+    ? wedding.celebrantName?.trim() || "Birthday Star"
+    : wedding.brideName && wedding.groomName
+      ? `${firstName(wedding.groomName)} & ${firstName(wedding.brideName)}`
       : "Your Invitation";
 
+  // The birthday number is the headline detail of a wish, so it replaces the
+  // event date that doesn't exist for that form.
+  const birthdayDetail =
+    wishes && typeof wedding.birthdayNumber === "number"
+      ? `${ordinal(wedding.birthdayNumber)} Birthday`
+      : null;
+
   const brandName = plannerBrandName?.trim() || null;
-  const eventLabel =
-    wedding.brideName && wedding.groomName ? `${coverTitle}'s wedding` : "our wedding";
+  const eventLabel = birthday
+    ? `${displayName}'s ${definition.label.toLowerCase()}`
+    : wedding.brideName && wedding.groomName
+      ? `${displayName}'s ${definition.label.toLowerCase()}`
+      : `our ${definition.label.toLowerCase()}`;
   const shareTitle = brandName
-    ? `${coverTitle} Wedding Invitation — ${brandName}`
-    : `${coverTitle} Wedding Invitation`;
+    ? `${displayName} ${definition.invitationLabel} — ${brandName}`
+    : `${displayName} ${definition.invitationLabel}`;
   const shareText = (url: string) =>
     brandName
-      ? `You're invited to ${eventLabel} — presented by ${brandName}. View our invitation: ${url}`
-      : `You're invited to ${eventLabel}! View our invitation: ${url}`;
+      ? `You're invited to ${eventLabel} — presented by ${brandName}. View the invitation: ${url}`
+      : `You're invited to ${eventLabel}! View the invitation: ${url}`;
 
   const weddingDate = wedding.weddingDate
     ? new Date(`${wedding.weddingDate}T00:00:00`).toLocaleDateString("en-IN", {
@@ -115,7 +142,7 @@ export function SuccessContent({
       })
     : "—";
 
-  const templateLabel = wedding.templateName ?? "Wedding Invitation";
+  const templateLabel = wedding.templateName ?? definition.invitationLabel;
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(absoluteInvitationUrl());
@@ -198,7 +225,7 @@ export function SuccessContent({
                 <div className="relative w-full aspect-[9/18.5] overflow-hidden bg-ivory-950">
                   <iframe
                     src={`/w/${wedding.slug}?embed=1`}
-                    title={`${coverTitle} — live invitation preview`}
+                    title={`${displayName} — live invitation preview`}
                     allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
                     className="absolute inset-0 h-full w-full border-0 bg-ivory-950"
                   />
@@ -207,16 +234,18 @@ export function SuccessContent({
             </div>
 
             <div className="w-full max-w-sm mt-space-md flex flex-col gap-space-xs">
-              <div className="w-full flex items-center justify-between px-space-md py-space-sm bg-surface-lowest rounded-xl shadow-sm">
-                <div className="flex items-center gap-space-xs text-on-surface">
-                  <Icon name="music_note" size="md" className="text-secondary animate-spin" />
-                  <div className="flex flex-col text-left">
-                    <span className="font-body-xs font-semibold">Ambient Shehnai Soundtrack</span>
-                    <span className="text-[11px] text-on-surface-variant leading-none">Autoplay On Gesture · 320kbps AAC</span>
+              {!birthday && (
+                <div className="w-full flex items-center justify-between px-space-md py-space-sm bg-surface-lowest rounded-xl shadow-sm">
+                  <div className="flex items-center gap-space-xs text-on-surface">
+                    <Icon name="music_note" size="md" className="text-secondary animate-spin" />
+                    <div className="flex flex-col text-left">
+                      <span className="font-body-xs font-semibold">Ambient Shehnai Soundtrack</span>
+                      <span className="text-[11px] text-on-surface-variant leading-none">Autoplay On Gesture · 320kbps AAC</span>
+                    </div>
                   </div>
+                  <span className="font-body-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
                 </div>
-                <span className="font-body-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
-              </div>
+              )}
               <Link
                 href={`/w/${wedding.slug}`}
                 target="_blank"
@@ -235,9 +264,13 @@ export function SuccessContent({
               <div className="flex items-start justify-between gap-space-md">
                 <div className="flex flex-col">
                   <span className="font-body-xs font-semibold uppercase tracking-widest text-secondary mb-1">Publication Confirmed</span>
-                  <h1 className="font-headline-lg font-semibold text-primary tracking-tight">Your Wedding Invitation is Ready & Live!</h1>
+                  <h1 className="font-headline-lg font-semibold text-primary tracking-tight">
+                    Your {definition.invitationLabel} is Ready &amp; Live!
+                  </h1>
                   <p className="mt-2 font-body text-on-surface-variant max-w-xl">
-                    Your bespoke animated invitation suite is published and accessible worldwide on any smartphone, tablet, or modern desktop browser.
+                    {birthdayDetail
+                      ? `Your ${birthdayDetail} invitation is published and accessible worldwide on any smartphone, tablet, or modern desktop browser.`
+                      : "Your bespoke animated invitation suite is published and accessible worldwide on any smartphone, tablet, or modern desktop browser."}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-full bg-secondary-container/40 flex items-center justify-center shrink-0">
@@ -318,7 +351,9 @@ export function SuccessContent({
                 <span className="font-body-xs font-mono text-emerald-800 bg-emerald-100/70 px-space-sm py-0.5 rounded">200 OK</span>
               </div>
               <p className="font-body-md text-on-surface-variant">
-                The private invitation link, administrative guest RSVP credentials, and attached calendar ICS file have been dispatched to:
+                {birthday
+                  ? "The private invitation link has been dispatched to:"
+                  : "The private invitation link, administrative guest RSVP credentials, and attached calendar ICS file have been dispatched to:"}
               </p>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm p-space-md bg-surface-low rounded-lg">
                 <div className="flex items-center gap-space-xs">
@@ -336,9 +371,9 @@ export function SuccessContent({
                   <span className="font-body-xs font-mono text-on-surface-variant">MIME Type: multipart/alternative</span>
                 </div>
                 <div className="text-xs text-on-surface font-mono bg-surface-lowest p-space-sm rounded">
-                  <p><strong className="text-primary font-semibold">Subject:</strong> Wedding Invitation Ready — {coverTitle} ({weddingDate})</p>
-                  <p className="mt-1"><strong className="text-primary font-semibold">Attachments:</strong> wedding-calendar.ics (12 KB)</p>
-                  <p className="mt-1 text-on-surface-variant"><strong className="text-primary font-semibold">Body Content:</strong> Formal couple salutation, direct authenticated passkey, and guaranteed archive preservation through {expirationDate}.</p>
+                  <p><strong className="text-primary font-semibold">Subject:</strong> {definition.invitationLabel} Ready — {displayName}{!birthday ? ` (${weddingDate})` : ""}</p>
+                  <p className="mt-1"><strong className="text-primary font-semibold">Attachments:</strong> {birthday ? "None" : `${definition.label.toLowerCase()}-calendar.ics (12 KB)`}</p>
+                  <p className="mt-1 text-on-surface-variant"><strong className="text-primary font-semibold">Body Content:</strong> Formal salutation, direct authenticated passkey, and guaranteed archive preservation through {expirationDate}.</p>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-sm pt-space-xs">
@@ -357,8 +392,15 @@ export function SuccessContent({
                 <div className="flex flex-col">
                   <h4 className="font-headline-sm font-semibold text-primary">Suite Expiration & Archival Continuity</h4>
                   <p className="mt-1 font-body-sm text-on-surface-variant leading-relaxed">
-                    Active until <span className="font-semibold text-on-surface">{expirationDate}</span> (Wedding Date + 2 Calendar Months).
-                    Your canonical public URL remains permanently immutable and will not break when updating itinerary schedules, seating charts, or RSVP guest lists.
+                    Active until <span className="font-semibold text-on-surface">{expirationDate}</span> (
+                    {wishes
+                      ? "Publish Date + 2 Calendar Months"
+                      : `${definition.dateLabel} + 2 Calendar Months`}
+                    ).
+                    Your canonical public URL remains permanently immutable and will not break when updating{" "}
+                    {wishes
+                      ? "the birthday message, photos, or birthday details."
+                      : "itinerary schedules, seating charts, or RSVP guest lists."}
                   </p>
                 </div>
               </div>
@@ -388,7 +430,9 @@ export function SuccessContent({
             <div className="w-12 h-12 rounded-full bg-secondary-container/40 flex items-center justify-center text-secondary mb-space-sm">
               <Icon name="qr_code_2" size="xl" />
             </div>
-            <h3 className="font-headline-sm font-semibold text-primary">Guest Scan & Direct RSVP</h3>
+            <h3 className="font-headline-sm font-semibold text-primary">
+              {birthday ? "Guest Scan & Open" : "Guest Scan & Direct RSVP"}
+            </h3>
             <p className="font-body-sm text-on-surface-variant mt-1 mb-space-lg">Scan to open the invitation instantly on any smartphone.</p>
             <div className="w-48 h-48 bg-white rounded-lg flex items-center justify-center p-2 shadow-inner">
               <InvitationQrCode url={invitationUrl} />

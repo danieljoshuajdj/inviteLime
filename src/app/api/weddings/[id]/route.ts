@@ -4,22 +4,40 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasPhoneDigits } from "@/lib/phone";
 import { jsonError, readBody } from "@/lib/services/helpers";
+import { mediaKeysInWeddingData } from "@/lib/services/invitation-deletion";
+import { deleteUnreferencedMediaKeys } from "@/lib/services/media-cleanup";
 import { UUID_RE } from "@/lib/services/media-access";
 import { consumeRateLimit } from "@/lib/services/ops";
 import { purgeWedding, WeddingPurgeError } from "@/lib/services/wedding-purge";
 import { dressCodeSchema, mediaItemSchema } from "@/lib/validators";
+import { normalizeWeddingData } from "@/lib/builder/defaults";
+import { formTypeOrDefault, isBirthdayForm } from "@/lib/builder/forms";
+import { BIRTHDAY_NUMBER_MAX, BIRTHDAY_NUMBER_MIN, validateDetails } from "@/lib/builder/validation";
+import type { Database } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 
 const upsertSchema = z.object({
-  brideName: z.string().trim().min(1).max(120),
-  groomName: z.string().trim().min(1).max(120),
-  brideBio: z.string().max(2000).optional().default(""),
-  groomBio: z.string().max(2000).optional().default(""),
-  story: z.string().max(4000).optional().default(""),
+  // Couple fields belong to wedding/engagement; birthday fields to the birthday
+  // forms. Which set is required is decided by the wedding's frozen form type.
+  brideName: z.string().trim().min(1).max(120).optional(),
+  groomName: z.string().trim().min(1).max(120).optional(),
+  celebrantName: z.string().trim().min(1).max(120).optional(),
+  birthdayNumber: z
+    .number()
+    .int()
+    .min(BIRTHDAY_NUMBER_MIN)
+    .max(BIRTHDAY_NUMBER_MAX)
+    .nullable()
+    .optional(),
+  specialMessage: z.string().max(2000).optional(),
+  mainPhoto: z.string().trim().max(2000).nullable().optional(),
+  brideBio: z.string().max(2000).optional(),
+  groomBio: z.string().max(2000).optional(),
+  story: z.string().max(4000).optional(),
   brideDesignation: z.string().trim().max(200).optional(),
   groomDesignation: z.string().trim().max(200).optional(),
-  dress: dressCodeSchema,
+  dress: dressCodeSchema.optional(),
   rsvpEnabled: z.boolean().optional(),
   rsvpWhatsapp: z
     .string()
@@ -29,10 +47,10 @@ const upsertSchema = z.object({
       message: "Enter a valid WhatsApp number, including the country code.",
     })
     .optional(),
-  weddingDate: z.string().min(1),
+  weddingDate: z.string().min(1).optional(),
   weddingTime: z.string().nullable().optional(),
-  venue: z.string().trim().min(1).max(200),
-  address: z.string().max(1000).optional().default(""),
+  venue: z.string().trim().min(1).max(200).optional(),
+  address: z.string().max(1000).optional(),
   mapsUrl: z.string().url().nullable().optional().or(z.literal("")),
   events: z
     .array(
@@ -48,7 +66,7 @@ const upsertSchema = z.object({
       })
     )
     .max(12)
-    .default([]),
+    .optional(),
   gallery: z.array(mediaItemSchema).max(100).optional(),
   bridePhoto: z.string().trim().max(2000).nullable().optional(),
   groomPhoto: z.string().trim().max(2000).nullable().optional(),
@@ -74,7 +92,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
   const { data, error } = await supabase
     .from("weddings")
-    .select("id, bride_name, groom_name, wedding_date, wedding_time, venue, address, maps_url, wedding_data, rsvp_toggle, status, slug")
+    .select("id, form_type, bride_name, groom_name, celebrant_name, wedding_date, wedding_time, venue, address, maps_url, wedding_data, rsvp_toggle, status, slug")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -83,8 +101,13 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
   const wd = (data.wedding_data ?? {}) as Record<string, unknown>;
   return Response.json({
+    formType: formTypeOrDefault(data.form_type),
     brideName: data.bride_name ?? wd.brideName ?? "",
     groomName: data.groom_name ?? wd.groomName ?? "",
+    celebrantName: data.celebrant_name ?? wd.celebrantName ?? "",
+    birthdayNumber: typeof wd.birthdayNumber === "number" ? wd.birthdayNumber : null,
+    specialMessage: (wd.specialMessage as string) ?? "",
+    mainPhoto: (wd.mainPhoto as string | null) ?? null,
     brideBio: (wd.brideBio as string) ?? "",
     groomBio: (wd.groomBio as string) ?? "",
     story: (wd.story as string) ?? "",
@@ -123,58 +146,143 @@ export async function PATCH(req: Request, { params }: RouteContext) {
 
   const { data: existing } = await supabase
     .from("weddings")
-    .select("id, wedding_data")
+    .select("id, form_type, guest_session_id, wedding_data")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
   if (!existing) return jsonError(404, "Invitation not found");
 
+  // The form was frozen when the draft was created, so the stored value — not
+  // the client — decides which fields this edit may change and which are
+  // required. A template re-categorised after purchase must not rewrite it.
+  const formType = formTypeOrDefault(existing.form_type);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+
   const prevWData = (existing.wedding_data ?? {}) as Record<string, unknown>;
-  const wd = {
+  const wd: Record<string, unknown> = {
     ...prevWData,
-    brideName: parsed.data.brideName,
-    groomName: parsed.data.groomName,
-    brideBio: parsed.data.brideBio,
-    groomBio: parsed.data.groomBio,
-    story: parsed.data.story,
-    events: parsed.data.events,
-    ...(parsed.data.brideDesignation !== undefined
-      ? { brideDesignation: parsed.data.brideDesignation }
+    formType,
+    ...(!birthday && parsed.data.brideName !== undefined
+      ? { brideName: parsed.data.brideName }
       : {}),
-    ...(parsed.data.groomDesignation !== undefined
-      ? { groomDesignation: parsed.data.groomDesignation }
+    ...(!birthday && parsed.data.groomName !== undefined
+      ? { groomName: parsed.data.groomName }
       : {}),
-    ...(parsed.data.dress !== undefined ? { dress: parsed.data.dress } : {}),
-    ...(typeof parsed.data.rsvpEnabled === "boolean"
+    ...(birthday && parsed.data.celebrantName !== undefined
+      ? { celebrantName: parsed.data.celebrantName }
+      : {}),
+    ...(birthday && parsed.data.birthdayNumber !== undefined
+      ? { birthdayNumber: parsed.data.birthdayNumber }
+      : {}),
+    ...(birthday && parsed.data.specialMessage !== undefined
+      ? { specialMessage: parsed.data.specialMessage }
+      : {}),
+    ...(birthday && parsed.data.mainPhoto !== undefined
+      ? { mainPhoto: parsed.data.mainPhoto }
+      : {}),
+    ...(!birthday && parsed.data.brideBio !== undefined
+      ? { brideBio: parsed.data.brideBio }
+      : {}),
+    ...(!birthday && parsed.data.groomBio !== undefined
+      ? { groomBio: parsed.data.groomBio }
+      : {}),
+    ...(!birthday && parsed.data.story !== undefined ? { story: parsed.data.story } : {}),
+    ...(!birthday && parsed.data.events !== undefined ? { events: parsed.data.events } : {}),
+    ...(!birthday && parsed.data.dress !== undefined ? { dress: parsed.data.dress } : {}),
+    ...(!birthday && typeof parsed.data.rsvpEnabled === "boolean"
       ? { rsvpEnabled: parsed.data.rsvpEnabled }
       : {}),
-    ...(parsed.data.rsvpWhatsapp !== undefined
+    ...(!birthday && parsed.data.brideDesignation !== undefined
+      ? { brideDesignation: parsed.data.brideDesignation }
+      : {}),
+    ...(!birthday && parsed.data.groomDesignation !== undefined
+      ? { groomDesignation: parsed.data.groomDesignation }
+      : {}),
+    ...(!birthday && parsed.data.rsvpWhatsapp !== undefined
       ? { rsvpWhatsapp: parsed.data.rsvpWhatsapp }
       : {}),
     ...(parsed.data.gallery !== undefined ? { gallery: parsed.data.gallery } : {}),
-    ...(parsed.data.bridePhoto !== undefined ? { bridePhoto: parsed.data.bridePhoto } : {}),
-    ...(parsed.data.groomPhoto !== undefined ? { groomPhoto: parsed.data.groomPhoto } : {}),
-    ...(parsed.data.couplePhoto !== undefined ? { couplePhoto: parsed.data.couplePhoto } : {}),
-    ...(parsed.data.music !== undefined ? { music: parsed.data.music } : {}),
+    ...(!birthday && parsed.data.bridePhoto !== undefined
+      ? { bridePhoto: parsed.data.bridePhoto }
+      : {}),
+    ...(!birthday && parsed.data.groomPhoto !== undefined
+      ? { groomPhoto: parsed.data.groomPhoto }
+      : {}),
+    ...(!birthday && parsed.data.couplePhoto !== undefined
+      ? { couplePhoto: parsed.data.couplePhoto }
+      : {}),
+    ...(!birthday && parsed.data.music !== undefined ? { music: parsed.data.music } : {}),
+    ...(!wishes && parsed.data.weddingDate !== undefined
+      ? { weddingDate: parsed.data.weddingDate }
+      : {}),
+    ...(!wishes && parsed.data.weddingTime !== undefined
+      ? { weddingTime: parsed.data.weddingTime }
+      : {}),
+    ...(!wishes && parsed.data.venue !== undefined ? { venue: parsed.data.venue } : {}),
+    ...(!wishes && parsed.data.address !== undefined ? { address: parsed.data.address } : {}),
+    ...(!wishes && parsed.data.mapsUrl !== undefined
+      ? { mapsUrl: parsed.data.mapsUrl || null }
+      : {}),
   };
+
+  // Account edits never fail on a date that has since passed — an existing
+  // invitation must remain editable — but they must not blank required fields.
+  const issue = validateDetails(normalizeWeddingData(wd), formType, null);
+  if (issue) return jsonError(400, issue.message);
+
+  const update: Database["public"]["Tables"]["weddings"]["Update"] = {
+    wedding_data: wd as never,
+  };
+  if (!birthday) {
+    if (parsed.data.brideName !== undefined) update.bride_name = parsed.data.brideName;
+    if (parsed.data.groomName !== undefined) update.groom_name = parsed.data.groomName;
+    if (typeof parsed.data.rsvpEnabled === "boolean") {
+      update.rsvp_toggle = parsed.data.rsvpEnabled;
+    }
+  } else if (parsed.data.celebrantName !== undefined) {
+    update.celebrant_name = parsed.data.celebrantName;
+  }
+  if (!wishes) {
+    if (parsed.data.weddingDate !== undefined) update.wedding_date = parsed.data.weddingDate || null;
+    if (parsed.data.weddingTime !== undefined) update.wedding_time = parsed.data.weddingTime || null;
+    if (parsed.data.venue !== undefined) update.venue = parsed.data.venue;
+    if (parsed.data.address !== undefined) update.address = parsed.data.address || null;
+    if (parsed.data.mapsUrl !== undefined) update.maps_url = parsed.data.mapsUrl || null;
+  }
 
   const { error } = await supabase
     .from("weddings")
-    .update({
-      bride_name: parsed.data.brideName,
-      groom_name: parsed.data.groomName,
-      wedding_date: parsed.data.weddingDate || null,
-      wedding_time: parsed.data.weddingTime || null,
-      venue: parsed.data.venue,
-      address: parsed.data.address || null,
-      maps_url: parsed.data.mapsUrl || null,
-      ...(typeof parsed.data.rsvpEnabled === "boolean"
-        ? { rsvp_toggle: parsed.data.rsvpEnabled }
-        : {}),
-      wedding_data: wd as never,
-    })
+    .update(update)
     .eq("id", id);
   if (error) return jsonError(500, error.message);
+
+  // The update committed, so media that only the previous blob referenced is
+  // now unused. Keys still shown in the new blob are filtered out; the cleanup
+  // re-checks every reference anyway. `includeStaleWeddingMedia` also clears
+  // rows left by an upload the editor replaced or abandoned before saving.
+  // Cleanup is best-effort: a storage/logging hiccup must not turn a successful
+  // save into an error.
+  try {
+    const stillUsed = new Set(mediaKeysInWeddingData(wd));
+    const removed = mediaKeysInWeddingData(prevWData).filter((key) => !stillUsed.has(key));
+
+    const cleanup = await deleteUnreferencedMediaKeys(removed, {
+      weddingId: id,
+      guestSessionId: existing.guest_session_id ?? null,
+      includeStaleWeddingMedia: true,
+      admin: createAdminClient(),
+    });
+
+    if (cleanup.failures.length > 0) {
+      console.warn("[weddings] media cleanup incomplete", {
+        weddingId: id,
+        failures: cleanup.failures.slice(0, 5),
+      });
+    }
+  } catch (err) {
+    console.warn("[weddings] media cleanup failed", { weddingId: id, error: err });
+  }
 
   return Response.json({ ok: true });
 }

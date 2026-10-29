@@ -14,16 +14,16 @@ export function FaqSection({ faq = [] }: { faq?: FaqItem[] }) {
   const [openIdx, setOpenIdx] = useState<number | null>(0);
 
   return (
-    <section className="bg-ivory-100/70 py-20">
+    <section className="bg-ivory-100/70 py-10 sm:py-20">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-sapphire-600">
             Questions
           </p>
-          <h2 className="mt-3 font-heading-2xl text-ivory-950">Frequently asked questions</h2>
+          <h2 className="mt-2 font-heading-2xl text-ivory-950 sm:mt-3">Frequently asked questions</h2>
         </div>
 
-        <div className="mt-10 space-y-3">
+        <div className="mt-6 space-y-3 sm:mt-10">
           {faq.length === 0 ? (
             <p className="text-center font-body text-navy-700">
               FAQ coming from the site settings. Please configure content in the admin panel.
@@ -41,7 +41,7 @@ export function FaqSection({ faq = [] }: { faq?: FaqItem[] }) {
                 >
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-start"
+                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-start sm:px-5 sm:py-4"
                     onClick={() => setOpenIdx(open ? null : i)}
                     aria-expanded={open}
                   >
@@ -53,7 +53,7 @@ export function FaqSection({ faq = [] }: { faq?: FaqItem[] }) {
                     />
                   </button>
                   {open && (
-                    <div className="px-5 pb-5 font-body-sm leading-relaxed text-navy-800">{item.a}</div>
+                    <div className="px-4 pb-4 font-body-sm leading-relaxed text-navy-800 sm:px-5 sm:pb-5">{item.a}</div>
                   )}
                 </div>
               );

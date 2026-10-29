@@ -6,7 +6,7 @@ import { getGuestDraft } from "@/lib/services/guest";
 import { createRazorpayOrder } from "@/lib/services/payments";
 import { createDraftWedding, invitationUrl } from "@/lib/services/weddings";
 import { guestTokenFromCookies, type GuestDraft } from "@/lib/services/guest";
-import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
+import { getCurrentProfile, jsonError, readBody, type AuthSession } from "@/lib/services/helpers";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
 import { currencyFromRequest } from "@/lib/services/geo";
 import { quoteFor, type TemplatePricingInput } from "@/lib/services/pricing";
@@ -17,14 +17,21 @@ import {
 } from "@/lib/services/planner-plans";
 import { getPlannerBrand, isPlannerBrandComplete } from "@/lib/services/planner-branding";
 import { finalizePaidWedding } from "@/lib/services/finalize-purchase";
+import { normalizeWeddingData } from "@/lib/builder/defaults";
+import { formTypeOrDefault } from "@/lib/builder/forms";
+import { validateDetails } from "@/lib/builder/validation";
 
 const bodySchema = z.object({
   templateId: z.string().uuid(),
   templateVersionId: z.string().uuid(),
-  brideName: z.string().min(1).max(120),
-  groomName: z.string().min(1).max(120),
-  weddingDate: z.string().min(1),
-  email: z.string().email().optional().nullable(),
+  // Couple fields are supplied only by the wedding/engagement forms; the
+  // birthday forms send the celebrant instead. Which set is required is
+  // decided by the template's own form type, below.
+  brideName: z.string().trim().min(1).max(120).optional(),
+  groomName: z.string().trim().min(1).max(120).optional(),
+  celebrantName: z.string().trim().min(1).max(120).optional(),
+  weddingDate: z.string().min(1).optional(),
+  email: z.string().trim().email().optional().nullable(),
   // Guest session token. Optional because the httpOnly cookie is the normal
   // path; the explicit field covers fetch clients without cookies.
   token: z.string().min(10).optional(),
@@ -73,10 +80,17 @@ export async function POST(req: Request) {
     let coveredByPlan = false;
     let claimedSlot = false;
 
-    if (plannerId) {
+    // A guest (not signed in) must supply an email before anything is
+    // published. Signed-in owners can fall back to their account address, and
+    // planner drafts always need the session check below.
+    let authSession: AuthSession | null = null;
+    if (plannerId || !parsed.data.email) {
       const authClient = await createServerClient();
-      const session = await getCurrentProfile(authClient);
-      if (!session || session.user.id !== plannerId) {
+      authSession = await getCurrentProfile(authClient);
+    }
+
+    if (plannerId) {
+      if (!authSession || authSession.user.id !== plannerId) {
         return jsonError(403, "Sign in as the planner account that started this invitation.");
       }
 
@@ -93,6 +107,13 @@ export async function POST(req: Request) {
       }
     }
 
+    // The account address is the fallback only for a signed-in owner; a guest
+    // checkout must carry the email entered in the publish step.
+    const email = parsed.data.email?.trim() || authSession?.user.email?.trim() || null;
+    if (!email) {
+      return jsonError(400, "Please enter your email address to publish this invitation.");
+    }
+
     const templateVersion = await supabase
       .from("template_versions")
       .select("template_id, status")
@@ -105,13 +126,30 @@ export async function POST(req: Request) {
 
     const product = await supabase
       .from("templates")
-      .select("product_id, status")
+      .select("product_id, status, form_type")
       .eq("id", parsed.data.templateId)
       .eq("status", "active")
       .single();
     if (product.error || !product.data?.product_id) {
       return jsonError(400, "This template is no longer available for purchase");
     }
+
+    // The template is authoritative for which form this invitation uses. The
+    // draft may have been started before an admin re-categorised the template,
+    // so its stored form type is not trusted here.
+    const formType = formTypeOrDefault(product.data.form_type);
+    const checkoutData = normalizeWeddingData({
+      ...((draft as GuestDraft).wedding_data as Record<string, unknown>),
+      ...(parsed.data.brideName !== undefined ? { brideName: parsed.data.brideName } : {}),
+      ...(parsed.data.groomName !== undefined ? { groomName: parsed.data.groomName } : {}),
+      ...(parsed.data.celebrantName !== undefined
+        ? { celebrantName: parsed.data.celebrantName }
+        : {}),
+      ...(parsed.data.weddingDate !== undefined ? { weddingDate: parsed.data.weddingDate } : {}),
+      formType,
+    });
+    const issue = validateDetails(checkoutData, formType);
+    if (issue) return jsonError(400, issue.message);
 
     const productRow = await supabase
       .from("products")
@@ -146,11 +184,14 @@ export async function POST(req: Request) {
       wedding = await createDraftWedding({
         templateId: parsed.data.templateId,
         templateVersionId: parsed.data.templateVersionId,
-        brideName: parsed.data.brideName,
-        groomName: parsed.data.groomName,
-        weddingDate: parsed.data.weddingDate,
+        formType,
+        brideName: checkoutData.brideName || undefined,
+        groomName: checkoutData.groomName || undefined,
+        celebrantName: checkoutData.celebrantName || undefined,
+        weddingDate:
+          formType === "birthday_wishes" ? undefined : checkoutData.weddingDate || undefined,
         guestSessionId: (draft as GuestDraft).session_id,
-        email: parsed.data.email ?? null,
+        email,
         weddingData: (draft as GuestDraft).wedding_data as Record<string, unknown>,
         productId: productRow.data.id,
         userId: plannerId,

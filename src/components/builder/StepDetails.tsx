@@ -5,12 +5,16 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/shared/Button";
 import { GuestSettingsFields } from "@/components/shared/GuestSettingsFields";
 import { Icon, type IconName } from "@/components/shared/Icon";
+import { CelebrantFields } from "@/components/builder/sections/CelebrantFields";
+import { CelebrationFields } from "@/components/builder/sections/CelebrationFields";
 import { CoupleFields } from "@/components/builder/sections/CoupleFields";
+import { EventMediaFields } from "@/components/builder/sections/EventMediaFields";
 import { MediaFields } from "@/components/builder/sections/MediaFields";
 import { WeddingFields } from "@/components/builder/sections/WeddingFields";
 import type { WeddingData } from "@/lib/builder/defaults";
+import { formDefinition, formTypeOf, isBirthdayForm } from "@/lib/builder/forms";
+import { validateDetails } from "@/lib/builder/validation";
 import { useClientNow } from "@/lib/use-client-now";
-import { isPastMoment } from "@/lib/utils";
 
 interface Props {
   token: string;
@@ -63,31 +67,15 @@ function DetailsSection({ id, index, title, description, icon, children }: Secti
 export function StepDetails({ token, data, onChange, onNext }: Props) {
   const [error, setError] = useState<string | null>(null);
   const now = useClientNow();
+  const formType = formTypeOf(data);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+  const definition = formDefinition(formType);
 
   function handleNext() {
-    if (!data.brideName.trim() || !data.groomName.trim()) {
-      showError("Please enter both bride and groom names before continuing.", "couple-details");
-      return;
-    }
-    if (!data.weddingDate || !data.venue.trim()) {
-      showError("Wedding date and venue are required.", "when-and-where");
-      return;
-    }
-    if (now && isPastMoment(data.weddingDate, data.weddingTime, now)) {
-      showError(
-        "Your wedding date has already passed — please pick today or a later date and time.",
-        "when-and-where"
-      );
-      return;
-    }
-    const staleEvent = now
-      ? data.events.find((ev) => ev.date && isPastMoment(ev.date, ev.time, now))
-      : undefined;
-    if (staleEvent) {
-      showError(
-        `“${staleEvent.name || "An additional ceremony"}” has a date in the past — please update it.`,
-        "when-and-where"
-      );
+    const issue = validateDetails(data, formType, now);
+    if (issue) {
+      showError(issue.message, issue.sectionId);
       return;
     }
     setError(null);
@@ -100,48 +88,79 @@ export function StepDetails({ token, data, onChange, onNext }: Props) {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  return (
-    <section aria-labelledby="step-details-title">
-      <div className="mx-auto max-w-3xl">
-        <p className="flex items-center gap-2 font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">
-          <Icon name="edit" size="sm" /> Step 1 · Invitation details
-        </p>
-        <h1 id="step-details-title" className="mt-2 font-heading-2xl !text-on-surface">
-          Create your invitation
-        </h1>
-        <p className="mt-2 font-body text-on-surface-variant">
-          Tell us about the couple, the celebration, your guests and the mood — all in one place.
-          Only the names, date and venue are required.
-        </p>
+  interface DetailsSectionDef {
+    id: string;
+    title: string;
+    description: string;
+    icon: IconName;
+    children: ReactNode;
+  }
 
-        <div className="mt-8 flex flex-col gap-6">
-          <DetailsSection
-            id="couple-details"
-            index={1}
-            title="Couple details"
-            description="These names appear on your invitation, your link and every guest message."
-            icon="diversity_1"
-          >
-            <CoupleFields data={data} onChange={onChange} />
-          </DetailsSection>
-
-          <DetailsSection
-            id="when-and-where"
-            index={2}
-            title="When & where"
-            description="The date powers your countdown, maps and invitation expiry."
-            icon="calendar_month"
-          >
-            <WeddingFields data={data} onChange={onChange} />
-          </DetailsSection>
-
-          <DetailsSection
-            id="guest-settings"
-            index={3}
-            title="Guest settings"
-            description="Optional dress code and RSVP options. You can change these later without changing your link."
-            icon="celebration"
-          >
+  const sections: DetailsSectionDef[] = birthday
+    ? [
+        {
+          id: "celebrant-details",
+          title: "Birthday person",
+          description: wishes
+            ? "Who the wish is for, the birthday number and the message guests will read."
+            : "Who the celebration is for. This name appears on the invitation and every guest message.",
+          icon: "celebration",
+          children: <CelebrantFields data={data} onChange={onChange} formType={formType} />,
+        },
+        ...(wishes
+          ? []
+          : [
+              {
+                id: "when-and-where",
+                title: "When & where",
+                description:
+                  "The celebration date powers your countdown, maps and invitation expiry.",
+                icon: "calendar_month" as IconName,
+                children: <CelebrationFields data={data} onChange={onChange} />,
+              },
+            ]),
+        {
+          id: "photos",
+          title: "Photos",
+          description: wishes
+            ? "Optional — one main image and up to three gallery photos."
+            : "Optional — a main image and a gallery of your favourite moments (15MB max per image).",
+          icon: "image",
+          children: (
+            <EventMediaFields
+              token={token}
+              data={data}
+              onChange={onChange}
+              maxGallery={wishes ? 3 : undefined}
+            />
+          ),
+        },
+      ]
+    : [
+        {
+          id: "couple-details",
+          title: "Couple details",
+          description:
+            "These names appear on your invitation, your link and every guest message.",
+          icon: "diversity_1",
+          children: <CoupleFields data={data} onChange={onChange} />,
+        },
+        {
+          id: "when-and-where",
+          title: "When & where",
+          description: "The date powers your countdown, maps and invitation expiry.",
+          icon: "calendar_month",
+          children: (
+            <WeddingFields data={data} onChange={onChange} formType={formType} />
+          ),
+        },
+        {
+          id: "guest-settings",
+          title: "Guest settings",
+          description:
+            "Optional dress code and RSVP options. You can change these later without changing your link.",
+          icon: "celebration",
+          children: (
             <GuestSettingsFields
               dress={data.dress}
               rsvpEnabled={data.rsvpEnabled}
@@ -149,17 +168,48 @@ export function StepDetails({ token, data, onChange, onNext }: Props) {
               onChange={onChange}
               idPrefix="builder"
             />
-          </DetailsSection>
+          ),
+        },
+        {
+          id: "photos-and-music",
+          title: "Photos & music",
+          description:
+            "Add up to 15MB per image and a soundtrack (10MB max). Choose a track from our library, or upload your own.",
+          icon: "image",
+          children: <MediaFields token={token} data={data} onChange={onChange} />,
+        },
+      ];
 
-          <DetailsSection
-            id="photos-and-music"
-            index={4}
-            title="Photos & music"
-            description="Add up to 15MB per image and a soundtrack (10MB max). Choose a track from our library, or upload your own."
-            icon="image"
-          >
-            <MediaFields token={token} data={data} onChange={onChange} />
-          </DetailsSection>
+  return (
+    <section aria-labelledby="step-details-title">
+      <div className="mx-auto max-w-3xl">
+        <p className="flex items-center gap-2 font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">
+          <Icon name="edit" size="sm" /> Step 1 · Invitation details
+        </p>
+        <h1 id="step-details-title" className="mt-2 font-heading-2xl !text-on-surface">
+          {birthday ? `Create your ${definition.label.toLowerCase()} invitation` : "Create your invitation"}
+        </h1>
+        <p className="mt-2 font-body text-on-surface-variant">
+          {wishes
+            ? "Tell us who the birthday wish is for, the age being celebrated and your message. The images are optional."
+            : birthday
+              ? "Tell us who you are celebrating, when and where, and add a few photos. Only the name, date and venue are required."
+              : "Tell us about the couple, the celebration, your guests and the mood — all in one place. Only the names, date and venue are required."}
+        </p>
+
+        <div className="mt-8 flex flex-col gap-6">
+          {sections.map((section, index) => (
+            <DetailsSection
+              key={section.id}
+              id={section.id}
+              index={index + 1}
+              title={section.title}
+              description={section.description}
+              icon={section.icon}
+            >
+              {section.children}
+            </DetailsSection>
+          ))}
         </div>
 
         {error && (

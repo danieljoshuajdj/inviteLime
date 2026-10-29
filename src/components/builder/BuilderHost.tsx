@@ -70,7 +70,7 @@ export function BuilderHost({
     dataRef.current = data;
   }, [data]);
 
-  const steps = buildStepper(data);
+  const steps = buildStepper(data, data.formType);
 
   const pushToast = useCallback((kind: ToastMessage["kind"], title: string, description?: string) => {
     const id = Date.now() + Math.random();

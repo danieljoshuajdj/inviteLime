@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
+import { Modal } from "@/components/shared/Modal";
 import { MusicLibraryPicker } from "@/components/builder/MusicLibraryPicker";
-import { isLibraryMediaUrl, libraryTrackName } from "@/lib/library-media";
+import { MAX_MEDIA_BYTES, isLibraryMediaUrl, libraryTrackName } from "@/lib/library-media";
 import type { WeddingData } from "@/lib/builder/defaults";
+import { categorySlugForFormType, formTypeOf } from "@/lib/builder/forms";
 
 interface Props {
   /** Guest session token for draft uploads. Omit in the account editor. */
@@ -18,6 +20,9 @@ interface Props {
 }
 
 type SlotRole = "bridePhoto" | "groomPhoto" | "couplePhoto" | "music";
+
+/** Shown in the oversized-image notice; kept in step with the server limit. */
+const MAX_IMAGE_MB = Math.round(MAX_MEDIA_BYTES / (1024 * 1024));
 
 /** A picked file shown from a local blob URL while its upload is in flight. */
 interface PendingGalleryItem {
@@ -37,6 +42,13 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
    */
   const [previews, setPreviews] = useState<Partial<Record<SlotRole, string>>>({});
   const [pendingGallery, setPendingGallery] = useState<PendingGalleryItem[]>([]);
+  /**
+   * Oversized images are rejected before upload and listed in a dedicated
+   * dialog. They must not use the form's inline error slot, which is reserved
+   * for uploads that actually failed.
+   */
+  const [oversizedNames, setOversizedNames] = useState<string[]>([]);
+  const [showOversized, setShowOversized] = useState(false);
   /** Every blob URL we mint, so unloading mid-upload cannot leak them. */
   const objectUrls = useRef<string[]>([]);
   const nextPendingId = useRef(0);
@@ -67,10 +79,27 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     });
   }
 
+  function isOversized(file: File) {
+    return file.size > MAX_MEDIA_BYTES;
+  }
+
+  function reportOversized(files: File[]) {
+    const names = files.map((file) => file.name).filter(Boolean);
+    if (names.length === 0) return;
+    setOversizedNames((prev) => Array.from(new Set([...prev, ...names])));
+    setShowOversized(true);
+  }
+
+  function closeOversized() {
+    setShowOversized(false);
+    setOversizedNames([]);
+  }
+
   async function uploadFile(
     file: File,
     role: "bride" | "groom" | "couple" | "gallery" | "music",
-    slot: SlotRole | "gallery"
+    slot: SlotRole | "gallery",
+    replaces?: string | null
   ) {
     const fd = new FormData();
     fd.append("file", file);
@@ -79,6 +108,9 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     // The account editor uploads into an existing wedding and authenticates
     // with its cookie session; the builder sends its guest token instead.
     if (weddingId) fd.append("weddingId", weddingId);
+    // Lets the server delete the object this upload just superseded. It only
+    // removes it when no saved draft/live invitation still references it.
+    if (replaces) fd.append("replaces", replaces);
     const res = await fetch("/api/uploads", {
       method: "POST",
       headers: token ? { authorization: `Bearer ${token}` } : undefined,
@@ -98,21 +130,61 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     }
   }
 
-  async function handleSlotPick(slot: SlotRole, role: "bride" | "groom" | "couple") {
+  /**
+   * Best-effort removal of an object the editor no longer displays.
+   *
+   * The server keeps it while the saved draft/live invitation still references
+   * it, so this is safe to call before the autosave. The save endpoint retries
+   * the same cleanup once the new state is committed.
+   */
+  async function cleanupMedia(urls: Array<string | null | undefined>) {
+    const values = urls.filter((url): url is string => typeof url === "string" && url.length > 0);
+    if (values.length === 0) return;
+
+    try {
+      await fetch("/api/uploads/cleanup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          urls: values,
+          ...(weddingId ? { weddingId } : {}),
+        }),
+      });
+    } catch {
+      // Not user-facing: the next save cleans up whatever is still unused.
+    }
+  }
+
+  async function handleSlotPick(
+    slot: "bridePhoto" | "groomPhoto" | "couplePhoto",
+    role: "bride" | "groom" | "couple"
+  ) {
+    // Two uploads racing for the same slot would leave the first one with no
+    // recorded superseder, so it could never be cleaned up.
+    if (uploadingRole === slot) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/webp";
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      setError(null);
+      if (isOversized(file)) {
+        reportOversized([file]);
+        return;
+      }
+      const previous = data[slot];
       const preview = makePreview(file);
       setPreviews((prev) => ({ ...prev, [slot]: preview }));
       setUploadingRole(slot);
-      setError(null);
       try {
-        await uploadFile(file, role, slot);
+        await uploadFile(file, role, slot, previous);
       } catch (err) {
-        setError((err as Error).message);
+        if ((err as Error).message === "FILE_TOO_LARGE") reportOversized([file]);
+        else setError((err as Error).message);
       } finally {
         clearPreview(slot);
         releasePreview(preview);
@@ -125,7 +197,13 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
   async function handleGallery(files: FileList | null) {
     if (!files || files.length === 0) return;
     setError(null);
-    const picked = Array.from(files).map((file) => {
+    const all = Array.from(files);
+    const oversized = all.filter(isOversized);
+    const accepted = all.filter((file) => !isOversized(file));
+    if (oversized.length > 0) reportOversized(oversized);
+    if (accepted.length === 0) return;
+
+    const picked = accepted.map((file) => {
       const preview = makePreview(file);
       return { id: nextPendingId.current++, file, preview };
     });
@@ -144,9 +222,18 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
       })
     );
 
-    const failed = results.filter((r) => r.status === "rejected");
+    const oversizedRejections: File[] = [];
+    const failed: Error[] = [];
+    results.forEach((result, index) => {
+      if (result.status !== "rejected") return;
+      const reason = result.reason as Error;
+      if (reason.message === "FILE_TOO_LARGE") oversizedRejections.push(picked[index].file);
+      else failed.push(reason);
+    });
+
+    if (oversizedRejections.length > 0) reportOversized(oversizedRejections);
     if (failed.length === 1) {
-      setError(((failed[0] as PromiseRejectedResult).reason as Error).message);
+      setError(failed[0].message);
     } else if (failed.length > 1) {
       setError(`${failed.length} photos could not be uploaded. Please try again.`);
     }
@@ -159,10 +246,11 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      const previous = data.music?.url ?? null;
       setUploadingRole("music");
       setError(null);
       try {
-        await uploadFile(file, "music", "music");
+        await uploadFile(file, "music", "music", previous);
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -172,11 +260,22 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     input.click();
   }
 
+  function removeGalleryItem(item: WeddingData["gallery"][number]) {
+    onChange((prev) => ({ gallery: prev.gallery.filter((x) => x !== item) }));
+    void cleanupMedia([item.url]);
+  }
+
+  function removeMusic() {
+    const previous = data.music?.url ?? null;
+    onChange({ music: null });
+    void cleanupMedia([previous]);
+  }
+
   const slots = [
-    { slot: "groomPhoto" as SlotRole, role: "groom" as const, label: "Groom's photo", url: data.groomPhoto },
-    { slot: "bridePhoto" as SlotRole, role: "bride" as const, label: "Bride's photo", url: data.bridePhoto },
-    { slot: "couplePhoto" as SlotRole, role: "couple" as const, label: "Couple's photo", url: data.couplePhoto },
-  ];
+    { slot: "groomPhoto", role: "groom", label: "Groom's photo", url: data.groomPhoto },
+    { slot: "bridePhoto", role: "bride", label: "Bride's photo", url: data.bridePhoto },
+    { slot: "couplePhoto", role: "couple", label: "Couple's photo", url: data.couplePhoto },
+  ] as const;
 
   return (
     <div className="flex flex-col gap-8">
@@ -261,7 +360,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
               <GalleryThumb
                 key={`${g.url}-${i}`}
                 url={g.url}
-                onRemove={() => onChange((prev) => ({ gallery: prev.gallery.filter((x) => x !== g) }))}
+                onRemove={() => removeGalleryItem(g)}
               />
             ))}
             {/* Picked but not uploaded yet: the local preview with a spinner. */}
@@ -303,7 +402,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
           </div>
           <div className="flex items-center gap-2 sm:shrink-0">
             {data.music && (
-              <Button type="button" variant="ghost" size="sm" icon="close" onClick={() => onChange({ music: null })}>
+              <Button type="button" variant="ghost" size="sm" icon="close" onClick={removeMusic}>
                 Remove
               </Button>
             )}
@@ -323,12 +422,15 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
         {data.music && <audio controls src={data.music.url} className="mt-3 w-full" preload="none" />}
 
         <MusicLibraryPicker
+          categorySlug={categorySlugForFormType(formTypeOf(data))}
           selectedUrl={data.music && isLibraryMediaUrl(data.music.url) ? data.music.url : null}
-          onSelect={(track) =>
+          onSelect={(track) => {
+            const previous = data.music?.url ?? null;
             onChange({
               music: { role: "music", url: track.url, name: libraryTrackName(track) },
-            })
-          }
+            });
+            if (previous && !isLibraryMediaUrl(previous)) void cleanupMedia([previous]);
+          }}
         />
       </div>
 
@@ -337,6 +439,36 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
           <Icon name="error" size="sm" /> {error}
         </p>
       )}
+
+      <Modal
+        open={showOversized}
+        onClose={closeOversized}
+        title={oversizedNames.length === 1 ? "Image too large" : "Images too large"}
+        icon="warning"
+        size="sm"
+        footer={
+          <Button type="button" onClick={closeOversized}>
+            OK
+          </Button>
+        }
+      >
+        <p className="font-body-sm text-on-surface-variant">
+          {oversizedNames.length === 1
+            ? `This image is larger than ${MAX_IMAGE_MB} MB, so it was not uploaded:`
+            : `These images are larger than ${MAX_IMAGE_MB} MB, so they were not uploaded:`}
+        </p>
+        <ul className="mt-3 flex flex-col gap-1.5">
+          {oversizedNames.map((name) => (
+            <li key={name} className="flex items-start gap-2 break-all font-body-sm text-on-surface">
+              <Icon name="image" size="sm" className="mt-0.5 shrink-0 text-on-surface-variant" />
+              <span>{name}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 font-body-xs text-on-surface-variant">
+          Please choose {oversizedNames.length === 1 ? "a smaller file" : "smaller files"}.
+        </p>
+      </Modal>
     </div>
   );
 }

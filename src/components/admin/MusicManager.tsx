@@ -4,32 +4,47 @@ import { useMemo, useRef, useState } from "react";
 
 import { Badge, EmptyState } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
-import { TextInput } from "@/components/shared/Field";
-import { Toggle } from "@/components/shared/Field";
+import { MultiSelect, TextInput, Toggle } from "@/components/shared/Field";
 import { Icon } from "@/components/shared/Icon";
 import { Modal } from "@/components/shared/Modal";
 import { toast } from "@/components/account/toast";
 import { formatDate } from "@/lib/utils";
 // Imported from the client-safe module: `@/lib/services/music-library` pulls in
 // the storage client, whose `server-only` guard cannot be bundled for the browser.
-import { MAX_MUSIC_BYTES, type MusicTrack } from "@/lib/library-media";
+import {
+  MAX_MUSIC_BYTES,
+  type MusicTrack,
+  type MusicTrackCategory,
+} from "@/lib/library-media";
 
 interface Props {
   initialTracks: MusicTrack[];
+  /** Event categories a track can be offered in. */
+  categories: MusicTrackCategory[];
 }
 
-export function MusicManager({ initialTracks }: Props) {
+export function MusicManager({ initialTracks, categories }: Props) {
   const [tracks, setTracks] = useState<MusicTrack[]>(initialTracks);
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<MusicTrack | null>(null);
+  const [pendingCategories, setPendingCategories] = useState<MusicTrack | null>(null);
+  const [categoryDraft, setCategoryDraft] = useState<string[]>([]);
+  const [categorySaving, setCategorySaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const activeCount = useMemo(() => tracks.filter((t) => t.isActive).length, [tracks]);
+
+  const categoryOptions = useMemo(
+    () => categories.map((category) => ({ value: category.id, label: category.name })),
+    [categories]
+  );
 
   function chooseFile(next: File | null) {
     setFile(next);
@@ -52,14 +67,21 @@ export function MusicManager({ initialTracks }: Props) {
       setError("Give the track a title before adding it.");
       return;
     }
+    if (categoryIds.length === 0) {
+      setCategoryError("Select at least one category for this track.");
+      return;
+    }
 
     setUploading(true);
     setError(null);
+    setCategoryError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("title", title.trim());
       fd.append("artist", artist.trim());
+      // Repeated field: the API reads every selected category id.
+      for (const categoryId of categoryIds) fd.append("categoryIds", categoryId);
       // Read the duration client-side so the picker can show it without the
       // server having to decode the file.
       fd.append("durationMs", String(await readDuration(file)));
@@ -73,8 +95,14 @@ export function MusicManager({ initialTracks }: Props) {
       );
       setTitle("");
       setArtist("");
+      setCategoryIds([]);
       clearFile();
-      toast("Track added", `${json.track.title} is now available in the library`);
+      toast(
+        "Track added",
+        `${json.track.title} is now available in ${json.track.categories
+          .map((category) => category.name)
+          .join(", ")}`
+      );
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -103,6 +131,44 @@ export function MusicManager({ initialTracks }: Props) {
     }
   }
 
+  function openCategoryEditor(track: MusicTrack) {
+    setPendingCategories(track);
+    setCategoryDraft(track.categories.map((category) => category.id));
+  }
+
+  async function saveCategories() {
+    if (!pendingCategories) return;
+    if (categoryDraft.length === 0) {
+      toast("Choose a category", "A track must stay in at least one category.");
+      return;
+    }
+
+    const track = pendingCategories;
+    setCategorySaving(true);
+    try {
+      const res = await fetch(`/api/admin/music/${track.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryIds: categoryDraft }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Update failed");
+
+      const selected = categories
+        .filter((category) => categoryDraft.includes(category.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setTracks((prev) =>
+        prev.map((item) => (item.id === track.id ? { ...item, categories: selected } : item))
+      );
+      setPendingCategories(null);
+      toast("Categories updated", track.title);
+    } catch (e) {
+      toast("Update failed", (e as Error).message);
+    } finally {
+      setCategorySaving(false);
+    }
+  }
+
   async function remove(track: MusicTrack) {
     setBusyId(track.id);
     try {
@@ -128,7 +194,8 @@ export function MusicManager({ initialTracks }: Props) {
           <div>
             <h2 className="font-heading-md font-semibold !text-on-surface">Upload a track</h2>
             <p className="font-body-xs text-on-surface-variant">
-              Couples can pick any active track for their invitation, or upload their own.
+              Choose the categories this track belongs to. Guests see it only while customising an
+              invitation in one of those categories.
             </p>
           </div>
         </div>
@@ -197,12 +264,27 @@ export function MusicManager({ initialTracks }: Props) {
             />
           </div>
 
+          <MultiSelect
+            label="Categories"
+            required
+            value={categoryIds}
+            onChange={(next) => {
+              setCategoryIds(next);
+              setCategoryError(null);
+            }}
+            options={categoryOptions}
+            placeholder="Select one or more categories"
+            emptyText="No categories configured"
+            hint="A track can be offered in several categories at once."
+            error={categoryError ?? undefined}
+          />
+
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" icon="add" loading={uploading}>
               {uploading ? "Adding track" : "Add to library"}
             </Button>
             <p className="font-body-xs text-on-surface-variant">
-              The track joins the library only after you submit this form.
+              The track joins the selected categories only after you submit this form.
             </p>
           </div>
           {error && (
@@ -227,7 +309,7 @@ export function MusicManager({ initialTracks }: Props) {
           <EmptyState
             icon="music_off"
             title="No tracks yet"
-            description="Upload an audio file above and it will appear in every guest's music picker."
+            description="Upload an audio file above and it will appear in the music picker for the categories you select."
             className="mt-3 rounded-2xl border border-dashed border-outline-variant"
           />
         ) : (
@@ -252,6 +334,19 @@ export function MusicManager({ initialTracks }: Props) {
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {track.categories.length === 0 ? (
+                      <span className="font-body-xs text-error">
+                        No categories — this track is hidden from every picker
+                      </span>
+                    ) : (
+                      track.categories.map((category) => (
+                        <Badge key={category.id} tone="primary">
+                          {category.name}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
                 </div>
 
                 <audio
@@ -272,6 +367,14 @@ export function MusicManager({ initialTracks }: Props) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    icon="category"
+                    onClick={() => openCategoryEditor(track)}
+                  >
+                    Categories
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     icon="delete"
                     className="!text-error"
                     aria-label={`Delete ${track.title}`}
@@ -285,6 +388,55 @@ export function MusicManager({ initialTracks }: Props) {
           </ul>
         )}
       </div>
+
+      <Modal
+        open={!!pendingCategories}
+        onClose={() => {
+          if (!categorySaving) setPendingCategories(null);
+        }}
+        title="Track categories"
+        icon="category"
+        size="md"
+        blockBackdropClose={categorySaving}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => setPendingCategories(null)}
+              disabled={categorySaving}
+            >
+              Cancel
+            </Button>
+            <Button icon="save" loading={categorySaving} onClick={() => void saveCategories()}>
+              Save categories
+            </Button>
+          </>
+        }
+      >
+        {pendingCategories && (
+          <div className="flex flex-col gap-4">
+            <p className="font-body-sm text-on-surface-variant">
+              Choose where <strong className="!text-on-surface">{pendingCategories.title}</strong>{" "}
+              appears. Removing a category hides it there, but leaves every published invitation
+              untouched.
+            </p>
+            <MultiSelect
+              label="Categories"
+              required
+              value={categoryDraft}
+              onChange={setCategoryDraft}
+              options={categoryOptions}
+              placeholder="Select one or more categories"
+              emptyText="No categories configured"
+            />
+            {pendingCategories.categories.length === 0 && (
+              <p className="rounded-lg bg-warning/10 px-3 py-2 font-body-sm text-warning">
+                This track currently belongs to no category, so no guest can see it.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <DeleteTrackDialog
         key={pendingDelete?.id ?? "none"}

@@ -1,6 +1,7 @@
 import { MediaManager } from "@/components/admin/MediaManager";
 import { isAdminPreviewMode } from "@/lib/services/admin-preview";
 import { listMediaPacks } from "@/lib/services/media-packs";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { MediaPack } from "@/lib/library-media";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ const previewPacks: MediaPack[] = [
     id: "preview-pack-1",
     name: "Royal couple",
     description: "Warm palace tones for heritage and grand templates.",
+    formType: "wedding",
     items: [
       { id: "pp-1", role: "bride", url: "", mimeType: "image/webp", sizeBytes: 240_000, sortOrder: 1, createdAt: new Date("2026-01-10").toISOString() },
       { id: "pp-2", role: "groom", url: "", mimeType: "image/webp", sizeBytes: 252_000, sortOrder: 2, createdAt: new Date("2026-01-10").toISOString() },
@@ -26,7 +28,8 @@ const previewPacks: MediaPack[] = [
   {
     id: "preview-pack-2",
     name: "Coastal pastel",
-    description: "Airy seaside set for destination templates.",
+    description: "Airy seaside set for destination engagement templates.",
+    formType: "engagement",
     items: [
       { id: "pp-6", role: "bride", url: "", mimeType: "image/webp", sizeBytes: 220_000, sortOrder: 1, createdAt: new Date("2026-02-02").toISOString() },
       { id: "pp-7", role: "groom", url: "", mimeType: "image/webp", sizeBytes: 226_000, sortOrder: 2, createdAt: new Date("2026-02-02").toISOString() },
@@ -47,6 +50,22 @@ export default async function AdminMediaPage() {
     console.warn("[admin/media] could not load media packs:", err);
   }
 
+  let categories: { id: string; name: string; slug: string }[] = [];
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.from("categories").select("id, name, slug").order("name");
+    categories = ((data as { id: string; name: string; slug: string }[] | null) ?? []).map(
+      (category) => ({ id: category.id, name: category.name, slug: category.slug })
+    );
+  } catch (err) {
+    console.warn("[admin/media] could not load categories:", err);
+  }
+
   const preview = isAdminPreviewMode();
-  return <MediaManager initialPacks={packs.length > 0 ? packs : preview ? previewPacks : []} />;
+  return (
+    <MediaManager
+      initialPacks={packs.length > 0 ? packs : preview ? previewPacks : []}
+      categories={categories}
+    />
+  );
 }

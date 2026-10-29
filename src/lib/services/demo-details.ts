@@ -1,19 +1,23 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DemoDetailPack, DemoDetailPackEvent } from "@/lib/library-media";
+import { formDefinition, formTypeOrDefault, isBirthdayForm, type FormType } from "@/lib/builder/forms";
+import { isValidBirthdayNumber } from "@/lib/builder/validation";
 
 export type { DemoDetailPack, DemoDetailPackEvent };
 
 /**
- * Admin-curated demo details: couple names, venue, events, dress code and
- * code and RSVP contact. The template demo renders them instead of the stock
- * generic dataset; live invitations never read this table.
+ * Admin-curated demo details. A pack mirrors exactly one builder form: couple,
+ * venue, events and dress for weddings/engagements, or celebrant, date/venue,
+ * age/message for the birthday forms. The template demo renders them instead of
+ * the stock generic dataset; live invitations never read this table.
  *
  * Kept free of imports beyond the Supabase admin client so the normalisation
  * rules can be unit tested directly.
  */
 
 const PACK_COLUMNS =
-  "id, name, description, bride_name, groom_name, bride_designation, groom_designation, " +
+  "id, name, description, form_type, bride_name, groom_name, celebrant_name, " +
+  "birthday_number, special_message, bride_designation, groom_designation, " +
   "bride_bio, groom_bio, couple_bio, story, wedding_date, wedding_time, venue, address, " +
   "maps_url, latitude, longitude, " +
   "dress_bride_color, dress_bride_color_name, dress_groom_color, dress_groom_color_name, " +
@@ -26,8 +30,12 @@ interface RawPackRow {
   id: string;
   name: string;
   description: string | null;
-  bride_name: string;
-  groom_name: string;
+  form_type: FormType | string | null;
+  bride_name: string | null;
+  groom_name: string | null;
+  celebrant_name: string | null;
+  birthday_number: number | null;
+  special_message: string | null;
   bride_designation: string | null;
   groom_designation: string | null;
   bride_bio: string | null;
@@ -81,8 +89,12 @@ export interface DemoDetailPackEventInput {
 export interface DemoDetailPackInput {
   name: string;
   description: string | null;
-  brideName: string;
-  groomName: string;
+  formType: FormType;
+  brideName: string | null;
+  groomName: string | null;
+  celebrantName: string | null;
+  birthdayNumber: number | null;
+  specialMessage: string | null;
   brideDesignation: string | null;
   groomDesignation: string | null;
   brideBio: string | null;
@@ -153,6 +165,15 @@ function isoDate(raw: unknown, field: string): string | null {
   return value;
 }
 
+/** A date the builder form also treats as required (birthday celebration). */
+function requiredIsoDate(raw: unknown, field: string): string {
+  const value = isoDate(raw, field);
+  if (!value) {
+    throw new DemoDetailValidationError("INVALID_PACK", `${field} is required`);
+  }
+  return value;
+}
+
 /** The admin form uses a time picker, so packs store 24-hour "HH:MM". */
 function isoTime(raw: unknown, field: string): string | null {
   const value = typeof raw === "string" ? raw.trim() : "";
@@ -194,10 +215,33 @@ function normalizeEvent(raw: unknown, index: number): DemoDetailPackEventInput {
   };
 }
 
+/** Birthday-wishes age. Mirrors the builder's 1–150 rule. */
+function birthdayNumber(raw: unknown): number {
+  const value =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+        ? Number(raw)
+        : NaN;
+  if (!isValidBirthdayNumber(value)) {
+    throw new DemoDetailValidationError(
+      "INVALID_PACK",
+      "Birthday number must be a whole number between 1 and 150"
+    );
+  }
+  return value;
+}
+
 /** Validates and normalises an admin-supplied pack payload. */
 export function normalizeDemoDetailPackInput(raw: unknown): DemoDetailPackInput {
   const input = (raw ?? {}) as Record<string, unknown>;
-  const rawEvents = Array.isArray(input.events) ? input.events : [];
+  const formType = formTypeOrDefault(input.formType);
+  const couple = !isBirthdayForm(formType);
+  const celebration = formType === "birthday_celebration";
+  const wishes = formType === "birthday_wishes";
+  const dateLabel = formDefinition(formType).dateLabel || "Event date";
+
+  const rawEvents = couple && Array.isArray(input.events) ? input.events : [];
   if (rawEvents.length > MAX_EVENTS) {
     throw new DemoDetailValidationError("INVALID_PACK", `A pack can hold at most ${MAX_EVENTS} events`);
   }
@@ -205,30 +249,48 @@ export function normalizeDemoDetailPackInput(raw: unknown): DemoDetailPackInput 
   return {
     name: requiredText(input.name, 120, "Pack name"),
     description: text(input.description, 300),
-    brideName: requiredText(input.brideName, 120, "Bride name"),
-    groomName: requiredText(input.groomName, 120, "Groom name"),
-    brideDesignation: text(input.brideDesignation, 200),
-    groomDesignation: text(input.groomDesignation, 200),
-    brideBio: text(input.brideBio, 2000),
-    groomBio: text(input.groomBio, 2000),
-    coupleBio: text(input.coupleBio, 2000),
-    story: text(input.story, 4000),
-    weddingDate: isoDate(input.weddingDate, "Wedding date"),
-    weddingTime: isoTime(input.weddingTime, "Wedding time"),
-    venue: text(input.venue, 300),
-    address: text(input.address, 300),
-    mapsUrl: text(input.mapsUrl, 500),
-    latitude: coordinate(input.latitude, "Latitude", -90, 90),
-    longitude: coordinate(input.longitude, "Longitude", -180, 180),
-    dressBrideColor: color(input.dressBrideColor, "Bride dress colour"),
-    dressBrideColorName: text(input.dressBrideColorName, 60),
-    dressGroomColor: color(input.dressGroomColor, "Groom dress colour"),
-    dressGroomColorName: text(input.dressGroomColorName, 60),
-    rsvpDeadline: isoDate(input.rsvpDeadline, "Reply-by date"),
-    rsvpContactName: text(input.rsvpContactName, 200),
-    rsvpContactPhone: text(input.rsvpContactPhone, 40),
-    rsvpWhatsapp: text(input.rsvpWhatsapp, 500),
-    events: rawEvents.map(normalizeEvent),
+    formType,
+    // Couple forms keep the original wedding/engagement fields.
+    brideName: couple ? requiredText(input.brideName, 120, "Bride name") : null,
+    groomName: couple ? requiredText(input.groomName, 120, "Groom name") : null,
+    brideDesignation: couple ? text(input.brideDesignation, 200) : null,
+    groomDesignation: couple ? text(input.groomDesignation, 200) : null,
+    brideBio: couple ? text(input.brideBio, 2000) : null,
+    groomBio: couple ? text(input.groomBio, 2000) : null,
+    coupleBio: couple ? text(input.coupleBio, 2000) : null,
+    story: couple ? text(input.story, 4000) : null,
+    // Birthday forms use the person being celebrated.
+    celebrantName: couple
+      ? null
+      : requiredText(input.celebrantName, 120, "Birthday person's name"),
+    birthdayNumber: wishes ? birthdayNumber(input.birthdayNumber) : null,
+    specialMessage: wishes ? requiredText(input.specialMessage, 4000, "Special message") : null,
+    // Birthday Wishes has no date or place. A celebration keeps one date and
+    // venue, mirroring its builder form.
+    weddingDate: wishes
+      ? null
+      : couple
+        ? isoDate(input.weddingDate, dateLabel)
+        : requiredIsoDate(input.weddingDate, dateLabel),
+    weddingTime: wishes ? null : isoTime(input.weddingTime, `${dateLabel === "Event date" ? "Event" : dateLabel.replace(/ date$/i, "")} time`),
+    venue: wishes
+      ? null
+      : celebration
+        ? requiredText(input.venue, 300, "Venue")
+        : text(input.venue, 300),
+    address: wishes ? null : text(input.address, 300),
+    mapsUrl: wishes ? null : text(input.mapsUrl, 500),
+    latitude: couple ? coordinate(input.latitude, "Latitude", -90, 90) : null,
+    longitude: couple ? coordinate(input.longitude, "Longitude", -180, 180) : null,
+    dressBrideColor: couple ? color(input.dressBrideColor, "Bride dress colour") : null,
+    dressBrideColorName: couple ? text(input.dressBrideColorName, 60) : null,
+    dressGroomColor: couple ? color(input.dressGroomColor, "Groom dress colour") : null,
+    dressGroomColorName: couple ? text(input.dressGroomColorName, 60) : null,
+    rsvpDeadline: couple ? isoDate(input.rsvpDeadline, "Reply-by date") : null,
+    rsvpContactName: couple ? text(input.rsvpContactName, 200) : null,
+    rsvpContactPhone: couple ? text(input.rsvpContactPhone, 40) : null,
+    rsvpWhatsapp: couple ? text(input.rsvpWhatsapp, 500) : null,
+    events: couple ? rawEvents.map(normalizeEvent) : [],
   };
 }
 
@@ -255,8 +317,12 @@ function mapPack(
     id: row.id,
     name: row.name,
     description: row.description,
+    formType: formTypeOrDefault(row.form_type),
     brideName: row.bride_name,
     groomName: row.groom_name,
+    celebrantName: row.celebrant_name,
+    birthdayNumber: row.birthday_number,
+    specialMessage: row.special_message,
     brideDesignation: row.bride_designation,
     groomDesignation: row.groom_designation,
     brideBio: row.bride_bio,
@@ -285,12 +351,25 @@ function mapPack(
   };
 }
 
-function packRow(input: DemoDetailPackInput): Omit<RawPackRow, "id" | "created_at" | "updated_at"> {
+/**
+ * The writable shape of a pack row. `form_type` is non-null on insert/update
+ * (the column defaults to `wedding` for legacy rows), which is narrower than
+ * the read shape where old databases may still report null.
+ */
+type PackWriteRow = Omit<RawPackRow, "id" | "created_at" | "updated_at" | "form_type"> & {
+  form_type: FormType;
+};
+
+function packRow(input: DemoDetailPackInput): PackWriteRow {
   return {
     name: input.name,
     description: input.description,
+    form_type: input.formType,
     bride_name: input.brideName,
     groom_name: input.groomName,
+    celebrant_name: input.celebrantName,
+    birthday_number: input.birthdayNumber,
+    special_message: input.specialMessage,
     bride_designation: input.brideDesignation,
     groom_designation: input.groomDesignation,
     bride_bio: input.brideBio,
@@ -425,15 +504,26 @@ export async function createDemoDetailPack(raw: unknown): Promise<DemoDetailPack
 }
 
 export async function updateDemoDetailPack(id: string, raw: unknown): Promise<DemoDetailPack> {
-  const input = normalizeDemoDetailPackInput(raw);
   const admin = createAdminClient();
 
   const { data: existing } = await admin
     .from("demo_detail_packs")
-    .select("id")
+    .select("id, form_type")
     .eq("id", id)
     .maybeSingle();
   if (!existing) throw new Error("Demo details pack not found");
+
+  // The category of a pack cannot change. A client that omits `formType`
+  // (older API callers) must update the pack in its existing form rather than
+  // silently converting it to a wedding pack.
+  const payload =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  if (payload.formType === undefined || payload.formType === null || payload.formType === "") {
+    payload.formType = existing.form_type ?? "wedding";
+  }
+  const input = normalizeDemoDetailPackInput(payload);
 
   const { error } = await admin.from("demo_detail_packs").update(packRow(input)).eq("id", id);
   if (error) throw new Error(error.message);

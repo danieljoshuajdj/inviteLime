@@ -102,6 +102,23 @@ describe("weddingDraftSchema", () => {
     ).toBe(true);
   });
 
+  it("keeps birthday fields through autosave", () => {
+    const parsed = weddingDraftSchema.safeParse({
+      formType: "birthday_wishes",
+      celebrantName: "Ananya",
+      birthdayNumber: 21,
+      specialMessage: "Happy birthday!",
+      mainPhoto: "/media/main.jpg",
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.formType).toBe("birthday_wishes");
+    expect(parsed.data.celebrantName).toBe("Ananya");
+    expect(parsed.data.birthdayNumber).toBe(21);
+    expect(parsed.data.specialMessage).toBe("Happy birthday!");
+    expect(parsed.data.mainPhoto).toBe("/media/main.jpg");
+  });
+
   it("still bounds lengths and collection sizes", () => {
     expect(weddingDraftSchema.safeParse({ brideName: "M".repeat(121) }).success).toBe(false);
     expect(

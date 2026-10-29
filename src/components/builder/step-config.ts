@@ -1,4 +1,6 @@
 import type { WeddingData } from "@/lib/builder/defaults";
+import { formTypeOf, type FormType } from "@/lib/builder/forms";
+import { detailsComplete as detailsAreComplete } from "@/lib/builder/validation";
 
 export interface StepDef {
   id: string;
@@ -12,11 +14,11 @@ export interface StepDef {
   complete: boolean;
 }
 
-export function buildStepper(data: WeddingData): StepDef[] {
+export function buildStepper(data: WeddingData, formType: FormType = formTypeOf(data)): StepDef[] {
   return [
     // Couple, schedule, guest options and media share one form step. Only the
     // required details gate its tick — guest settings and media are optional.
-    { id: "details", label: "Invitation details", complete: detailsComplete(data) },
+    { id: "details", label: "Invitation details", complete: detailsComplete(data, formType) },
     // Preview and Publish have no required content — arriving on them is the
     // completion signal, so only the caller's "advanced past it" check gates them.
     { id: "preview", label: "Preview", complete: true },
@@ -24,8 +26,8 @@ export function buildStepper(data: WeddingData): StepDef[] {
   ];
 }
 
-export function detailsComplete(data: WeddingData): boolean {
-  return coupleComplete(data) && weddingComplete(data);
+export function detailsComplete(data: WeddingData, formType: FormType = formTypeOf(data)): boolean {
+  return detailsAreComplete(data, formType);
 }
 
 export function coupleComplete(data: WeddingData): boolean {
@@ -38,6 +40,11 @@ export function weddingComplete(data: WeddingData): boolean {
 
 export function mediaComplete(data: WeddingData): boolean {
   return Boolean(
-    data.gallery.length || data.bridePhoto || data.groomPhoto || data.couplePhoto || data.music
+    data.mainPhoto ||
+      data.gallery.length ||
+      data.bridePhoto ||
+      data.groomPhoto ||
+      data.couplePhoto ||
+      data.music
   );
 }

@@ -57,6 +57,7 @@ export function withPackMedia(data: WeddingData, media: PackDemoMedia): WeddingD
     bridePhoto: media.photos.bride ?? data.bridePhoto ?? null,
     groomPhoto: media.photos.groom ?? data.groomPhoto ?? null,
     couplePhoto: media.photos.couple ?? data.couplePhoto ?? null,
+    mainPhoto: media.photos.couple ?? data.mainPhoto ?? null,
     gallery:
       media.gallery.length > 0
         ? media.gallery.map((item) => ({ role: "gallery" as const, url: item.url }))
@@ -69,12 +70,18 @@ export function withPackMedia(data: WeddingData, media: PackDemoMedia): WeddingD
  * every template preview already understands. Photos and music are layered on
  * separately, from the packs assigned to the same template.
  *
- * Live invitations never call this: they always use the customer's own data.
+ * Couple packs fill the wedding fields; birthday packs fill the celebrant,
+ * date/venue or age/message fields instead. Live invitations never call this:
+ * they always use the customer's own data.
  */
 export function demoDetailsToWeddingData(pack: DemoDetailPack): WeddingData {
   return defaultWeddingData({
-    brideName: pack.brideName,
-    groomName: pack.groomName,
+    formType: pack.formType,
+    celebrantName: pack.celebrantName ?? "",
+    birthdayNumber: pack.birthdayNumber,
+    specialMessage: pack.specialMessage ?? "",
+    brideName: pack.brideName ?? "",
+    groomName: pack.groomName ?? "",
     brideBio: pack.brideBio ?? "",
     groomBio: pack.groomBio ?? "",
     coupleBio: pack.coupleBio ?? "",
@@ -173,6 +180,10 @@ export function weddingDataToRuntimeInput(
   return {
     id: input.id,
     slug: input.slug,
+    formType: data.formType,
+    celebrantName: data.celebrantName.trim() || null,
+    birthdayNumber: data.birthdayNumber,
+    specialMessage: data.specialMessage.trim() || null,
     brideName: data.brideName,
     groomName: data.groomName,
     brideBio: data.brideBio,
@@ -203,6 +214,7 @@ export function weddingDataToRuntimeInput(
       bride: data.bridePhoto ?? null,
       groom: data.groomPhoto ?? null,
       couple: data.couplePhoto ?? null,
+      main: data.mainPhoto ?? null,
     },
     music: data.music ? { url: data.music.url, name: data.music.name } : null,
   };

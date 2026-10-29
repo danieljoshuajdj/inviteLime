@@ -107,6 +107,7 @@ export function mediaKeysInWeddingData(rawData: unknown): string[] {
   take(data.bridePhoto);
   take(data.groomPhoto);
   take(data.couplePhoto);
+  take(data.mainPhoto);
   if (Array.isArray(data.gallery)) {
     for (const item of data.gallery) {
       if (item && typeof item === "object") take((item as Record<string, unknown>).url);

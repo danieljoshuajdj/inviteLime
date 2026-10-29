@@ -121,8 +121,12 @@ const detailPack: DemoDetailPack = {
   id: "pack-1",
   name: "Royal Tamil wedding",
   description: null,
+  formType: "wedding",
   brideName: "Karthika M.",
   groomName: "Jeya Chandran S.",
+  celebrantName: null,
+  birthdayNumber: null,
+  specialMessage: null,
   brideDesignation: "Daughter of Mr. Mariappan",
   groomDesignation: null,
   brideBio: "Bride bio",
@@ -202,6 +206,47 @@ describe("demoDetailsToWeddingData", () => {
     expect(data.coupleBio).toBe("");
     expect(data.story).toBe("");
   });
+
+  it("maps birthday packs to celebrant, date/venue or age/message", () => {
+    const celebration = demoDetailsToWeddingData({
+      ...detailPack,
+      formType: "birthday_celebration",
+      brideName: null,
+      groomName: null,
+      celebrantName: "Ananya",
+      weddingDate: "2027-03-20",
+      venue: "Bayview Terrace",
+      events: [],
+    });
+
+    expect(celebration.formType).toBe("birthday_celebration");
+    expect(celebration.celebrantName).toBe("Ananya");
+    expect(celebration.weddingDate).toBe("2027-03-20");
+    expect(celebration.venue).toBe("Bayview Terrace");
+    expect(celebration.brideName).toBe("");
+    expect(celebration.events).toEqual([]);
+
+    const wishes = demoDetailsToWeddingData({
+      ...detailPack,
+      formType: "birthday_wishes",
+      brideName: null,
+      groomName: null,
+      celebrantName: "Meera",
+      birthdayNumber: 30,
+      specialMessage: "Have a wonderful year.",
+      weddingDate: null,
+      weddingTime: null,
+      venue: null,
+      address: null,
+      events: [],
+    });
+
+    expect(wishes.formType).toBe("birthday_wishes");
+    expect(wishes.celebrantName).toBe("Meera");
+    expect(wishes.birthdayNumber).toBe(30);
+    expect(wishes.specialMessage).toBe("Have a wonderful year.");
+    expect(wishes.groomName).toBe("");
+  });
 });
 
 describe("demoDetailsToRuntimeExtras", () => {
@@ -240,6 +285,7 @@ describe("withDemoMusic", () => {
       sizeBytes: 1024,
       durationMs: 1000,
       isActive: true,
+      categories: [],
       createdAt: "2026-01-01T00:00:00.000Z",
     });
 

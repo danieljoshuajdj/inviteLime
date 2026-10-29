@@ -106,6 +106,7 @@ export async function POST(req: Request) {
         templateSlug: source.templateSlug,
         token: parsed.data.token,
         appUrl,
+        formType: source.formType,
         planner,
       },
       previewData

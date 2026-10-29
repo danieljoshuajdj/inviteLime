@@ -1,4 +1,5 @@
 import type { Supabase } from "./helpers";
+import { formTypeOrDefault, isBirthdayForm } from "@/lib/builder/forms";
 
 /**
  * Read model for the admin "Invitations" tab.
@@ -37,6 +38,8 @@ export interface InvitationRow {
   couple: string;
   brideName: string | null;
   groomName: string | null;
+  celebrantName: string | null;
+  formType: string;
   email: string | null;
   status: InvitationStatus;
   templateName: string | null;
@@ -121,8 +124,10 @@ export function toQueryString(f: InvitationFilters): string {
 interface RawWeddingRow {
   id: string;
   slug: string | null;
+  form_type: string | null;
   bride_name: string | null;
   groom_name: string | null;
+  celebrant_name: string | null;
   email: string | null;
   status: InvitationStatus;
   created_at: string;
@@ -156,13 +161,19 @@ function mapRow(row: RawWeddingRow): InvitationRow {
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 
   const couple = [row.groom_name, row.bride_name].filter(Boolean).join(" & ");
+  const formType = formTypeOrDefault(row.form_type);
+  const displayName = isBirthdayForm(formType)
+    ? row.celebrant_name?.trim() || "Birthday Star"
+    : couple;
 
   return {
     id: row.id,
     slug: row.slug,
-    couple: couple || "—",
+    couple: displayName || "—",
     brideName: row.bride_name,
     groomName: row.groom_name,
+    celebrantName: row.celebrant_name,
+    formType,
     email: row.email,
     status: row.status,
     templateName: template?.name ?? null,
@@ -183,7 +194,7 @@ function mapRow(row: RawWeddingRow): InvitationRow {
 }
 
 const SELECT = `
-  id, slug, bride_name, groom_name, email, status, created_at, published_at, expiration_date,
+  id, slug, form_type, bride_name, groom_name, celebrant_name, email, status, created_at, published_at, expiration_date,
   template: templates(name, slug),
   wedding_media(count),
   rsvp_responses(count),
@@ -214,7 +225,7 @@ export async function listInvitations(
     // searchable columns, not this pattern.
     const like = `%${escapeLikeTerm(filters.q.toLowerCase())}%`;
     query = query.or(
-      `email.ilike.${like},slug.ilike.${like},bride_name.ilike.${like},groom_name.ilike.${like}`
+      `email.ilike.${like},slug.ilike.${like},bride_name.ilike.${like},groom_name.ilike.${like},celebrant_name.ilike.${like}`
     );
   }
 

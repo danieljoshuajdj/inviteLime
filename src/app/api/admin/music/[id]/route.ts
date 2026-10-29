@@ -4,7 +4,12 @@ import { createServerClient } from "@/lib/supabase/server";
 import { adminApiError, logAdminAction } from "@/lib/services/admin";
 import { jsonError, readBody, requireAdmin } from "@/lib/services/helpers";
 import { UUID_RE } from "@/lib/services/media-access";
-import { deleteMusicTrack, setMusicTrackActive } from "@/lib/services/music-library";
+import {
+  MusicValidationError,
+  deleteMusicTrack,
+  setMusicTrackActive,
+  setMusicTrackCategories,
+} from "@/lib/services/music-library";
 import { consumeRateLimit } from "@/lib/services/ops";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +18,17 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-const patchSchema = z.object({
-  isActive: z.boolean(),
-});
+const patchSchema = z
+  .object({
+    isActive: z.boolean().optional(),
+    /** Replaces the track's category assignments. At least one is required. */
+    categoryIds: z.array(z.string().uuid()).min(1, "Select at least one category").optional(),
+  })
+  .refine((value) => value.isActive !== undefined || value.categoryIds !== undefined, {
+    message: "Nothing to update",
+  });
 
-/** Shows or hides a track without deleting it. */
+/** Shows/hides a track and/or changes the categories it is offered in. */
 export async function PATCH(req: Request, { params }: RouteContext) {
   const supabase = await createServerClient();
   try {
@@ -28,12 +39,24 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const parsed = patchSchema.safeParse(await readBody(req));
     if (!parsed.success) return jsonError(400, "Invalid request", parsed.error.flatten());
 
-    await setMusicTrackActive(id, parsed.data.isActive);
+    if (parsed.data.isActive !== undefined) {
+      await setMusicTrackActive(id, parsed.data.isActive);
+    }
+    if (parsed.data.categoryIds !== undefined) {
+      await setMusicTrackCategories(id, parsed.data.categoryIds);
+    }
+
     await logAdminAction(admin.user.id, "music.update", "music_track", id, {
-      isActive: parsed.data.isActive,
+      ...(parsed.data.isActive !== undefined ? { isActive: parsed.data.isActive } : {}),
+      ...(parsed.data.categoryIds !== undefined
+        ? { categoryIds: parsed.data.categoryIds }
+        : {}),
     });
     return Response.json({ ok: true });
   } catch (e) {
+    if (e instanceof MusicValidationError) return jsonError(400, e.message, { code: e.code });
+    const message = e instanceof Error ? e.message : "Update failed";
+    if (message === "Track not found") return jsonError(404, message);
     return adminApiError(e);
   }
 }

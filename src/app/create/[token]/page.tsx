@@ -18,6 +18,7 @@ interface BuilderTemplateRow {
   id: string;
   name: string;
   slug: string;
+  form_type: string;
   product_id: string | null;
   product:
     | {
@@ -64,7 +65,7 @@ export default async function BuilderPage({ params }: PageProps) {
   const { data: templateRaw } = await supabase
     .from("templates")
     .select(
-      "id, name, slug, product_id, product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active))"
+      "id, name, slug, form_type, product_id, product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active))"
     )
     .eq("id", templateId)
     .single();
@@ -91,11 +92,14 @@ export default async function BuilderPage({ params }: PageProps) {
   }
 
   const storedWeddingData = liveWedding?.wedding_data ?? draft.wedding_data;
-  const weddingData = normalizeWeddingData(
-    liveWedding
-      ? { ...(storedWeddingData as Record<string, unknown>), rsvpEnabled: liveWedding.rsvp_toggle }
-      : storedWeddingData
-  );
+  // The template's category is authoritative for the form. A draft resumed
+  // after an admin re-categorised the template must open the current form, not
+  // whatever value happened to be saved in its JSON blob.
+  const weddingData = normalizeWeddingData({
+    ...((storedWeddingData ?? {}) as Record<string, unknown>),
+    ...(liveWedding ? { rsvpEnabled: liveWedding.rsvp_toggle } : {}),
+    formType: template.form_type,
+  });
   const product = Array.isArray(template.product) ? template.product[0] ?? null : template.product;
 
   // The price shown here is the same server-resolved quote the checkout will

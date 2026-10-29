@@ -3745,3 +3745,192 @@ Current behaviour after the latest UI pass:
 Verified after this pass: typecheck clean, focused ESLint clean, build
 passes, and 62 test files / 662 tests pass.
 
+# 107. MEDIA LIFECYCLE AND ORPHAN CLEANUP
+
+Implemented so replacing or removing wedding media removes the superseded
+Backblaze B2 object instead of leaving it orphaned forever. The same
+reference-aware rules cover builder autosaves, the account editor, the
+upload endpoint and admin media-pack replacement.
+
+## Safety rule
+
+An object is deleted only when no current state still points at it. The
+checks, in order, are:
+
+1. `weddings.wedding_data` for every wedding whose folder contains a
+   candidate key (plus the explicitly scoped wedding).
+2. every non-expired `guest_drafts` row for a session that owns a
+   candidate (a published invitation's builder tab can still hold the
+   same URLs), plus the exact draft being saved.
+3. `wedding_media` rows for the scoped wedding.
+
+Shared `library/` objects are always excluded — they belong to the
+platform, not to one invitation. External URLs and malformed keys are
+ignored. Query failures are fail-safe: nothing is deleted when the
+database cannot answer, and the returned `failures` list lets a later
+save retry. Object-delete failures also leave the recorded row in place
+so the next attempt can find it again.
+
+## Authority
+
+`src/lib/services/media-upload-scope.ts` is shared by both media
+endpoints:
+
+- `POST /api/uploads` writes the object,
+- `POST /api/uploads/cleanup` removes a superseded one.
+
+A request is authorized as a guest (opaque token from the cookie or a
+non-JWT bearer value) or as a logged-in owner. A wedding-folder key is
+allowed only for that wedding; a draft-folder key is allowed only when
+`guestFolderMatches` derives it from the caller's token. Uploading or
+cleaning another session's or another wedding's media is refused before
+any reference query runs. The cleanup endpoint is rate-limited
+(`media_cleanup`, 300/hour).
+
+## Cleanup service
+
+`src/lib/services/media-cleanup.ts` exposes:
+
+- `normalizeMediaCleanupKeys(values)` — accepts `/api/media/...` URLs
+  (absolute or relative) and plain `folder/role/file` keys, drops
+  `library/`, external and malformed values, de-duplicates, and caps a
+  single call at `MAX_MEDIA_CLEANUP_KEYS` (200).
+- `isMediaCleanupAllowed(key, { weddingId, guestToken })` — the
+  folder/role authorization rule above.
+- `deleteUnreferencedMediaKeys(values, request)` — normalizes, loads
+  references, deletes unreferenced objects, and then deletes the
+  matching stale `wedding_media` rows.
+
+Options: `weddingId`, `guestSessionId`, `draftId`,
+`includeStaleWeddingMedia`. The last one is used by save paths to sweep
+recorded rows an editor replaced or abandoned before saving. A
+draft-folder key is kept when no session is available to verify it,
+because without the session the only draft that could reference it
+cannot be found.
+
+### Grace window
+
+`STALE_WEDDING_MEDIA_GRACE_MS` (24 hours) protects uploads in flight.
+`saveWeddingMedia` writes the `wedding_media` row as soon as a file
+lands, while the editor persists the new URL on its next autosave. A
+save that was already in flight carries the previous image, so sweeping
+the new row immediately could delete the object the editor is about to
+save. Swept rows younger than the window are kept; a later save cleans
+them. Keys the caller names explicitly — a portrait replacement, a
+gallery/music removal — skip the grace window, because the caller has
+already declared them unwanted.
+
+Only data-backed roles are swept: `bride`, `groom`, `couple`,
+`gallery`, `music`. `wedding_media` rows for `video` are preserved
+until the data model has a video field to reconcile against.
+
+## Wiring
+
+- `POST /api/uploads` accepts an optional `replaces` field. After the
+  new object is stored, it offers the old key and any
+  `replacedPaths` returned by `saveWeddingMedia` (for single-file roles
+  with an existing wedding) to the cleanup service. The replaced key's
+  role must match the upload role and must not equal the new path.
+  `saveWeddingMedia` no longer deletes the superseded row before the
+  object is gone: it returns the previous keys and removes only a
+  same-key duplicate (the stable filename was overwritten in place).
+  Cleanup deletes the object first and its row second, so a B2 failure
+  leaves the row for a later sweep to retry.
+- `POST /api/uploads/cleanup` is the client-facing removal endpoint
+  used by `MediaFields` for gallery-item removal, soundtrack removal
+  and replacing a library track. It returns
+  `{ deleted, kept, failures }`.
+- `POST /api/guest/draft` reads the previous draft before saving and
+  passes the keys that disappeared from it, plus replaced keys from the
+  live invitation's `previousData` when the session has already
+  published, to the cleanup service. Cleanup runs after the save
+  commits and never turns a successful save into an error.
+- `PATCH /api/weddings/[id]` (account editor) cleans media referenced
+  only by the previous `wedding_data` and sweeps stale rows for the
+  wedding. It selects `guest_session_id` with the row so a linked
+  builder draft is checked too.
+- `syncActiveWeddingFromDraft` now returns `previousData`, the live
+  data before the mirror, so the autosave route can identify replaced
+  live media.
+- `src/lib/services/media-packs.ts`: admin single-photo replacement
+  deletes the old object(s) first and only then their rows. If B2
+  refuses, the rows survive and a later replacement retries, rather
+  than leaving an unreachable orphan behind.
+- `MediaFields` sends `replaces` on portrait/music upload, calls the
+  cleanup endpoint when an item is removed, and ignores a second pick
+  for a slot whose upload is still running (two racing uploads would
+  leave the first with no recorded superseder).
+
+## Verification
+
+- `src/lib/services/media-cleanup.test.ts` covers key normalization,
+  folder authorization, live/expired drafts, draftId-only session
+  discovery, stale-row sweep, the grace window, explicit removals,
+  other-wedding rows, non-data-backed roles, query failures and storage
+  failures.
+- Route tests for guest draft and wedding PATCH assert the cleanup
+  calls and payloads.
+- Suite after this pass: `npm run typecheck` clean, `npm test` — 63
+  files / 682 tests pass, `npm run build` passes, focused ESLint clean
+  on the changed files. Repo-wide `npm run lint` still reports five
+  pre-existing errors in untouched files (`favorites/page.tsx`,
+  `admin/categories/page.tsx`, and the
+  `PaymentConfirmationModal.tsx` effect rule).
+
+## Remaining maintenance note
+
+Existing orphans created before this change are not removed
+retroactively. The earlier live audit found two stale groom objects in
+B2 and duplicate guest drafts; the cleanup above handles them when the
+owning wedding/draft is saved or deleted. A future maintenance-cron
+sweep could enumerate guest-draft folders and aged `wedding_media` rows
+without waiting for a save.
+
+# 108. BUILDER UPLOAD NOTICE, TIMELINE ORDER AND GUEST EMAIL
+
+Four publish-flow fixes shipped together.
+
+## Oversized images
+
+`src/components/builder/sections/MediaFields.tsx` checks every picked
+portrait and gallery image against `MAX_MEDIA_BYTES` (15 MB, imported
+from the client-safe `src/lib/library-media.ts`) before starting the
+upload. Rejected files are collected by name and shown in a shared
+`Modal` with the limit and an OK button. A `FILE_TOO_LARGE` response
+from the server is folded into the same notice, so image-size failures
+never appear in the form's inline error slot. That slot remains for
+real upload/network failures and for the audio upload, whose limit is
+unchanged.
+
+## Save-the-dates order
+
+`sample-template/index.html` now sorts the wedding plus additional
+ceremonies by `date` + `time` in `fromRuntime` before rendering. The
+number in each circle is still the array index, so the numbering now
+matches the real timeline no matter what order the builder stored the
+ceremonies in. Missing times sort to the start of their date; entries
+without a usable ISO date keep their relative order after the dated
+ones. The template package version is bumped to `1.3.0` because its
+behavior changed.
+
+## Guest publish email
+
+`StepReview` marks the email field required for non-planner drafts and
+blocks both checkout and the dev publish shortcut until a syntactically
+valid address is present. The server is authoritative:
+`POST /api/orders` trims and validates the address, then requires one
+for a caller without a signed-in session. A signed-in owner may leave
+the field empty because the route falls back to
+`authSession.user.email`. Planner drafts still run the existing
+session-owner check before anything else. Tests in
+`src/app/api/orders/route.test.ts` cover a guest without an email, a
+guest-supplied email and the signed-in account fallback.
+
+## Verification
+
+- `npm run typecheck` clean.
+- `npm test` — 63 files / 686 tests pass.
+- `npm run build` passes.
+- Focused ESLint reports only the three pre-existing `<img>` warnings
+  in `MediaFields.tsx`.
+

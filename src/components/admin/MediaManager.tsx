@@ -2,13 +2,20 @@
 
 import { useRef, useState } from "react";
 
-import { EmptyState } from "@/components/shared/Badge";
+import { Badge, EmptyState } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { TextInput, Textarea } from "@/components/shared/Field";
 import { Icon } from "@/components/shared/Icon";
 import { Modal } from "@/components/shared/Modal";
 import { toast } from "@/components/account/toast";
 import { cn } from "@/lib/utils";
+import {
+  EVENT_CATEGORIES,
+  FORM_TYPES,
+  formDefinition,
+  formTypeFromCategorySlug,
+  type FormType,
+} from "@/lib/builder/forms";
 // Client-safe module: the service pulls in the storage client, whose
 // `server-only` guard cannot be bundled for the browser.
 import {
@@ -19,13 +26,60 @@ import {
   type MediaPackRole,
 } from "@/lib/library-media";
 
+interface CategoryOption {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface CategoryForm {
+  category: CategoryOption;
+  formType: FormType;
+}
+
 interface Props {
   initialPacks: MediaPack[];
+  /** Event categories, used to build the new-pack category picker. */
+  categories: CategoryOption[];
 }
 
 const SINGLE_ROLES: readonly MediaPackRole[] = ["groom", "bride", "couple"];
+const BIRTHDAY_ROLES: readonly MediaPackRole[] = ["couple"];
 
 const MAX_PHOTO_LABEL = `${Math.floor(MAX_MEDIA_BYTES / (1024 * 1024))}MB`;
+
+/** Birthday forms have one main image, not separate bride and groom portraits. */
+function roleSlots(formType: FormType): readonly MediaPackRole[] {
+  return formType === "wedding" || formType === "engagement" ? SINGLE_ROLES : BIRTHDAY_ROLES;
+}
+
+function roleLabel(role: MediaPackRole, formType: FormType): string {
+  if (formType !== "wedding" && formType !== "engagement" && role === "couple") {
+    return "Main photo";
+  }
+  return MEDIA_PACK_ROLE_LABELS[role];
+}
+
+/**
+ * The four categories that own a builder form, in form order. Falls back to
+ * the built-in taxonomy when the database has no categories (preview/older DB).
+ */
+function categoryForms(categories: CategoryOption[]): CategoryForm[] {
+  const fromDb = categories
+    .map((category) => ({ category, formType: formTypeFromCategorySlug(category.slug) }))
+    .filter((entry): entry is CategoryForm => entry.formType !== null);
+
+  if (fromDb.length > 0) {
+    return fromDb.sort(
+      (a, b) => FORM_TYPES.indexOf(a.formType) - FORM_TYPES.indexOf(b.formType)
+    );
+  }
+
+  return EVENT_CATEGORIES.map((category) => ({
+    category: { id: category.slug, name: category.name, slug: category.slug },
+    formType: category.type,
+  }));
+}
 
 /**
  * Media packs: shared sample photos (groom, bride, couple, gallery) that
@@ -34,10 +88,12 @@ const MAX_PHOTO_LABEL = `${Math.floor(MAX_MEDIA_BYTES / (1024 * 1024))}MB`;
  * A pack is uploaded once here and assigned to any number of templates in the
  * template wizard, so the same pictures are never bundled into each ZIP.
  */
-export function MediaManager({ initialPacks }: Props) {
+export function MediaManager({ initialPacks, categories }: Props) {
   const [packs, setPacks] = useState<MediaPack[]>(initialPacks);
 
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createFormType, setCreateFormType] = useState<FormType>("wedding");
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
@@ -56,10 +112,18 @@ export function MediaManager({ initialPacks }: Props) {
   const [uploadTarget, setUploadTarget] = useState<{ packId: string; role: MediaPackRole } | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const forms = categoryForms(categories);
+  const createDefinition = formDefinition(createFormType);
 
-  function openCreate() {
+  function openPicker() {
+    setPickerOpen(true);
+  }
+
+  function chooseCreateCategory(formType: FormType) {
+    setCreateFormType(formType);
     setCreateName("");
     setCreateDescription("");
+    setPickerOpen(false);
     setCreateOpen(true);
   }
 
@@ -70,7 +134,11 @@ export function MediaManager({ initialPacks }: Props) {
       const res = await fetch("/api/admin/media-packs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: createName.trim(), description: createDescription.trim() || null }),
+        body: JSON.stringify({
+          name: createName.trim(),
+          description: createDescription.trim() || null,
+          formType: createFormType,
+        }),
       });
       const json = (await res.json()) as { pack?: MediaPack; error?: string };
       if (!res.ok || !json.pack) throw new Error(json.error ?? "Create failed");
@@ -215,22 +283,23 @@ export function MediaManager({ initialPacks }: Props) {
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">Library</p>
           <h1 className="mt-1 font-heading-2xl !text-on-surface">Media</h1>
         </div>
-        <Button icon="add" onClick={openCreate}>New media pack</Button>
+        <Button icon="add" onClick={openPicker}>New media pack</Button>
       </div>
 
       <p className="mt-4 max-w-2xl font-body-sm text-on-surface-variant">
         Packs of sample photos — groom, bride, couple and a gallery — that template demos
-        render while people preview them. Assign a pack to a template while uploading it:
-        the same pictures are then reused by every demo, so they are uploaded once instead
-        of being bundled into each template ZIP. Live invitations always show the couple&apos;s
-        own photos.
+        render while people preview them. Each pack belongs to one event category, and the
+        template wizard only offers packs from the template&apos;s own category. Assign a pack
+        while uploading a template: the same pictures are then reused by every demo, so they
+        are uploaded once instead of being bundled into each template ZIP. Live invitations
+        always show the couple&apos;s or celebrant&apos;s own photos.
       </p>
 
       {packs.length === 0 ? (
         <EmptyState
           icon="image"
           title="No media packs yet"
-          description="Create a pack, upload groom, bride, couple and gallery photos, then assign it to any template while uploading its package."
+          description="Choose a category, create a pack, upload its photos, then assign it to templates of that category while uploading their package."
           className="mt-6 rounded-2xl border border-dashed border-outline-variant"
         />
       ) : (
@@ -245,6 +314,7 @@ export function MediaManager({ initialPacks }: Props) {
             const gallery = pack.items
               .filter((i) => i.role === "gallery")
               .sort((a, b) => a.sortOrder - b.sortOrder);
+            const singleRoles = roleSlots(pack.formType);
 
             return (
               <div key={pack.id} className="rounded-2xl border border-outline-variant bg-surface p-5">
@@ -255,6 +325,7 @@ export function MediaManager({ initialPacks }: Props) {
                         <Icon name="image" size="md" weight="w400" />
                       </span>
                       {pack.name}
+                      <Badge tone="primary">{formDefinition(pack.formType).label}</Badge>
                     </p>
                     <p className="mt-1 font-body-xs text-on-surface-variant">
                       {pack.items.length} photo{pack.items.length === 1 ? "" : "s"} ·{" "}
@@ -273,19 +344,20 @@ export function MediaManager({ initialPacks }: Props) {
                 </div>
 
                 <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                  {SINGLE_ROLES.map((role) => {
+                  {singleRoles.map((role) => {
                     const item = singlePhoto(role);
                     const busy = uploadingKey === `${pack.id}:${role}`;
+                    const label = roleLabel(role, pack.formType);
                     return (
                       <div key={role} className="rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
                         <p className="font-body-xs font-semibold uppercase tracking-[0.1em] text-on-surface-variant">
-                          {MEDIA_PACK_ROLE_LABELS[role]}
+                          {label}
                         </p>
                         <div className="relative mt-2 aspect-[3/4] overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
-                          <PhotoFrame url={item?.url ?? null} alt={`${pack.name} — ${MEDIA_PACK_ROLE_LABELS[role]}`} />
+                          <PhotoFrame url={item?.url ?? null} alt={`${pack.name} — ${label}`} />
                           {item && (
                             <RemoveButton
-                              label={`Remove ${MEDIA_PACK_ROLE_LABELS[role].toLowerCase()}`}
+                              label={`Remove ${label.toLowerCase()}`}
                               onClick={() => setRemovingItem({ pack, item })}
                             />
                           )}
@@ -371,13 +443,56 @@ export function MediaManager({ initialPacks }: Props) {
         }}
       />
 
+      {/* New pack: the category decides which templates can use it. */}
+      <Modal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title="Choose a category"
+        icon="category"
+        size="md"
+      >
+        <p className="font-body-sm text-on-surface-variant">
+          The category decides which templates can use this photo pack. Templates only offer
+          packs from their own category.
+        </p>
+        <div className="mt-4 grid gap-2">
+          {forms.map(({ category, formType }) => (
+            <button
+              key={formType}
+              type="button"
+              onClick={() => chooseCreateCategory(formType)}
+              className="flex items-center gap-3 rounded-xl border border-outline-variant p-4 text-left transition-colors hover:bg-surface-container"
+            >
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-secondary/10 text-secondary">
+                <Icon name="image" size="md" weight="w400" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-body-sm font-semibold !text-on-surface">
+                  {category.name}
+                </span>
+                <span className="mt-0.5 block font-body-xs text-on-surface-variant">
+                  Sample photos for {category.name.toLowerCase()} demo templates.
+                </span>
+              </span>
+              <Icon name="chevron_right" size="sm" className="flex-shrink-0 text-on-surface-variant" />
+            </button>
+          ))}
+        </div>
+      </Modal>
+
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="New media pack"
+        title={`New ${createDefinition.label.toLowerCase()} media pack`}
         icon="image"
       >
         <form onSubmit={createPack} className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="primary">{createDefinition.label}</Badge>
+            <span className="font-body-xs text-on-surface-variant">
+              This pack will only be offered to {createDefinition.label.toLowerCase()} templates.
+            </span>
+          </div>
           <TextInput
             label="Name"
             required
@@ -389,7 +504,7 @@ export function MediaManager({ initialPacks }: Props) {
             label="Description (optional)"
             rows={2}
             value={createDescription}
-            placeholder="What kind of wedding this set suits..."
+            placeholder="Which templates this photo set suits..."
             onChange={(e) => setCreateDescription(e.target.value)}
           />
           <Button type="submit" loading={createBusy} fullWidth>Create pack</Button>
@@ -404,6 +519,12 @@ export function MediaManager({ initialPacks }: Props) {
       >
         {editing && (
           <form onSubmit={saveEdit} className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="primary">{formDefinition(editing.formType).label}</Badge>
+              <span className="font-body-xs text-on-surface-variant">
+                The category of an existing pack cannot change.
+              </span>
+            </div>
             <TextInput
               label="Name"
               required
@@ -480,7 +601,7 @@ export function MediaManager({ initialPacks }: Props) {
         {removingItem && (
           <div className="flex flex-col gap-3">
             <p className="font-body-md text-on-surface">
-              Remove this {MEDIA_PACK_ROLE_LABELS[removingItem.item.role].toLowerCase()} from{" "}
+              Remove this {roleLabel(removingItem.item.role, removingItem.pack.formType).toLowerCase()} from{" "}
               <span className="font-semibold">“{removingItem.pack.name}”</span>?
             </p>
             <p className="font-body-sm text-on-surface-variant">

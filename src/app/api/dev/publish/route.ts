@@ -9,6 +9,9 @@ import { finalizePaidWedding } from "@/lib/services/finalize-purchase";
 import { isPaymentBypassEnabled } from "@/lib/services/dev-bypass";
 import { jsonError, readBody } from "@/lib/services/helpers";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
+import { normalizeWeddingData } from "@/lib/builder/defaults";
+import { formTypeOrDefault } from "@/lib/builder/forms";
+import { validateDetails } from "@/lib/builder/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -63,11 +66,24 @@ export async function POST(req: Request) {
     if (!draft) return jsonError(404, "Draft not found for this session");
 
     const data = (draft.wedding_data ?? {}) as Record<string, unknown>;
-    const brideName = typeof data.brideName === "string" ? data.brideName.trim() : "";
-    const groomName = typeof data.groomName === "string" ? data.groomName.trim() : "";
-    const weddingDate = typeof data.weddingDate === "string" ? data.weddingDate.trim() : "";
-    if (!brideName || !groomName || !weddingDate) {
-      return jsonError(400, "Draft is incomplete. Add both names and the wedding date first.");
+
+    const { data: templateRow } = await supabase
+      .from("templates")
+      .select("product_id, form_type, product:products(price_paise, currency)")
+      .eq("id", draft.template_id)
+      .single();
+    const product = templateRow as unknown as {
+      product_id: string | null;
+      form_type: string | null;
+      product: { price_paise: number; currency: string } | null;
+    } | null;
+    if (!product?.product_id) return jsonError(400, "This template is not configured for publishing");
+
+    const formType = formTypeOrDefault(product.form_type);
+    const weddingData = normalizeWeddingData({ ...data, formType });
+    const issue = validateDetails(weddingData, formType);
+    if (issue) {
+      return jsonError(400, `Draft is incomplete. ${issue.message}`);
     }
 
     // Reuse a draft wedding this session already created (e.g. the developer
@@ -87,16 +103,6 @@ export async function POST(req: Request) {
     let pricePaise = 0;
     let currency = "INR";
 
-    const { data: templateRow } = await supabase
-      .from("templates")
-      .select("product_id, product:products(price_paise, currency)")
-      .eq("id", draft.template_id)
-      .single();
-    const product = templateRow as unknown as {
-      product_id: string | null;
-      product: { price_paise: number; currency: string } | null;
-    } | null;
-    if (!product?.product_id) return jsonError(400, "This template is not configured for publishing");
     const prod = Array.isArray(product.product) ? product.product[0] : product.product;
     pricePaise = prod?.price_paise ?? 0;
     currency = prod?.currency ?? "INR";
@@ -107,9 +113,12 @@ export async function POST(req: Request) {
       const created = await createDraftWedding({
         templateId: draft.template_id,
         templateVersionId: draft.template_version_id,
-        brideName,
-        groomName,
-        weddingDate,
+        formType,
+        brideName: weddingData.brideName || undefined,
+        groomName: weddingData.groomName || undefined,
+        celebrantName: weddingData.celebrantName || undefined,
+        weddingDate:
+          formType === "birthday_wishes" ? undefined : weddingData.weddingDate || undefined,
         guestSessionId: draft.session_id,
         email: draft.email,
         weddingData: data,

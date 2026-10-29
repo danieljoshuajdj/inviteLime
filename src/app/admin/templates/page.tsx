@@ -20,13 +20,14 @@ const mockTemplates = [
     slug: "royal-mughal-palace",
     description: "Ornate maroon and gold palace theme with jhalar borders.",
     status: "active" as const,
+    formType: "wedding",
     thumbnailUrl: null,
     product: { id: "p1", name: "Single Invitation", pricePaise: 149900, currency: "INR", active: true },
     currentVersion: "1.4.0",
     versionCount: 4,
     activeInvitations: 3,
     totalInvitations: 5,
-    categories: ["Wedding", "Grand"],
+    categories: ["Wedding"],
     mediaPackId: "preview-pack-1",
     mediaPackName: "Royal couple",
     demoDetailPackId: "preview-details-1",
@@ -40,13 +41,14 @@ const mockTemplates = [
     slug: "coastal-villa-sunset",
     description: "Airy pastel layout for destination weddings by the sea.",
     status: "active" as const,
+    formType: "engagement",
     thumbnailUrl: null,
     product: { id: "p1", name: "Single Invitation", pricePaise: 149900, currency: "INR", active: true },
     currentVersion: "2.1.0",
     versionCount: 2,
     activeInvitations: 1,
     totalInvitations: 2,
-    categories: ["Villa destination"],
+    categories: ["Engagement"],
     mediaPackId: null,
     mediaPackName: null,
     demoDetailPackId: null,
@@ -60,6 +62,7 @@ const mockTemplates = [
     slug: "minimal-vows",
     description: "Type-led single page for modern, low-key ceremonies.",
     status: "draft" as const,
+    formType: "wedding",
     thumbnailUrl: null,
     product: null,
     currentVersion: null,
@@ -82,6 +85,7 @@ const mockMediaPacks: MediaPack[] = [
     id: "preview-pack-1",
     name: "Royal couple",
     description: "Warm palace tones for heritage and grand templates.",
+    formType: "wedding",
     items: [
       { id: "pp-1", role: "bride", url: "", mimeType: "image/webp", sizeBytes: 240_000, sortOrder: 1, createdAt: "2026-01-10T00:00:00.000Z" },
       { id: "pp-2", role: "groom", url: "", mimeType: "image/webp", sizeBytes: 252_000, sortOrder: 2, createdAt: "2026-01-10T00:00:00.000Z" },
@@ -95,7 +99,8 @@ const mockMediaPacks: MediaPack[] = [
   {
     id: "preview-pack-2",
     name: "Coastal pastel",
-    description: "Airy seaside set for destination templates.",
+    description: "Airy seaside set for destination engagement templates.",
+    formType: "engagement",
     items: [],
     templateCount: 0,
     createdAt: "2026-02-02T00:00:00.000Z",
@@ -114,6 +119,10 @@ const mockMusicTracks: MusicTrack[] = [
     sizeBytes: 2_400_000,
     durationMs: 90_000,
     isActive: true,
+    categories: [
+      { id: "d1", name: "Wedding", slug: "wedding" },
+      { id: "d2", name: "Engagement", slug: "engagement" },
+    ],
     createdAt: "2026-01-05T00:00:00.000Z",
   },
   {
@@ -125,6 +134,7 @@ const mockMusicTracks: MusicTrack[] = [
     sizeBytes: 2_100_000,
     durationMs: 84_000,
     isActive: true,
+    categories: [{ id: "d2", name: "Engagement", slug: "engagement" }],
     createdAt: "2026-01-06T00:00:00.000Z",
   },
 ];
@@ -134,8 +144,12 @@ const mockDetailPacks: DemoDetailPack[] = [
     id: "preview-details-1",
     name: "Royal Tamil wedding",
     description: "Traditional palace celebration with warm gold and rose tones.",
+    formType: "wedding",
     brideName: "Karthika M.",
     groomName: "Jeya Chandran S.",
+    celebrantName: null,
+    birthdayNumber: null,
+    specialMessage: null,
     brideDesignation: "M.Sc. — Product designer",
     groomDesignation: "M.Tech — Software engineer",
     brideBio: null,
@@ -191,8 +205,9 @@ const mockDetailPacks: DemoDetailPack[] = [
 // result must render as empty, never as invented data.
 const mockCategories = [
   { id: "d1", name: "Wedding", slug: "wedding" },
-  { id: "d2", name: "Villa destination", slug: "villa-destination" },
-  { id: "d3", name: "Grand", slug: "grand" },
+  { id: "d2", name: "Engagement", slug: "engagement" },
+  { id: "d3", name: "Birthday Celebration", slug: "birthday-celebration" },
+  { id: "d4", name: "Birthday Wishes", slug: "birthday-wishes" },
 ];
 
 const mockTags = [
@@ -207,7 +222,7 @@ export default async function AdminTemplatesPage() {
 
   const [templatesRes, categoriesRes, productsRes, tagsRes, weddingsRes, mediaPacks, detailPacks, musicTracks] = await Promise.all([
     admin.from("templates").select(
-      `id, name, slug, description, status, thumbnail_path,
+      `id, name, slug, description, status, form_type, thumbnail_path,
        product_id, product:product_id(id, name, price_paise, currency, active),
        media_pack_id, media_pack:media_pack_id(id, name),
        demo_detail_pack_id, demo_detail_pack:demo_detail_pack_id(id, name),
@@ -248,7 +263,7 @@ export default async function AdminTemplatesPage() {
 
   const mapped = ((templatesRes.data as Array<{
     id: string; name: string; slug: string; description: string | null;
-    status: "active" | "disabled" | "draft"; thumbnail_path: string | null;
+    status: "active" | "disabled" | "draft"; form_type: string; thumbnail_path: string | null;
     product: { id: string; name: string; price_paise: number; currency: string; active: boolean } | null;
     media_pack_id: string | null;
     media_pack: { id: string; name: string } | null;
@@ -266,6 +281,7 @@ export default async function AdminTemplatesPage() {
     slug: t.slug,
     description: t.description ?? null,
     status: t.status,
+    formType: t.form_type,
     thumbnailUrl: t.thumbnail_path ? storagePublicUrl("templates", t.thumbnail_path) : null,
     product: t.product
       ? {

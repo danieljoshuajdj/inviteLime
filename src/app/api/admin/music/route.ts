@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       title,
       artist,
       durationMs,
+      categoryIds: form.getAll("categoryIds"),
       randomSuffix: randomUUID().replace(/-/g, "").slice(0, 12),
     });
 

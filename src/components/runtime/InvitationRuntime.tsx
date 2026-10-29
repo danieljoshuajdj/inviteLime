@@ -9,6 +9,7 @@ import { normalizeWhatsappNumber, whatsappChatUrl } from "@/lib/phone";
 import { buildRsvpWhatsappText } from "@/lib/runtime/rsvp-bridge";
 import type { PublicWeddingRecord } from "@/lib/services/weddings";
 import type { WeddingData } from "@/lib/builder/defaults";
+import { firstName, formDefinition, formTypeOf, isBirthdayForm, ordinal } from "@/lib/builder/forms";
 
 interface PlannerBrand {
   brandName: string;
@@ -43,6 +44,18 @@ export function invitationNav(
   rsvpEnabled = weddingData.rsvpEnabled
 ): InvitationNavItem[] {
   const hasGallery = (weddingData.gallery ?? []).length > 0;
+  const formType = formTypeOf(weddingData);
+  if (isBirthdayForm(formType)) {
+    // A birthday has no couple story or ceremonies. The celebration still has
+    // a date and venue, while a wish has only its message and images.
+    return [
+      { id: "home", label: "Home", icon: "home" },
+      ...(formType === "birthday_celebration"
+        ? [{ id: "events", label: "Details", icon: "calendar_month" } satisfies InvitationNavItem]
+        : []),
+      ...(hasGallery ? [{ id: "gallery", label: "Gallery", icon: "image" } satisfies InvitationNavItem] : []),
+    ];
+  }
   return [
     { id: "home", label: "Home", icon: "home" },
     { id: "story", label: "Our Story", icon: "auto_awesome" },
@@ -73,13 +86,29 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
   const nav = invitationNav(weddingData, wedding.rsvp_toggle);
   const gallery = weddingData.gallery ?? [];
   const hasGallery = nav.some((item) => item.id === "gallery");
+  const formType = formTypeOf(weddingData);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+  const definition = formDefinition(formType);
+  const celebrantName = (wedding.celebrant_name ?? weddingData.celebrantName ?? "").trim();
+  const groomName = wedding.groom_name ?? weddingData.groomName ?? "";
+  const brideName = wedding.bride_name ?? weddingData.brideName ?? "";
+  const displayName = birthday
+    ? celebrantName || "Birthday Star"
+    : groomName && brideName
+      ? `${firstName(groomName)} & ${firstName(brideName)}`
+      : firstName(groomName) || firstName(brideName) || "Our Invitation";
+  const heroImg = birthday
+    ? weddingData.mainPhoto ?? weddingData.couplePhoto ?? gallery[0]?.url ?? null
+    : weddingData.couplePhoto ?? gallery[0]?.url ?? null;
+  const rsvpEnabled = !birthday && wedding.rsvp_toggle;
 
   if (!opened) {
     return (
       <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-ivory-950 text-center text-ivory-50">
         <BgDeco />
-        {weddingData.couplePhoto && (
-          <img src={weddingData.couplePhoto} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+        {heroImg && (
+          <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
         )}
         <div className="relative z-10 flex flex-col items-center gap-6 px-6">
           {planner && (
@@ -87,10 +116,15 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
               Presented by <span className="font-semibold text-gold-300">{planner.brandName}</span>
             </p>
           )}
-          <p className="font-body-xs uppercase tracking-[0.5em] text-gold-300">You&apos;re invited</p>
-          <h1 className="max-w-3xl font-heading-3xl !text-ivory-50">
-            {wedding.groom_name} <span className="text-gold-300">&amp;</span> {wedding.bride_name}
-          </h1>
+          <p className="font-body-xs uppercase tracking-[0.5em] text-gold-300">
+            {birthday ? definition.invitationLabel : "You're invited"}
+          </p>
+          <h1 className="max-w-3xl font-heading-3xl !text-ivory-50">{displayName}</h1>
+          {wishes && typeof weddingData.birthdayNumber === "number" && (
+            <p className="font-heading-lg text-gold-200">
+              {ordinal(weddingData.birthdayNumber)} Birthday
+            </p>
+          )}
           <button
             type="button"
             onClick={openInvitation}
@@ -100,7 +134,7 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
             <Icon name="play_circle" size="xl" weight="w600" />
           </button>
           {weddingData.music && <audio ref={audioRef} src={weddingData.music.url} loop preload="none" />}
-          <p className="font-body-sm text-ivory-300">Tap to open with music ✨</p>
+          <p className="font-body-sm text-ivory-300">Tap to open ✨</p>
         </div>
       </div>
     );
@@ -116,9 +150,7 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
               <Icon name="spa" size="md" weight="w500" />
             </span>
             <span className="flex flex-col">
-              <span className="font-heading-md !text-ivory-950">
-                {wedding.groom_name.split(" ")[0]} &amp; {wedding.bride_name.split(" ")[0]}
-              </span>
+              <span className="font-heading-md !text-ivory-950">{displayName}</span>
               {planner && (
                 <span className="text-[10px] uppercase tracking-[0.14em] text-navy-500">
                   Presented by {planner.brandName}
@@ -141,7 +173,7 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
               </button>
             ))}
           </div>
-          {wedding.rsvp_toggle && (
+          {rsvpEnabled && (
             <button
               type="button"
               onClick={() => setSection("rsvp")}
@@ -181,13 +213,15 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
             weddingData={weddingData}
             visits={visits}
             onNav={setSection}
-            rsvpEnabled={wedding.rsvp_toggle}
+            rsvpEnabled={rsvpEnabled}
           />
         )}
-        {section === "story" && <StorySection weddingData={weddingData} />}
-        {section === "events" && <EventsSection weddingData={weddingData} />}
-        {section === "gallery" && hasGallery && <GallerySection gallery={gallery} />}
-        {section === "rsvp" && wedding.rsvp_toggle && (
+        {section === "story" && !birthday && <StorySection weddingData={weddingData} />}
+        {section === "events" && !wishes && <EventsSection weddingData={weddingData} />}
+        {section === "gallery" && hasGallery && (
+          <GallerySection gallery={gallery} birthday={birthday} />
+        )}
+        {section === "rsvp" && rsvpEnabled && (
           <RsvpSection
             weddingId={wedding.id}
             rsvpToggle={wedding.rsvp_toggle}
@@ -198,10 +232,11 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
       </main>
 
       <footer className="border-t border-navy-200 bg-ivory-950 pb-8 pt-8 text-center text-ivory-300">
-        <p className="font-heading-lg text-ivory-50">
-          {wedding.groom_name.split(" ")[0]} &amp; {wedding.bride_name.split(" ")[0]}
+        <p className="font-heading-lg text-ivory-50">{displayName}</p>
+        <p className="mt-2 font-body-xs">
+          Crafted with Invite Lime
+          {wedding.wedding_date ? ` · ${formatDateLong(wedding.wedding_date)}` : ""}
         </p>
-        <p className="mt-2 font-body-xs">Crafted with Invite Lime · {formatDateLong(wedding.wedding_date)}</p>
 
         {planner && (
           <div className="mx-auto mt-6 max-w-2xl border-t border-white/10 px-4 pt-6">
@@ -238,7 +273,64 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
 
 function HomeSection({ wedding, weddingData, visits, onNav, rsvpEnabled }: { wedding: PublicWeddingRecord; weddingData: WeddingData; visits: number; onNav: (s: Section) => void; rsvpEnabled: boolean }) {
   const gallery = weddingData.gallery ?? [];
-  const heroImg = weddingData.couplePhoto ?? gallery[0]?.url ?? null;
+  const formType = formTypeOf(weddingData);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+  const definition = formDefinition(formType);
+  const celebrantName = (wedding.celebrant_name ?? weddingData.celebrantName ?? "").trim();
+  const groomName = wedding.groom_name ?? weddingData.groomName ?? "";
+  const brideName = wedding.bride_name ?? weddingData.brideName ?? "";
+  const heroImg = birthday
+    ? weddingData.mainPhoto ?? weddingData.couplePhoto ?? gallery[0]?.url ?? null
+    : weddingData.couplePhoto ?? gallery[0]?.url ?? null;
+
+  if (birthday) {
+    return (
+      <section>
+        <div className="relative flex min-h-[70dvh] items-center justify-center overflow-hidden bg-ivory-950 text-ivory-50">
+          {heroImg ? <img src={heroImg} alt="" className="absolute inset-0 h-full w-full object-cover opacity-50" /> : <BgDeco />}
+          <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center">
+            <p className="font-body-xs uppercase tracking-[0.5em] text-gold-300">
+              {definition.invitationLabel}
+            </p>
+            <h1 className="max-w-3xl font-heading-3xl !text-ivory-50">
+              {celebrantName || "Birthday Star"}
+            </h1>
+            {wishes && typeof weddingData.birthdayNumber === "number" && (
+              <p className="font-heading-lg text-gold-200">
+                {ordinal(weddingData.birthdayNumber)} Birthday
+              </p>
+            )}
+            {!wishes && wedding.wedding_date && (
+              <p className="font-heading-lg text-gold-200">{formatDateLong(wedding.wedding_date)}</p>
+            )}
+            {!wishes && wedding.venue && <p className="font-body text-ivory-300">{wedding.venue}</p>}
+            {!wishes && wedding.wedding_date && <Countdown target={wedding.wedding_date} />}
+          </div>
+        </div>
+
+        {wishes && weddingData.specialMessage.trim() && (
+          <div className="mx-auto max-w-3xl px-4 py-12 text-center sm:px-6">
+            <p className="font-body-xs uppercase tracking-[0.4em] text-sapphire-600">A wish for you</p>
+            <p className="mt-5 whitespace-pre-line font-body-lg leading-relaxed text-navy-800">
+              {weddingData.specialMessage}
+            </p>
+          </div>
+        )}
+
+        {(gallery.length > 0 || !wishes) && (
+          <div className={cn("mx-auto grid max-w-6xl gap-4 px-4 py-10 sm:px-6", gallery.length > 0 && !wishes ? "sm:grid-cols-2" : "sm:grid-cols-1")}>
+            {!wishes && (
+              <QuickCard icon="calendar_month" title="Celebration details" onClick={() => onNav("events")} />
+            )}
+            {gallery.length > 0 && (
+              <QuickCard icon="image" title="See the photos" onClick={() => onNav("gallery")} />
+            )}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section>
@@ -248,11 +340,13 @@ function HomeSection({ wedding, weddingData, visits, onNav, rsvpEnabled }: { wed
         <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center">
           <p className="font-body-xs uppercase tracking-[0.5em] text-gold-300">Save the date</p>
           <h1 className="max-w-3xl font-heading-3xl !text-ivory-50">
-            {wedding.groom_name} &amp; {wedding.bride_name}
+            {groomName} &amp; {brideName}
           </h1>
-          <p className="font-heading-lg text-gold-200">{formatDateLong(wedding.wedding_date)}</p>
+          {wedding.wedding_date && (
+            <p className="font-heading-lg text-gold-200">{formatDateLong(wedding.wedding_date)}</p>
+          )}
           {wedding.venue && <p className="font-body text-ivory-300">{wedding.venue}</p>}
-          <Countdown target={wedding.wedding_date} />
+          {wedding.wedding_date && <Countdown target={wedding.wedding_date} />}
         </div>
       </div>
 
@@ -318,8 +412,9 @@ function PersonPhoto({ name, bio, opposite = false }: { name: string; bio: strin
 
 function EventsSection({ weddingData }: { weddingData: WeddingData }) {
   const events = weddingData.events ?? [];
+  const birthday = isBirthdayForm(formTypeOf(weddingData));
   const main = {
-    name: "The Wedding",
+    name: birthday ? "Birthday Celebration" : "The Wedding",
     date: weddingData.weddingDate,
     time: weddingData.weddingTime ?? null,
     venue: weddingData.venue,
@@ -330,8 +425,12 @@ function EventsSection({ weddingData }: { weddingData: WeddingData }) {
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
-      <p className="text-center font-body-xs uppercase tracking-[0.4em] text-sapphire-600">Events</p>
-      <h2 className="mt-3 text-center font-heading-2xl !text-ivory-950">Ceremonies & celebrations</h2>
+      <p className="text-center font-body-xs uppercase tracking-[0.4em] text-sapphire-600">
+        {birthday ? "Celebration" : "Events"}
+      </p>
+      <h2 className="mt-3 text-center font-heading-2xl !text-ivory-950">
+        {birthday ? "Date, time & place" : "Ceremonies & celebrations"}
+      </h2>
       <div className="mt-10 relative border-l-2 border-dashed border-sapphire-300 pl-8">
         {all.map((ev, i) =>
           !ev ? null : (
@@ -370,11 +469,13 @@ function EventsSection({ weddingData }: { weddingData: WeddingData }) {
   );
 }
 
-function GallerySection({ gallery }: { gallery: NonNullable<WeddingData["gallery"]> }) {
+function GallerySection({ gallery, birthday = false }: { gallery: NonNullable<WeddingData["gallery"]>; birthday?: boolean }) {
   return (
     <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <p className="text-center font-body-xs uppercase tracking-[0.4em] text-sapphire-600">Gallery</p>
-      <h2 className="mt-3 text-center font-heading-2xl !text-ivory-950">Moments together</h2>
+      <h2 className="mt-3 text-center font-heading-2xl !text-ivory-950">
+        {birthday ? "Birthday moments" : "Moments together"}
+      </h2>
       <div className="mt-10 columns-2 gap-3 sm:columns-3 [&>div]:mb-3">
         {gallery.map((g, i) => (
           <div key={`${g.url}-${i}`} className="overflow-hidden rounded-2xl border border-navy-200">
@@ -638,13 +739,15 @@ function BgDeco() {
   );
 }
 
-function formatDateLong(date: string): string {
+function formatDateLong(date: string | null | undefined): string {
+  if (!date) return "";
   const d = new Date(`${date}T00:00:00`);
   if (isNaN(d.getTime())) return date;
   return d.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
-function formatDateShort(date: string): string {
+function formatDateShort(date: string | null | undefined): string {
+  if (!date) return "—";
   const d = new Date(`${date}T00:00:00`);
   if (isNaN(d.getTime())) return date;
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });

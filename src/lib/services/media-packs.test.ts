@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { mediaPackMatchesForm } from "@/lib/library-media";
+
 import {
   MAX_MEDIA_PACK_BYTES,
   MediaPackValidationError,
   buildPackDemoMedia,
   normalizePackDescription,
+  normalizePackFormType,
   normalizePackName,
   normalizePackRole,
   sniffImageMime,
@@ -232,6 +235,35 @@ describe("normalizePackName / normalizePackDescription", () => {
     expect(normalizePackDescription("   ")).toBeNull();
     expect(normalizePackDescription("Pastel palette")).toBe("Pastel palette");
     expect(normalizePackDescription(undefined)).toBeNull();
+  });
+});
+
+describe("normalizePackFormType", () => {
+  it("accepts the four event forms, trimming whitespace", () => {
+    expect(normalizePackFormType("wedding")).toBe("wedding");
+    expect(normalizePackFormType(" engagement ")).toBe("engagement");
+    expect(normalizePackFormType("birthday_celebration")).toBe("birthday_celebration");
+    expect(normalizePackFormType("birthday_wishes")).toBe("birthday_wishes");
+  });
+
+  it("rejects an unknown or missing category", () => {
+    try {
+      normalizePackFormType("anniversary");
+      throw new Error("expected rejection");
+    } catch (e) {
+      expect((e as MediaPackValidationError).code).toBe("INVALID_FORM");
+    }
+    expect(() => normalizePackFormType(undefined)).toThrow(MediaPackValidationError);
+  });
+});
+
+describe("mediaPackMatchesForm", () => {
+  it("matches only the pack's own form", () => {
+    expect(mediaPackMatchesForm({ formType: "wedding" }, "wedding")).toBe(true);
+    expect(mediaPackMatchesForm({ formType: "wedding" }, "engagement")).toBe(false);
+    expect(mediaPackMatchesForm({ formType: "birthday_wishes" }, "birthday_wishes")).toBe(true);
+    expect(mediaPackMatchesForm({ formType: "wedding" }, null)).toBe(false);
+    expect(mediaPackMatchesForm({ formType: "wedding" }, undefined)).toBe(false);
   });
 });
 

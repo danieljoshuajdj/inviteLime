@@ -70,6 +70,9 @@ const URL_SLOTS: ReadonlyArray<{ key: string; role: MediaRole }> = [
   { key: "bridePhoto", role: "bride" },
   { key: "groomPhoto", role: "groom" },
   { key: "couplePhoto", role: "couple" },
+  // Birthday main image; reuses the existing `couple` media role so no schema
+  // or storage-policy change is needed.
+  { key: "mainPhoto", role: "couple" },
 ];
 
 /**

@@ -30,6 +30,13 @@ const PATH_ALIASES = new Map<string, string>([
   ["couple.groom.photo", "wedding.photos.groom"],
   ["couple.couplePhoto", "wedding.photos.couple"],
   ["couple.story", "wedding.story"],
+  ["celebrant.name", "wedding.celebrantName"],
+  ["celebrant.photo", "wedding.photos.main"],
+  ["birthday.person.name", "wedding.celebrantName"],
+  ["birthday.number", "wedding.birthdayNumber"],
+  ["birthday.ordinal", "wedding.birthdayOrdinal"],
+  ["birthday.message", "wedding.specialMessage"],
+  ["birthday.mainPhoto", "wedding.photos.main"],
 ]);
 
 /** URL prefixes a template may be handed. Everything else is dropped. */
@@ -121,6 +128,13 @@ function inviteLimeBindingRuntime(): void {
     ["couple.groom.photo", "wedding.photos.groom"],
     ["couple.couplePhoto", "wedding.photos.couple"],
     ["couple.story", "wedding.story"],
+    ["celebrant.name", "wedding.celebrantName"],
+    ["celebrant.photo", "wedding.photos.main"],
+    ["birthday.person.name", "wedding.celebrantName"],
+    ["birthday.number", "wedding.birthdayNumber"],
+    ["birthday.ordinal", "wedding.birthdayOrdinal"],
+    ["birthday.message", "wedding.specialMessage"],
+    ["birthday.mainPhoto", "wedding.photos.main"],
   ]);
   const SAFE_URL = /^(?:https?:|mailto:|tel:|\/|#)/i;
   const HAS_SCHEME = /^[a-z][a-z0-9+.\-]*:/i;

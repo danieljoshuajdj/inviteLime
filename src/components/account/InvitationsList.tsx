@@ -8,13 +8,17 @@ import { Icon } from "@/components/shared/Icon";
 import { Badge } from "@/components/shared/Badge";
 import { DeleteInvitationButton } from "@/components/account/DeleteInvitationButton";
 import { toast } from "@/components/account/toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
+import { formTypeOrDefault, isBirthdayForm, ordinal } from "@/lib/builder/forms";
 
 export interface InvitationItem {
   id: string;
   slug: string;
   bride: string;
   groom: string;
+  celebrant?: string;
+  birthdayNumber?: number | null;
+  formType?: string | null;
   date: string;
   venue: string;
   status: "draft" | "active" | "expired" | "cancelled";
@@ -59,7 +63,7 @@ export function InvitationsList({
         <Icon name="auto_awesome" size="xl" className="mx-auto text-on-surface-variant" weight="w200" />
         <h2 className="mt-4 font-heading-md font-semibold !text-on-surface">No invitations yet</h2>
         <p className="mt-1 font-body-sm text-on-surface-variant">
-          Weddings you publish from your account will show up here with live guest stats.
+          Invitations you publish from your account will show up here with live guest stats.
         </p>
         <Link href="/create/browse" className="mt-5 inline-flex items-center gap-2">
           <Button icon="add_circle">Create your first invitation</Button>
@@ -71,7 +75,17 @@ export function InvitationsList({
   return (
     <div className="flex flex-col gap-4">
       {visibleItems.map((item) => {
-        const couple = `${item.groom || "—"} & ${item.bride || "—"}`;
+        const formType = formTypeOrDefault(item.formType);
+        const birthday = isBirthdayForm(formType);
+        const couple = birthday
+          ? item.celebrant?.trim() || "Birthday Star"
+          : `${item.groom || "—"} & ${item.bride || "—"}`;
+        const dateLine =
+          birthday && typeof item.birthdayNumber === "number"
+            ? `${ordinal(item.birthdayNumber)} Birthday`
+            : item.date
+              ? formatDate(item.date)
+              : "date TBD";
         return (
           <div key={item.id} className="rounded-2xl border border-outline-variant bg-surface p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -82,7 +96,7 @@ export function InvitationsList({
                 <div>
                   <h2 className="font-heading-md font-semibold !text-on-surface">{couple}</h2>
                   <p className="font-body-xs text-on-surface-variant">
-                    {item.templateName} · {item.date ? formatDate(item.date) : "date TBD"}
+                    {item.templateName} · {dateLine}
                   </p>
                 </div>
               </div>
@@ -109,9 +123,9 @@ export function InvitationsList({
             )}
 
             {/* Live stats */}
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+            <div className={cn("mt-4 grid grid-cols-1 gap-2 sm:gap-3", birthday ? "sm:grid-cols-2" : "sm:grid-cols-3")}>
               <StatCard label="Invitation views" value={item.views} icon="visibility" />
-              <StatCard label="Confirmations" value={item.attending} icon="celebration" />
+              {!birthday && <StatCard label="Confirmations" value={item.attending} icon="celebration" />}
               <StatCard label="Status" value={item.status === "active" && item.url ? "Live" : "Not live"} icon="public" />
             </div>
 

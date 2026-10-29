@@ -62,6 +62,13 @@ export const dressCodeSchema = z
   .optional();
 
 export const weddingDataSchema = z.object({
+  formType: z
+    .enum(["wedding", "engagement", "birthday_celebration", "birthday_wishes"])
+    .optional(),
+  celebrantName: z.string().trim().max(120).optional().default(""),
+  birthdayNumber: z.number().int().min(1).max(150).nullable().optional(),
+  specialMessage: z.string().trim().max(4000).optional().default(""),
+  mainPhoto: z.string().trim().max(2000).optional().nullable(),
   brideName: z.string().trim().min(1, "Bride name is required").max(120),
   groomName: z.string().trim().min(1, "Groom name is required").max(120),
   brideBio: z.string().trim().max(2000).optional().default(""),

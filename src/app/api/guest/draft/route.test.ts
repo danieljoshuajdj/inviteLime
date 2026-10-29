@@ -20,17 +20,40 @@ const saveGuestDraft = vi.fn<
   wedding_data: {},
 }));
 
+const getGuestDraft = vi.fn(async () => null as Record<string, unknown> | null);
+
 const syncActiveWeddingFromDraft = vi.fn<
-  (input: Record<string, unknown>) => Promise<{ id: string; slug: string; data: Record<string, unknown> } | null>
+  (input: Record<string, unknown>) => Promise<{
+    id: string;
+    slug: string;
+    data: Record<string, unknown>;
+    previousData: Record<string, unknown>;
+  } | null>
 >(async () => null);
 
+const deleteUnreferencedMediaKeys = vi.fn(async () => ({
+  deleted: [],
+  kept: [],
+  failures: [],
+}));
+
 vi.mock("@/lib/services/guest", () => ({
+  getGuestDraft: (...args: unknown[]) => getGuestDraft(...(args as [])),
   saveGuestDraft: (input: Record<string, unknown>) => saveGuestDraft(input),
 }));
 
 vi.mock("@/lib/services/guest-wedding", () => ({
   syncActiveWeddingFromDraft: (input: Record<string, unknown>) =>
     syncActiveWeddingFromDraft(input),
+}));
+
+vi.mock("@/lib/services/media-cleanup", () => ({
+  deleteUnreferencedMediaKeys: (...args: unknown[]) =>
+    deleteUnreferencedMediaKeys(...(args as [])),
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({}),
 }));
 
 vi.mock("@/lib/services/ops", () => ({
@@ -59,6 +82,10 @@ describe("POST /api/guest/draft", () => {
   beforeEach(() => {
     saveGuestDraft.mockClear();
     syncActiveWeddingFromDraft.mockClear();
+    getGuestDraft.mockReset();
+    getGuestDraft.mockResolvedValue(null);
+    deleteUnreferencedMediaKeys.mockClear();
+    syncActiveWeddingFromDraft.mockResolvedValue(null);
   });
 
   it("saves a step-one draft that has no date or venue yet", async () => {
@@ -95,6 +122,66 @@ describe("POST /api/guest/draft", () => {
       draftId: "draft-1",
       weddingData: stepOneData,
     });
+  });
+
+  it("offers media from the previous draft to the reference-aware cleanup", async () => {
+    const oldKey = "0123456789abcdef-4-42/gallery/gallery-old.webp";
+    getGuestDraft.mockResolvedValue({
+      id: "draft-1",
+      session_id: "session-1",
+      wedding_data: {
+        gallery: [{ role: "gallery", url: `/api/media/${oldKey}`, name: "old.webp" }],
+      },
+    });
+
+    const res = await POST(request({
+      token: TOKEN,
+      templateId: TEMPLATE_ID,
+      templateVersionId: VERSION_ID,
+      weddingData: { ...stepOneData, gallery: [] },
+      email: null,
+    }));
+
+    expect(res.status).toBe(200);
+    expect(deleteUnreferencedMediaKeys).toHaveBeenCalledWith(
+      [oldKey],
+      expect.objectContaining({
+        weddingId: null,
+        guestSessionId: "session-1",
+        draftId: "draft-1",
+        includeStaleWeddingMedia: false,
+      })
+    );
+  });
+
+  it("includes the live invitation's previous media when it is mirrored", async () => {
+    const liveId = "33333333-3333-4333-8333-333333333333";
+    const oldKey = `${liveId}/groom/groom-old.webp`;
+    syncActiveWeddingFromDraft.mockResolvedValue({
+      id: liveId,
+      slug: "meera-aarav",
+      data: {},
+      previousData: {
+        groomPhoto: `/api/media/${oldKey}`,
+      },
+    });
+
+    const res = await POST(request({
+      token: TOKEN,
+      templateId: TEMPLATE_ID,
+      templateVersionId: VERSION_ID,
+      weddingData: stepOneData,
+      email: null,
+    }));
+
+    expect(res.status).toBe(200);
+    expect(deleteUnreferencedMediaKeys).toHaveBeenCalledWith(
+      [oldKey],
+      expect.objectContaining({
+        weddingId: liveId,
+        includeStaleWeddingMedia: true,
+      })
+    );
   });
 
   it("saves a step-two draft with an unnamed ceremony and a half-typed maps link", async () => {

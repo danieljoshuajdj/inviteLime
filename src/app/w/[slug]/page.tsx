@@ -13,6 +13,7 @@ import { weddingDataToRuntimeInput } from "@/lib/services/demo-wedding";
 import { absolutizeMediaUrl, rewriteRuntimeMedia } from "@/lib/services/media-urls";
 import { resolveInvitationPlannerBrand } from "@/lib/services/planner-branding";
 import { buildInvitationMetadata } from "@/lib/services/invitation-metadata";
+import { coverTitle, formDefinition, formTypeOf, isBirthdayForm } from "@/lib/builder/forms";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -30,6 +31,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       slug: wedding.slug,
       brideName: wedding.bride_name,
       groomName: wedding.groom_name,
+      celebrantName: wedding.celebrant_name,
+      formType: wedding.form_type,
       brandName: plannerBrand?.brandName ?? null,
     });
   } catch {
@@ -48,7 +51,16 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
 
   // Public runtime runs against wedding_data (canonical content source) and
   // the count of confirmed RSVPs (statistics are publicly shown per design).
-  const data = normalizeWeddingData(wedding.wedding_data);
+  // The stored column is authoritative for the form: a template re-categorised
+  // after this invitation was sold must not change what guests see.
+  const data = normalizeWeddingData({
+    ...((wedding.wedding_data ?? {}) as Record<string, unknown>),
+    formType: wedding.form_type,
+  });
+  const formType = formTypeOf(data);
+  const birthday = isBirthdayForm(formType);
+  const invitationTitle = coverTitle(data);
+  const invitationLabel = formDefinition(formType).invitationLabel;
 
   let rsvpCount = 0;
   let attendingCount = 0;
@@ -125,7 +137,8 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
       (url) => absolutizeMediaUrl(url, appUrl)
     ),
     rsvp: {
-      enabled: wedding.rsvp_toggle,
+      // Birthday forms deliberately have no RSVP flow.
+      enabled: !birthday && wedding.rsvp_toggle,
       deadline: wedding.rsvp_deadline,
       attendingCount,
       responseCount: rsvpCount,
@@ -141,7 +154,7 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
       <TemplateFrame
         html={runtime.html}
         payload={payload}
-        title={`${wedding.groom_name} & ${wedding.bride_name} — Wedding Invitation`}
+        title={`${invitationTitle} — ${invitationLabel}`}
         fallbackHref={invitationUrl(wedding.slug)}
       />
     );

@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import type { Supabase } from "@/lib/services/helpers";
+import type { EventFormType } from "@/types/database";
 
 export interface PublicTemplate extends Record<string, unknown> {
   id: string;
@@ -8,6 +9,8 @@ export interface PublicTemplate extends Record<string, unknown> {
   slug: string;
   description: string | null;
   status: string;
+  /** Event form derived from the template's single category. */
+  form_type: EventFormType;
   thumbnail_url: string | null;
   preview_gif_url: string | null;
   price_paise: number;
@@ -24,7 +27,7 @@ export interface PublicTemplate extends Record<string, unknown> {
 }
 
 const TEMPLATE_SELECT = `
-  id, name, slug, description, status, thumbnail_path, preview_gif_path, media_pack_id,
+  id, name, slug, description, status, form_type, thumbnail_path, preview_gif_path, media_pack_id,
   demo_detail_pack_id, music_track_id, created_at, updated_at,
   product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active)),
   categories:template_categories(category:categories(id, name, slug))
@@ -74,6 +77,7 @@ function normalizeTemplate(row: any): PublicTemplate {
     slug: row.slug,
     description: row.description,
     status: row.status,
+    form_type: row.form_type ?? "wedding",
     thumbnail_url: row.thumbnail_path
       ? storagePublicUrl("templates", row.thumbnail_path)
       : null,
