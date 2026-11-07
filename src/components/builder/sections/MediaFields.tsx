@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
+import { Toggle } from "@/components/shared/Field";
 import { Icon } from "@/components/shared/Icon";
 import { Modal } from "@/components/shared/Modal";
 import { MusicLibraryPicker } from "@/components/builder/MusicLibraryPicker";
 import { MAX_MEDIA_BYTES, isLibraryMediaUrl, libraryTrackName } from "@/lib/library-media";
-import type { WeddingData } from "@/lib/builder/defaults";
+import { MAX_GALLERY_PHOTOS, type WeddingData } from "@/lib/builder/defaults";
 import { categorySlugForFormType, formTypeOf } from "@/lib/builder/forms";
 
 interface Props {
@@ -42,6 +43,8 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
    */
   const [previews, setPreviews] = useState<Partial<Record<SlotRole, string>>>({});
   const [pendingGallery, setPendingGallery] = useState<PendingGalleryItem[]>([]);
+  /** URL of the gallery photo currently being swapped for a new upload. */
+  const [replacingGalleryUrl, setReplacingGalleryUrl] = useState<string | null>(null);
   /**
    * Oversized images are rejected before upload and listed in a dedicated
    * dialog. They must not use the form's inline error slot, which is reserved
@@ -95,12 +98,11 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     setOversizedNames([]);
   }
 
-  async function uploadFile(
+  async function uploadMedia(
     file: File,
     role: "bride" | "groom" | "couple" | "gallery" | "music",
-    slot: SlotRole | "gallery",
     replaces?: string | null
-  ) {
+  ): Promise<string> {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("role", role);
@@ -118,15 +120,25 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     });
     const json = (await res.json()) as { url?: string; error?: string };
     if (!res.ok || !json.url) throw new Error(json.error ?? "Upload failed");
+    return json.url;
+  }
+
+  async function uploadFile(
+    file: File,
+    role: "bride" | "groom" | "couple" | "gallery" | "music",
+    slot: SlotRole | "gallery",
+    replaces?: string | null
+  ) {
+    const url = await uploadMedia(file, role, replaces);
     if (slot === "gallery") {
       // Appends must be relative to the latest list: several photos can be
       // uploading at once, and each one finishes independently.
-      const item = { role, url: json.url, name: file.name };
+      const item = { role, url, name: file.name };
       onChange((prev) => ({ gallery: [...prev.gallery, item] }));
     } else if (slot === "music") {
-      onChange({ music: { role: "music", url: json.url, name: file.name } });
+      onChange({ music: { role: "music", url, name: file.name } });
     } else {
-      onChange({ [slot]: json.url } as Partial<WeddingData>);
+      onChange({ [slot]: url } as Partial<WeddingData>);
     }
   }
 
@@ -203,7 +215,27 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     if (oversized.length > 0) reportOversized(oversized);
     if (accepted.length === 0) return;
 
-    const picked = accepted.map((file) => {
+    // Count photos already saved plus ones still uploading, so two batches
+    // racing each other can never push the gallery past the cap.
+    const capacity = Math.max(
+      0,
+      MAX_GALLERY_PHOTOS - data.gallery.length - pendingGallery.length
+    );
+    if (capacity <= 0) {
+      setError(`You can add up to ${MAX_GALLERY_PHOTOS} gallery photos.`);
+      return;
+    }
+    const selected = accepted.slice(0, capacity);
+    if (selected.length < accepted.length) {
+      const skipped = accepted.length - selected.length;
+      setError(
+        `Only ${MAX_GALLERY_PHOTOS} gallery photos are allowed — ${skipped} ${
+          skipped === 1 ? "was" : "were"
+        } not added.`
+      );
+    }
+
+    const picked = selected.map((file) => {
       const preview = makePreview(file);
       return { id: nextPendingId.current++, file, preview };
     });
@@ -265,6 +297,38 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     void cleanupMedia([item.url]);
   }
 
+  async function handleGalleryReplace(item: WeddingData["gallery"][number]) {
+    if (replacingGalleryUrl) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setError(null);
+      if (isOversized(file)) {
+        reportOversized([file]);
+        return;
+      }
+      setReplacingGalleryUrl(item.url);
+      try {
+        const url = await uploadMedia(file, "gallery", item.url);
+        onChange((prev) => ({
+          gallery: prev.gallery.map((x) =>
+            x === item ? { role: "gallery" as const, url, name: file.name } : x
+          ),
+        }));
+        void cleanupMedia([item.url]);
+      } catch (err) {
+        if ((err as Error).message === "FILE_TOO_LARGE") reportOversized([file]);
+        else setError((err as Error).message);
+      } finally {
+        setReplacingGalleryUrl(null);
+      }
+    };
+    input.click();
+  }
+
   function removeMusic() {
     const previous = data.music?.url ?? null;
     onChange({ music: null });
@@ -277,105 +341,146 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     { slot: "couplePhoto", role: "couple", label: "Couple's photo", url: data.couplePhoto },
   ] as const;
 
+  const galleryCount = data.gallery.length;
+  const galleryRemaining = Math.max(
+    0,
+    MAX_GALLERY_PHOTOS - galleryCount - pendingGallery.length
+  );
+  const galleryAtCap = galleryRemaining <= 0;
+
   return (
     <div className="flex flex-col gap-8">
-      <div className="grid gap-4 sm:grid-cols-3">
-        {slots.map((s) => {
-          const preview = previews[s.slot];
-          const shown = preview ?? s.url;
-          const busy = uploadingRole === s.slot;
-          return (
-            <button
-              key={s.slot}
-              type="button"
-              onClick={() => void handleSlotPick(s.slot, s.role)}
-              aria-busy={busy || undefined}
-              className="group relative aspect-[3/4] overflow-hidden rounded-2xl border-2 border-dashed border-outline-variant bg-surface-container-low text-start transition-colors hover:border-secondary"
-            >
-              {shown ? (
-                <img src={shown} alt={s.label} className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
-                  <Icon name="image" size="xl" weight="w200" className="text-on-surface-variant" />
-                  <span className="font-body-xs font-semibold text-on-surface-variant">{s.label}</span>
-                </span>
-              )}
-              {busy ? (
-                // Uploading: the picked photo is already on screen under the
-                // spinner (blob URL below), and clears to full when it lands.
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white">
-                    <Icon name="refresh" size="md" className="animate-spin" />
-                  </span>
-                </span>
-              ) : (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    <Icon name={s.url ? "edit" : "add"} size="sm" />
-                  </span>
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+          <Toggle
+            label="Include Photos?"
+            description="Add a bride, groom or couple photo — one, two or all three are fine."
+            checked={data.includePhotos}
+            onChange={(checked) => onChange({ includePhotos: checked })}
+          />
+        </div>
+
+        {data.includePhotos && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {slots.map((s) => {
+              const preview = previews[s.slot];
+              const shown = preview ?? s.url;
+              const busy = uploadingRole === s.slot;
+              return (
+                <button
+                  key={s.slot}
+                  type="button"
+                  onClick={() => void handleSlotPick(s.slot, s.role)}
+                  aria-busy={busy || undefined}
+                  className="group relative aspect-[3/4] overflow-hidden rounded-2xl border-2 border-dashed border-outline-variant bg-surface-container-low text-start transition-colors hover:border-secondary"
+                >
+                  {shown ? (
+                    <img src={shown} alt={s.label} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
+                      <Icon name="image" size="xl" weight="w200" className="text-on-surface-variant" />
+                      <span className="font-body-xs font-semibold text-on-surface-variant">{s.label}</span>
+                    </span>
+                  )}
+                  {busy ? (
+                    // Uploading: the picked photo is already on screen under the
+                    // spinner (blob URL below), and clears to full when it lands.
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white">
+                        <Icon name="refresh" size="md" className="animate-spin" />
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        <Icon name={s.url ? "edit" : "add"} size="sm" />
+                      </span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Gallery */}
-      <div>
-        {/* Stacked on phones so the button sits under the heading rather than
-            beside it; the original row from `sm` up. */}
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="font-heading-md font-semibold !text-on-surface">Photo gallery</h3>
-          <input
-            ref={galleryInput}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            hidden
-            onChange={(e) => {
-              void handleGallery(e.target.files);
-              // The input keeps its value, so re-picking the same photo (after
-              // removing it) would fire no change event at all.
-              e.target.value = "";
-            }}
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+          <Toggle
+            label="Include Photo Gallery?"
+            description={`Share up to ${MAX_GALLERY_PHOTOS} of your favourite moments.`}
+            checked={data.includeGallery}
+            onChange={(checked) => onChange({ includeGallery: checked })}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            icon={pendingGallery.length ? "refresh" : "add_circle"}
-            loading={pendingGallery.length > 0}
-            onClick={() => galleryInput.current?.click()}
-          >
-            Upload photos
-          </Button>
         </div>
-        {data.gallery.length === 0 && pendingGallery.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-6 text-center font-body-sm text-on-surface-variant">
-            No gallery photos yet. Guests love a peek into your world.
-          </p>
-        ) : (
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {data.gallery.map((g, i) => (
-              <GalleryThumb
-                key={`${g.url}-${i}`}
-                url={g.url}
-                onRemove={() => removeGalleryItem(g)}
-              />
-            ))}
-            {/* Picked but not uploaded yet: the local preview with a spinner. */}
-            {pendingGallery.map((p) => (
-              <div
-                key={p.id}
-                aria-busy
-                className="relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
-              >
-                <img src={p.preview} alt="" className="h-full w-full object-cover" />
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
-                  <Icon name="refresh" size="md" className="animate-spin" />
-                </span>
+
+        {data.includeGallery && (
+          <div>
+            {/* Stacked on phones so the button sits under the heading rather
+                than beside it; the original row from `sm` up. */}
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-heading-md font-semibold !text-on-surface">Photo gallery</h3>
+                <p className="mt-1 font-body-xs text-on-surface-variant">
+                  {galleryCount}/{MAX_GALLERY_PHOTOS} Photos Uploaded
+                </p>
               </div>
-            ))}
+              <input
+                ref={galleryInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                hidden
+                onChange={(e) => {
+                  void handleGallery(e.target.files);
+                  // The input keeps its value, so re-picking the same photo (after
+                  // removing it) would fire no change event at all.
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={pendingGallery.length ? "refresh" : "add_circle"}
+                loading={pendingGallery.length > 0}
+                disabled={galleryAtCap}
+                onClick={() => galleryInput.current?.click()}
+              >
+                Upload photos
+              </Button>
+            </div>
+            {data.gallery.length === 0 && pendingGallery.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-6 text-center font-body-sm text-on-surface-variant">
+                No gallery photos yet. Guests love a peek into your world.
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {data.gallery.map((g, i) => (
+                  <GalleryThumb
+                    key={`${g.url}-${i}`}
+                    url={g.url}
+                    busy={replacingGalleryUrl === g.url}
+                    onReplace={() => void handleGalleryReplace(g)}
+                    onRemove={() => removeGalleryItem(g)}
+                  />
+                ))}
+                {/* Picked but not uploaded yet: the local preview with a spinner. */}
+                {pendingGallery.map((p) => (
+                  <div
+                    key={p.id}
+                    aria-busy
+                    className="relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
+                  >
+                    <img src={p.preview} alt="" className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                      <Icon name="refresh" size="md" className="animate-spin" />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -473,18 +578,49 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
   );
 }
 
-function GalleryThumb({ url, onRemove }: { url: string; onRemove: () => void }) {
+function GalleryThumb({
+  url,
+  busy,
+  onReplace,
+  onRemove,
+}: {
+  url: string;
+  busy?: boolean;
+  onReplace: () => void;
+  onRemove: () => void;
+}) {
   return (
     <div className="group relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
       <img src={url} alt="" className="h-full w-full object-cover" />
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
-        aria-label="Remove photo"
-      >
-        <Icon name="close" size="sm" />
-      </button>
+      {/* Kept visible at all sizes: touch devices have no hover state. */}
+      <div className="absolute right-1 top-1 flex gap-1">
+        <button
+          type="button"
+          onClick={onReplace}
+          disabled={busy}
+          className="rounded-full bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          aria-label="Replace photo"
+        >
+          <Icon name="edit" size="sm" />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={busy}
+          className="rounded-full bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          aria-label="Remove photo"
+        >
+          <Icon name="close" size="sm" />
+        </button>
+      </div>
+      {busy && (
+        <span
+          aria-busy
+          className="absolute inset-0 flex items-center justify-center bg-black/50 text-white"
+        >
+          <Icon name="refresh" size="md" className="animate-spin" />
+        </span>
+      )}
     </div>
   );
 }

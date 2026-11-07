@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { hasPhoneDigits } from "./phone";
+import { MAX_GALLERY_PHOTOS } from "./builder/defaults";
 
 export const emailSchema = z.string().email("Enter a valid email address");
 
@@ -85,7 +86,7 @@ export const weddingDataSchema = z.object({
   latitude: z.number().min(-90).max(90).optional().nullable(),
   longitude: z.number().min(-180).max(180).optional().nullable(),
   events: z.array(eventSchema).max(12).default([]),
-  gallery: z.array(mediaItemSchema).max(100).default([]),
+  gallery: z.array(mediaItemSchema).max(MAX_GALLERY_PHOTOS).default([]),
   dress: dressCodeSchema,
   rsvpEnabled: z.boolean().optional().default(false),
   rsvpWhatsapp: z
@@ -100,6 +101,10 @@ export const weddingDataSchema = z.object({
   bridePhoto: z.string().trim().max(2000).optional().nullable(),
   groomPhoto: z.string().trim().max(2000).optional().nullable(),
   couplePhoto: z.string().trim().max(2000).optional().nullable(),
+  /** Portrait section switch; independent of the gallery switch. */
+  includePhotos: z.boolean().optional().default(false),
+  /** Gallery section switch; independent of the portrait switch. */
+  includeGallery: z.boolean().optional().default(false),
   music: mediaItemSchema.optional().nullable(),
 });
 
@@ -135,6 +140,10 @@ export const weddingDraftSchema = weddingDataSchema.partial().extend({
   rsvpWhatsapp: z.string().trim().max(30).optional(),
   events: z.array(draftEventSchema).max(12).optional(),
   gallery: z.array(draftMediaItemSchema).max(100).optional(),
+  // Keep these absent when an old draft did not send them, so normalization
+  // can infer the right value from the media that draft already holds.
+  includePhotos: z.boolean().optional(),
+  includeGallery: z.boolean().optional(),
   music: draftMediaItemSchema.optional().nullable(),
 });
 

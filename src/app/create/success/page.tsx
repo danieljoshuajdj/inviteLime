@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSignedIn } from "@/lib/services/auth-guard";
 import { SuccessContent } from "@/components/builder/SuccessContent";
 import { resolveInvitationPlannerBrand } from "@/lib/services/planner-branding";
 
@@ -51,16 +52,25 @@ export default async function SuccessPage({ searchParams }: PageProps) {
 
   if (!weddingId) notFound();
 
+  const successPath = `/create/success?wedding=${encodeURIComponent(weddingId)}${
+    orderId ? `&order=${encodeURIComponent(orderId)}` : ""
+  }`;
+  const { user } = await requireSignedIn(successPath);
+
   const supabase = createAdminClient();
   const { data: wedding, error } = await supabase
     .from("weddings")
     .select(
-      "id, slug, template_id, template_version_id, form_type, bride_name, groom_name, celebrant_name, couple_bio, story, wedding_date, wedding_time, venue, address, maps_url, latitude, longitude, email, expiration_date, status, billing_source, planner_id, planner_brand_snapshot, wedding_data, rsvp_toggle, rsvp_deadline"
+      "id, user_id, slug, template_id, template_version_id, form_type, bride_name, groom_name, celebrant_name, couple_bio, story, wedding_date, wedding_time, venue, address, maps_url, latitude, longitude, email, expiration_date, status, billing_source, planner_id, planner_brand_snapshot, wedding_data, rsvp_toggle, rsvp_deadline"
     )
     .eq("id", weddingId)
     .single();
 
   if (error || !wedding || wedding.status !== "active" || !wedding.slug) notFound();
+
+  // The publish confirmation contains the live link and receipt details, so it
+  // is only shown to the account that owns the invitation.
+  if (wedding.user_id !== user.id) notFound();
 
   // Transform to camelCase for the component
   const weddingDataJson = (wedding.wedding_data ?? {}) as Record<string, unknown>;

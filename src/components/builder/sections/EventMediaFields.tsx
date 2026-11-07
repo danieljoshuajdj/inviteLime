@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
+import { Toggle } from "@/components/shared/Field";
 import { Icon } from "@/components/shared/Icon";
 import { Modal } from "@/components/shared/Modal";
 import { MAX_MEDIA_BYTES } from "@/lib/library-media";
-import type { WeddingData } from "@/lib/builder/defaults";
+import { MAX_GALLERY_PHOTOS, type WeddingData } from "@/lib/builder/defaults";
 
 interface Props {
   /** Guest session token for draft uploads. Omit in the account editor. */
@@ -15,7 +16,7 @@ interface Props {
   weddingId?: string;
   data: WeddingData;
   onChange: (patch: Partial<WeddingData> | ((prev: WeddingData) => Partial<WeddingData>)) => void;
-  /** Gallery cap. Birthday Wishes uses 3; the celebration form leaves it open. */
+  /** Gallery cap. Birthday Wishes uses 3; the celebration form uses the default 6. */
   maxGallery?: number;
 }
 
@@ -31,9 +32,16 @@ interface PendingItem {
  * gallery. The wedding MediaFields also covers portraits, soundtrack and the
  * larger copy deck, none of which belong on a birthday invitation.
  */
-export function EventMediaFields({ token, weddingId, data, onChange, maxGallery }: Props) {
+export function EventMediaFields({
+  token,
+  weddingId,
+  data,
+  onChange,
+  maxGallery = MAX_GALLERY_PHOTOS,
+}: Props) {
   const [uploadingMain, setUploadingMain] = useState(false);
   const [pending, setPending] = useState<PendingItem[]>([]);
+  const [replacingGalleryUrl, setReplacingGalleryUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [oversizedNames, setOversizedNames] = useState<string[]>([]);
   const [showOversized, setShowOversized] = useState(false);
@@ -49,7 +57,7 @@ export function EventMediaFields({ token, weddingId, data, onChange, maxGallery 
     []
   );
 
-  const remaining = maxGallery === undefined ? Infinity : Math.max(0, maxGallery - data.gallery.length);
+  const remaining = Math.max(0, maxGallery - data.gallery.length - pending.length);
   const atCap = remaining <= 0;
 
   function makePreview(file: File) {
@@ -160,14 +168,19 @@ export function EventMediaFields({ token, weddingId, data, onChange, maxGallery 
     if (oversized.length > 0) reportOversized(oversized);
     if (accepted.length === 0) return;
 
-    const capacity = maxGallery === undefined ? accepted.length : Math.max(0, remaining - pending.length);
+    const capacity = remaining;
     if (capacity <= 0) {
       setError(`You can add up to ${maxGallery} gallery photos.`);
       return;
     }
     const selected = accepted.slice(0, capacity);
     if (selected.length < accepted.length) {
-      setError(`Only ${maxGallery} gallery photos are allowed — ${accepted.length - selected.length} were not added.`);
+      const skipped = accepted.length - selected.length;
+      setError(
+        `Only ${maxGallery} gallery photos are allowed — ${skipped} ${
+          skipped === 1 ? "was" : "were"
+        } not added.`
+      );
     }
 
     const picked = selected.map((file) => {
@@ -206,6 +219,38 @@ export function EventMediaFields({ token, weddingId, data, onChange, maxGallery 
   function removeGalleryItem(item: WeddingData["gallery"][number]) {
     onChange((prev) => ({ gallery: prev.gallery.filter((x) => x !== item) }));
     void cleanup([item.url]);
+  }
+
+  async function replaceGalleryItem(item: WeddingData["gallery"][number]) {
+    if (replacingGalleryUrl) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setError(null);
+      if (isOversized(file)) {
+        reportOversized([file]);
+        return;
+      }
+      setReplacingGalleryUrl(item.url);
+      try {
+        const url = await upload(file, "gallery", item.url);
+        onChange((prev) => ({
+          gallery: prev.gallery.map((x) =>
+            x === item ? { role: "gallery" as const, url, name: file.name } : x
+          ),
+        }));
+        void cleanup([item.url]);
+      } catch (err) {
+        if ((err as Error).message === "FILE_TOO_LARGE") reportOversized([file]);
+        else setError((err as Error).message);
+      } finally {
+        setReplacingGalleryUrl(null);
+      }
+    };
+    input.click();
   }
 
   return (
@@ -259,74 +304,78 @@ export function EventMediaFields({ token, weddingId, data, onChange, maxGallery 
         </div>
       </div>
 
-      <div>
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-heading-md font-semibold !text-on-surface">Photo gallery</h3>
-            <p className="mt-1 font-body-xs text-on-surface-variant">
-              {maxGallery === undefined
-                ? "Share as many moments as you like."
-                : `Up to ${maxGallery} photos. ${remaining} slot${remaining === 1 ? "" : "s"} left.`}
-            </p>
-          </div>
-          <input
-            ref={galleryInput}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            hidden
-            onChange={(e) => {
-              void handleGallery(e.target.files);
-              e.target.value = "";
-            }}
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+          <Toggle
+            label="Include Photo Gallery?"
+            description={`Share up to ${maxGallery} of your favourite moments.`}
+            checked={data.includeGallery}
+            onChange={(checked) => onChange({ includeGallery: checked })}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            icon={pending.length ? "refresh" : "add_circle"}
-            loading={pending.length > 0}
-            disabled={atCap}
-            onClick={() => galleryInput.current?.click()}
-          >
-            Upload photos
-          </Button>
         </div>
 
-        {data.gallery.length === 0 && pending.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-6 text-center font-body-sm text-on-surface-variant">
-            No gallery photos yet.
-          </p>
-        ) : (
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {data.gallery.map((item, index) => (
-              <div
-                key={`${item.url}-${index}`}
-                className="group relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
-              >
-                <img src={item.url} alt="" className="h-full w-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => removeGalleryItem(item)}
-                  className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                  aria-label="Remove photo"
-                >
-                  <Icon name="close" size="sm" />
-                </button>
+        {data.includeGallery && (
+          <div>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-heading-md font-semibold !text-on-surface">Photo gallery</h3>
+                <p className="mt-1 font-body-xs text-on-surface-variant">
+                  {data.gallery.length}/{maxGallery} Photos Uploaded
+                </p>
               </div>
-            ))}
-            {pending.map((item) => (
-              <div
-                key={item.id}
-                aria-busy
-                className="relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
+              <input
+                ref={galleryInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                hidden
+                onChange={(e) => {
+                  void handleGallery(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={pending.length ? "refresh" : "add_circle"}
+                loading={pending.length > 0}
+                disabled={atCap}
+                onClick={() => galleryInput.current?.click()}
               >
-                <img src={item.preview} alt="" className="h-full w-full object-cover" />
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
-                  <Icon name="refresh" size="md" className="animate-spin" />
-                </span>
+                Upload photos
+              </Button>
+            </div>
+
+            {data.gallery.length === 0 && pending.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-6 text-center font-body-sm text-on-surface-variant">
+                No gallery photos yet.
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {data.gallery.map((item, index) => (
+                  <EventGalleryThumb
+                    key={`${item.url}-${index}`}
+                    url={item.url}
+                    busy={replacingGalleryUrl === item.url}
+                    onReplace={() => void replaceGalleryItem(item)}
+                    onRemove={() => removeGalleryItem(item)}
+                  />
+                ))}
+                {pending.map((item) => (
+                  <div
+                    key={item.id}
+                    aria-busy
+                    className="relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
+                  >
+                    <img src={item.preview} alt="" className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                      <Icon name="refresh" size="md" className="animate-spin" />
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
@@ -363,6 +412,53 @@ export function EventMediaFields({ token, weddingId, data, onChange, maxGallery 
           ))}
         </ul>
       </Modal>
+    </div>
+  );
+}
+
+function EventGalleryThumb({
+  url,
+  busy,
+  onReplace,
+  onRemove,
+}: {
+  url: string;
+  busy?: boolean;
+  onReplace: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="group relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
+      <img src={url} alt="" className="h-full w-full object-cover" />
+      {/* Kept visible at all sizes: touch devices have no hover state. */}
+      <div className="absolute right-1 top-1 flex gap-1">
+        <button
+          type="button"
+          onClick={onReplace}
+          disabled={busy}
+          className="rounded-full bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          aria-label="Replace photo"
+        >
+          <Icon name="edit" size="sm" />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={busy}
+          className="rounded-full bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          aria-label="Remove photo"
+        >
+          <Icon name="close" size="sm" />
+        </button>
+      </div>
+      {busy && (
+        <span
+          aria-busy
+          className="absolute inset-0 flex items-center justify-center bg-black/50 text-white"
+        >
+          <Icon name="refresh" size="md" className="animate-spin" />
+        </span>
+      )}
     </div>
   );
 }

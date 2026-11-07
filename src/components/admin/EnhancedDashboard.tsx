@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
 import { cn, formatDate } from "@/lib/utils";
-import { handleAdminExport } from "@/app/admin/dashboard/actions";
+import { handleAdminExport } from "@/app/admin/(protected)/dashboard/actions";
 import { sparklineAreaPath, sparklinePath, type PeriodKey } from "@/lib/services/revenue-series";
 
 interface DashboardMetrics {

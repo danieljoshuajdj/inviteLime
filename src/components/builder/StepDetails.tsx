@@ -11,7 +11,7 @@ import { CoupleFields } from "@/components/builder/sections/CoupleFields";
 import { EventMediaFields } from "@/components/builder/sections/EventMediaFields";
 import { MediaFields } from "@/components/builder/sections/MediaFields";
 import { WeddingFields } from "@/components/builder/sections/WeddingFields";
-import type { WeddingData } from "@/lib/builder/defaults";
+import { MAX_GALLERY_PHOTOS, type WeddingData } from "@/lib/builder/defaults";
 import { formDefinition, formTypeOf, isBirthdayForm } from "@/lib/builder/forms";
 import { validateDetails } from "@/lib/builder/validation";
 import { useClientNow } from "@/lib/use-client-now";
@@ -131,7 +131,7 @@ export function StepDetails({ token, data, onChange, onNext }: Props) {
               token={token}
               data={data}
               onChange={onChange}
-              maxGallery={wishes ? 3 : undefined}
+              maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
             />
           ),
         },

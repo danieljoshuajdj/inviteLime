@@ -34,7 +34,7 @@ export function StepPreview({ token, data, template, onBack, onNext }: Props) {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch("/api/guest/preview", {
+        const res = await fetch("/api/builder/preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -44,6 +44,10 @@ export function StepPreview({ token, data, template, onBack, onNext }: Props) {
             weddingData: weddingDataForDb(data),
           }),
         });
+        if (res.status === 401) {
+          window.location.href = `/login?next=${encodeURIComponent(`/create/${token}`)}`;
+          return;
+        }
         const json = (await res.json()) as PreviewResult;
         if (cancelled) return;
         if (!res.ok || !json.html) throw new Error(json.error ?? "Could not prepare the preview.");

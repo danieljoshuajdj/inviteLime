@@ -6,6 +6,7 @@ import {
   normalizeWeddingData,
   validDressColor,
   weddingDataForDb,
+  withVisibleMedia,
 } from "./defaults";
 
 describe("builder guest settings", () => {
@@ -66,6 +67,65 @@ describe("builder guest settings", () => {
       bride: { color: null, colorName: "Rosewood" },
       groom: { color: DEFAULT_DRESS_COLORS.groom, colorName: "Deep teal" },
     });
+  });
+});
+
+describe("media visibility switches", () => {
+  it("defaults both switches to off", () => {
+    const data = defaultWeddingData();
+    expect(data.includePhotos).toBe(false);
+    expect(data.includeGallery).toBe(false);
+  });
+
+  it("infers legacy media as included when the switches are absent", () => {
+    const data = normalizeWeddingData({
+      bridePhoto: "/media/bride.jpg",
+      gallery: [{ role: "gallery", url: "/media/1.jpg" }],
+    });
+
+    expect(data.includePhotos).toBe(true);
+    expect(data.includeGallery).toBe(true);
+  });
+
+  it("respects an explicit off switch even when media is still stored", () => {
+    const data = normalizeWeddingData({
+      bridePhoto: "/media/bride.jpg",
+      gallery: [{ role: "gallery", url: "/media/1.jpg" }],
+      includePhotos: false,
+      includeGallery: false,
+    });
+
+    expect(data.includePhotos).toBe(false);
+    expect(data.includeGallery).toBe(false);
+    expect(data.bridePhoto).toBe("/media/bride.jpg");
+    expect(data.gallery).toHaveLength(1);
+  });
+
+  it("filters only the rendered view, never the saved media", () => {
+    const data = defaultWeddingData({
+      bridePhoto: "/media/bride.jpg",
+      couplePhoto: "/media/couple.jpg",
+      gallery: [{ role: "gallery", url: "/media/1.jpg" }],
+      includePhotos: false,
+      includeGallery: false,
+    });
+    const visible = withVisibleMedia(data);
+
+    expect(visible.bridePhoto).toBeNull();
+    expect(visible.couplePhoto).toBeNull();
+    expect(visible.gallery).toEqual([]);
+    // The source object is untouched, so re-enabling restores everything.
+    expect(data.bridePhoto).toBe("/media/bride.jpg");
+    expect(data.gallery).toHaveLength(1);
+  });
+
+  it("keeps the switches through a database save", () => {
+    const saved = weddingDataForDb(
+      defaultWeddingData({ includePhotos: true, includeGallery: false })
+    );
+
+    expect(saved.includePhotos).toBe(true);
+    expect(saved.includeGallery).toBe(false);
   });
 });
 

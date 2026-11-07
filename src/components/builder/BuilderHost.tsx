@@ -85,7 +85,7 @@ export function BuilderHost({
   const save = useCallback(
     async (payload = dataRef.current, opts: { silent?: boolean } = {}) => {
       try {
-        const res = await fetch("/api/guest/draft", {
+        const res = await fetch("/api/builder/draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -96,6 +96,10 @@ export function BuilderHost({
             email,
           }),
         });
+        if (res.status === 401) {
+          window.location.href = `/login?next=${encodeURIComponent(`/create/${token}`)}`;
+          return false;
+        }
         const json = (await res.json()) as { draft?: unknown; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Autosave failed");
         setDirty(false);

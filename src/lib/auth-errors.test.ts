@@ -111,6 +111,19 @@ describe("friendlyAuthError", () => {
     const out = friendlyAuthError(err("User already registered", "user_already_exists"), "register");
     expect(out).not.toContain("Too many");
   });
+
+  it("explains Google sign-in failures without leaking provider internals", () => {
+    const unavailable = friendlyAuthError(
+      err("Unsupported provider: provider is not enabled"),
+      "login"
+    );
+    expect(unavailable).toContain("Google sign-in");
+    expect(unavailable).not.toContain("email");
+    expect(unavailable).not.toContain("Unsupported provider");
+
+    expect(friendlyAuthError(err("access_denied"), "login")).toContain("cancelled");
+    expect(friendlyAuthError(err("redirect_uri_mismatch"), "register")).toContain("not configured");
+  });
 });
 
 describe("friendlyAuthParam", () => {
@@ -118,6 +131,8 @@ describe("friendlyAuthParam", () => {
     expect(friendlyAuthParam("missing_code")).toContain("incomplete");
     expect(friendlyAuthParam("session_expired")).toContain("expired");
     expect(friendlyAuthParam("exchange_failed")).toContain("sign-in");
+    expect(friendlyAuthParam("google_cancelled")).toContain("cancelled");
+    expect(friendlyAuthParam("google_failed")).toContain("Google");
   });
 
   it("never reflects arbitrary text from the URL onto the login page", () => {

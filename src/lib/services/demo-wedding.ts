@@ -1,5 +1,9 @@
 import type { BuilderDressCode, WeddingData } from "@/lib/builder/defaults";
-import { defaultWeddingData, validDressColor } from "@/lib/builder/defaults";
+import {
+  defaultWeddingData,
+  validDressColor,
+  withVisibleMedia,
+} from "@/lib/builder/defaults";
 import type { DemoDetailPack, MusicTrack } from "@/lib/library-media";
 import type { RuntimeDress, RuntimeWeddingInput } from "@/lib/runtime/payload";
 import type { PackDemoMedia } from "@/lib/services/media-packs";
@@ -52,16 +56,27 @@ export const DEMO_WEDDING_DATA: WeddingData = defaultWeddingData({
  * invitations are untouched by this function.
  */
 export function withPackMedia(data: WeddingData, media: PackDemoMedia): WeddingData {
+  const bridePhoto = media.photos.bride ?? data.bridePhoto ?? null;
+  const groomPhoto = media.photos.groom ?? data.groomPhoto ?? null;
+  const couplePhoto = media.photos.couple ?? data.couplePhoto ?? null;
+  const mainPhoto = media.photos.couple ?? data.mainPhoto ?? null;
+  const gallery =
+    media.gallery.length > 0
+      ? media.gallery.map((item) => ({ role: "gallery" as const, url: item.url }))
+      : data.gallery;
+
+  // Demo mode must show the media pack even though a customer's default is
+  // "photos off". The switches are part of the builder data, so the pack has
+  // to opt its own media back in.
   return {
     ...data,
-    bridePhoto: media.photos.bride ?? data.bridePhoto ?? null,
-    groomPhoto: media.photos.groom ?? data.groomPhoto ?? null,
-    couplePhoto: media.photos.couple ?? data.couplePhoto ?? null,
-    mainPhoto: media.photos.couple ?? data.mainPhoto ?? null,
-    gallery:
-      media.gallery.length > 0
-        ? media.gallery.map((item) => ({ role: "gallery" as const, url: item.url }))
-        : data.gallery,
+    bridePhoto,
+    groomPhoto,
+    couplePhoto,
+    mainPhoto,
+    gallery,
+    includePhotos: data.includePhotos || Boolean(bridePhoto || groomPhoto || couplePhoto || mainPhoto),
+    includeGallery: data.includeGallery || gallery.length > 0,
   };
 }
 
@@ -177,30 +192,34 @@ export function weddingDataToRuntimeInput(
   },
   data: WeddingData
 ): RuntimeWeddingInput {
+  // The switches are presentation state, not storage: filtering here keeps
+  // switched-off media out of every template/preview while leaving the saved
+  // URLs available for when the customer turns the section back on.
+  const visible = withVisibleMedia(data);
   return {
     id: input.id,
     slug: input.slug,
-    formType: data.formType,
-    celebrantName: data.celebrantName.trim() || null,
-    birthdayNumber: data.birthdayNumber,
-    specialMessage: data.specialMessage.trim() || null,
-    brideName: data.brideName,
-    groomName: data.groomName,
-    brideBio: data.brideBio,
-    groomBio: data.groomBio,
-    coupleBio: data.coupleBio,
-    story: data.story,
-    brideDesignation: data.brideDesignation.trim() || null,
-    groomDesignation: data.groomDesignation.trim() || null,
-    dress: dressToRuntime(data.dress),
-    date: data.weddingDate || input.date || "",
-    time: data.weddingTime ?? input.time ?? null,
-    venue: data.venue || input.venue || "",
-    address: data.address || input.address || "",
-    mapsUrl: data.mapsUrl ?? input.mapsUrl ?? null,
-    latitude: data.latitude,
-    longitude: data.longitude,
-    events: data.events.map((ev) => ({
+    formType: visible.formType,
+    celebrantName: visible.celebrantName.trim() || null,
+    birthdayNumber: visible.birthdayNumber,
+    specialMessage: visible.specialMessage.trim() || null,
+    brideName: visible.brideName,
+    groomName: visible.groomName,
+    brideBio: visible.brideBio,
+    groomBio: visible.groomBio,
+    coupleBio: visible.coupleBio,
+    story: visible.story,
+    brideDesignation: visible.brideDesignation.trim() || null,
+    groomDesignation: visible.groomDesignation.trim() || null,
+    dress: dressToRuntime(visible.dress),
+    date: visible.weddingDate || input.date || "",
+    time: visible.weddingTime ?? input.time ?? null,
+    venue: visible.venue || input.venue || "",
+    address: visible.address || input.address || "",
+    mapsUrl: visible.mapsUrl ?? input.mapsUrl ?? null,
+    latitude: visible.latitude,
+    longitude: visible.longitude,
+    events: visible.events.map((ev) => ({
       name: ev.name,
       date: ev.date ?? null,
       time: ev.time ?? null,
@@ -209,13 +228,13 @@ export function weddingDataToRuntimeInput(
       mapsUrl: ev.mapsUrl ?? null,
       description: ev.description ?? null,
     })),
-    gallery: data.gallery.map((item) => ({ url: item.url, name: item.name })),
+    gallery: visible.gallery.map((item) => ({ url: item.url, name: item.name })),
     photos: {
-      bride: data.bridePhoto ?? null,
-      groom: data.groomPhoto ?? null,
-      couple: data.couplePhoto ?? null,
-      main: data.mainPhoto ?? null,
+      bride: visible.bridePhoto ?? null,
+      groom: visible.groomPhoto ?? null,
+      couple: visible.couplePhoto ?? null,
+      main: visible.mainPhoto ?? null,
     },
-    music: data.music ? { url: data.music.url, name: data.music.name } : null,
+    music: visible.music ? { url: visible.music.url, name: visible.music.name } : null,
   };
 }

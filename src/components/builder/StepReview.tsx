@@ -142,6 +142,10 @@ export function StepReview({
         coveredByPlan?: boolean;
         error?: string;
       };
+      if (res.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent(`/create/${token}`)}`;
+        return;
+      }
       if (!res.ok || !json.orderId) throw new Error(json.error ?? "Could not create the order");
 
       // A plan-covered publish has already gone live on the server. There is no
@@ -252,6 +256,10 @@ export function StepReview({
         body: JSON.stringify({ token }),
       });
       const json = (await res.json()) as DevPublishResult;
+      if (res.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent(`/create/${token}`)}`;
+        return;
+      }
       if (!res.ok) throw new Error(json.error ?? "Dev publish failed");
       setDevResult(json);
       setDevState("done");
@@ -533,7 +541,14 @@ function PreviewBoard({ data, invitationTitle }: { data: WeddingData; invitation
                   />
                 )}
                 {!wishes && <Row label="Venue" value={data.venue || "—"} />}
-                <Row label="Gallery" value={`${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`} />
+                <Row
+                  label="Gallery"
+                  value={
+                    data.includeGallery
+                      ? `${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`
+                      : "Not included"
+                  }
+                />
                 <Row label="Main image" value={data.mainPhoto ? "Selected" : "None yet"} />
               </>
             ) : (
@@ -541,7 +556,22 @@ function PreviewBoard({ data, invitationTitle }: { data: WeddingData; invitation
                 <Row label="Groom" value={data.groomName || "—"} />
                 <Row label="Bride" value={data.brideName || "—"} />
                 <Row label="Ceremony cards" value={`${data.events.length}`} />
-                <Row label="Gallery" value={`${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`} />
+                <Row
+                  label="Photos"
+                  value={
+                    data.includePhotos
+                      ? `${[data.bridePhoto, data.groomPhoto, data.couplePhoto].filter(Boolean).length} selected`
+                      : "Not included"
+                  }
+                />
+                <Row
+                  label="Gallery"
+                  value={
+                    data.includeGallery
+                      ? `${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`
+                      : "Not included"
+                  }
+                />
                 <Row label="Soundtrack" value={data.music ? "Selected" : "None yet"} />
               </>
             )}

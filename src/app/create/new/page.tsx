@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { StartHost } from "@/components/builder/StartHost";
+import { requireSignedIn } from "@/lib/services/auth-guard";
 
 export const metadata: Metadata = {
   title: "Create your invitation",
-  description: "Start your wedding invitation — no sign-in required.",
+  description: "Start your wedding invitation with your account.",
 };
 
 interface CreateNewPageProps {
@@ -18,6 +19,10 @@ export default async function CreateNewPage({ searchParams }: CreateNewPageProps
   // The old chooser screen is gone. Generic creation starts at the template
   // library; only template-specific links reach this route and start directly.
   if (!template) redirect("/create/browse");
+
+  // Guests may explore templates but must sign in before a draft is created.
+  // Keep the selected template in `next` so Google returns them straight to it.
+  await requireSignedIn(`/create/new?template=${encodeURIComponent(template)}`);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">

@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGuestDraft } from "@/lib/services/guest";
+import { getOwnedBuilderDraft } from "@/lib/services/builder";
+import { requireSignedIn } from "@/lib/services/auth-guard";
 import { isPaymentBypassEnabled } from "@/lib/services/dev-bypass";
 import { BuilderHost } from "@/components/builder/BuilderHost";
 import { normalizeWeddingData } from "@/lib/builder/defaults";
@@ -42,8 +43,13 @@ export default async function BuilderPage({ params }: PageProps) {
   const { token } = await params;
   if (!token || token.length < 10) notFound();
 
+  // The token alone is not a credential: the signed-in account must own the
+  // session the draft belongs to. A guest is sent through Google first and
+  // returned to this exact builder URL afterwards.
+  const { user } = await requireSignedIn(`/create/${token}`);
+
   const supabase = createAdminClient();
-  const draft = await getGuestDraft(supabase, token);
+  const draft = await getOwnedBuilderDraft(supabase, token, user.id);
   if (!draft) notFound();
 
   // Once a session has published, the wedding row is the canonical copy: its

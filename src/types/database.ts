@@ -30,6 +30,7 @@ export interface Database {
           role: ProfileRole;
           status: string;
           avatar_url: string | null;
+          google_id: string | null;
           last_seen_at: string | null;
           created_at: string;
           updated_at: string;
@@ -41,6 +42,7 @@ export interface Database {
           role?: ProfileRole;
           status?: string;
           avatar_url?: string | null;
+          google_id?: string | null;
           last_seen_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -52,6 +54,7 @@ export interface Database {
           role?: ProfileRole;
           status?: string;
           avatar_url?: string | null;
+          google_id?: string | null;
           last_seen_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -898,6 +901,7 @@ export interface Database {
         Row: {
           id: string;
           access_token: string;
+          user_id: string | null;
           ip_address: string | null;
           user_agent: string | null;
           expires_at: string;
@@ -907,6 +911,7 @@ export interface Database {
         Insert: {
           id?: string;
           access_token: string;
+          user_id?: string | null;
           ip_address?: string | null;
           user_agent?: string | null;
           expires_at: string;
@@ -916,6 +921,7 @@ export interface Database {
         Update: {
           id?: string;
           access_token?: string;
+          user_id?: string | null;
           ip_address?: string | null;
           user_agent?: string | null;
           expires_at?: string;

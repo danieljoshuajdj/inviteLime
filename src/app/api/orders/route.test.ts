@@ -65,7 +65,7 @@ const db = {
   },
 };
 
-const getGuestDraft = vi.fn();
+const getOwnedBuilderDraft = vi.fn();
 const createDraftWedding = vi.fn();
 const createRazorpayOrder = vi.fn();
 const consumeRateLimit = vi.fn(async () => ({ allowed: true }));
@@ -79,9 +79,10 @@ const finalizePaidWedding = vi.fn();
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => db }));
 vi.mock("@/lib/supabase/server", () => ({ createServerClient: async () => ({}) }));
-vi.mock("@/lib/services/guest", () => ({
-  getGuestDraft: (supabase: unknown, token: string) => getGuestDraft(supabase, token),
-  guestTokenFromCookies: () => "",
+vi.mock("@/lib/services/builder", () => ({
+  getOwnedBuilderDraft: (supabase: unknown, token: string, userId: string) =>
+    getOwnedBuilderDraft(supabase, token, userId),
+  builderTokenFromCookies: () => "",
 }));
 vi.mock("@/lib/services/payments", () => ({
   createRazorpayOrder: (...a: unknown[]) => createRazorpayOrder(...(a as [])),
@@ -123,9 +124,10 @@ beforeEach(() => {
   createDraftWedding.mockReset().mockResolvedValue({ id: "wedding-1" });
   createRazorpayOrder.mockReset().mockResolvedValue({ id: "order_rzp" });
   consumeRateLimit.mockReset().mockResolvedValue({ allowed: true });
-  getGuestDraft.mockReset().mockResolvedValue({
+  getOwnedBuilderDraft.mockReset().mockResolvedValue({
     id: "draft-1",
     session_id: "session-1",
+    user_id: "planner-1",
     wedding_data: { venue: "The Grand Palace" },
   });
   getCurrentProfile.mockReset().mockResolvedValue({
@@ -273,7 +275,7 @@ describe("POST /api/orders (event forms)", () => {
 
   it("derives the birthday wishes form and sends the celebrant", async () => {
     seedPublished("active", "birthday_wishes");
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
       wedding_data: {
@@ -305,7 +307,7 @@ describe("POST /api/orders (event forms)", () => {
 
   it("rejects a birthday celebration without a venue", async () => {
     seedPublished("active", "birthday_celebration");
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
       wedding_data: { celebrantName: "Ananya" },
@@ -328,7 +330,7 @@ describe("POST /api/orders (event forms)", () => {
 
   it("rejects birthday wishes without a message", async () => {
     seedPublished("active", "birthday_wishes");
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
       wedding_data: { celebrantName: "Ananya", birthdayNumber: 21 },
@@ -350,14 +352,14 @@ describe("POST /api/orders (event forms)", () => {
 });
 
 describe("POST /api/orders (publish email)", () => {
-  it("rejects a guest checkout without an email", async () => {
+  it("rejects an unauthenticated checkout", async () => {
     seedPublished("active");
     getCurrentProfile.mockResolvedValue(null);
 
     const res = await run({ ...payload(), email: null });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
     const body = (await res.json()) as { error?: string };
-    expect(body.error).toMatch(/email/i);
+    expect(body.error).toMatch(/sign in/i);
     expect(createDraftWedding).not.toHaveBeenCalled();
     expect(createRazorpayOrder).not.toHaveBeenCalled();
   });
@@ -372,13 +374,16 @@ describe("POST /api/orders (publish email)", () => {
     const res = await run({ ...payload(), email: null });
     expect(res.status).toBe(200);
     expect(createDraftWedding).toHaveBeenCalledWith(
-      expect.objectContaining({ email: "owner@example.com" })
+      expect.objectContaining({ email: "owner@example.com", userId: "user-1" })
     );
   });
 
-  it("accepts the email a guest enters", async () => {
+  it("accepts the email a signed-in customer enters", async () => {
     seedPublished("active");
-    getCurrentProfile.mockResolvedValue(null);
+    getCurrentProfile.mockResolvedValue({
+      user: { id: "user-1", email: "owner@example.com" },
+      profile: null,
+    });
 
     const res = await run({ ...payload(), email: "guest@example.com" });
     expect(res.status).toBe(200);
@@ -391,7 +396,7 @@ describe("POST /api/orders (publish email)", () => {
 describe("POST /api/orders (planner plans)", () => {
   it("publishes under the plan without Razorpay when the plan is live and branded", async () => {
     seedPublished("active");
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
       wedding_data: { brideName: "Aisha", venue: "The Grand Palace" },
@@ -438,7 +443,7 @@ describe("POST /api/orders (planner plans)", () => {
 
   it("falls back to a one-time purchase when the plan has lapsed", async () => {
     seedPublished("active");
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
       wedding_data: { venue: "The Grand Palace" },
@@ -471,7 +476,7 @@ describe("POST /api/orders (planner plans)", () => {
 
   it("falls back to one-time when the studio brand is incomplete", async () => {
     seedPublished("active");
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
       wedding_data: { venue: "The Grand Palace" },

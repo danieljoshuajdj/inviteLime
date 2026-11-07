@@ -1,7 +1,7 @@
 import type { AdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 
-import { guestTokenFromCookies, getGuestDraft, type GuestDraft } from "./guest";
+import { builderTokenFromCookies, getOwnedBuilderDraft, type BuilderDraft } from "./builder";
 import { getActiveGuestWedding } from "./guest-wedding";
 import { jsonError } from "./helpers";
 
@@ -17,10 +17,10 @@ import { jsonError } from "./helpers";
  */
 
 export interface MediaUploadActor {
-  /** Guest access token, from the cookie or a non-JWT bearer value. */
-  guestToken: string | null;
-  guestDraft: GuestDraft | null;
-  /** The published invitation this guest session owns, if checkout completed. */
+  /** Builder access token, from the cookie or a non-JWT bearer value. */
+  builderToken: string | null;
+  builderDraft: BuilderDraft | null;
+  /** The published invitation this builder session owns, if checkout completed. */
   activeGuestWeddingId: string | null;
   /** Logged-in account user id, from the cookie session or a JWT bearer. */
   userId: string | null;
@@ -35,21 +35,13 @@ export async function readMediaUploadActor(
   req: Request,
   admin: AdminClient
 ): Promise<MediaUploadActor> {
-  const cookieToken = guestTokenFromCookies(req.headers.get("cookie"));
+  const cookieToken = builderTokenFromCookies(req.headers.get("cookie"));
   const authHeader = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
 
-  // A guest token is an opaque value. A JWT is only treated as a user token
+  // A builder token is an opaque value. A JWT is only treated as a user token
   // when it has the three-part shape, exactly as the upload route always has.
-  const guestCandidate = cookieToken || (authHeader && !authHeader.includes(".") ? authHeader : null);
-
-  let guestDraft: GuestDraft | null = null;
-  let activeGuestWeddingId: string | null = null;
-  if (guestCandidate) {
-    guestDraft = await getGuestDraft(admin, guestCandidate);
-    if (guestDraft) {
-      activeGuestWeddingId = (await getActiveGuestWedding(admin, guestDraft.session_id))?.id ?? null;
-    }
-  }
+  const builderCandidate =
+    cookieToken || (authHeader && !authHeader.includes(".") ? authHeader : null);
 
   const serverSupabase = await createServerClient();
   const {
@@ -62,7 +54,17 @@ export async function readMediaUploadActor(
     userId = data.user?.id ?? null;
   }
 
-  return { guestToken: guestCandidate, guestDraft, activeGuestWeddingId, userId };
+  let builderDraft: BuilderDraft | null = null;
+  let activeGuestWeddingId: string | null = null;
+  if (builderCandidate && userId) {
+    builderDraft = await getOwnedBuilderDraft(admin, builderCandidate, userId);
+    if (builderDraft) {
+      activeGuestWeddingId =
+        (await getActiveGuestWedding(admin, builderDraft.session_id))?.id ?? null;
+    }
+  }
+
+  return { builderToken: builderCandidate, builderDraft, activeGuestWeddingId, userId };
 }
 
 /**
@@ -71,26 +73,24 @@ export async function readMediaUploadActor(
  *
  * An open builder tab omits `weddingId`; once its session has published, the
  * upload belongs in that wedding's folder. Before publishing it stays in the
- * draft folder, which is authorized by the guest token alone.
+ * draft folder, which is authorized by the builder token and its account
+ * owner together.
  */
 export async function authorizeMediaDestination(
   admin: AdminClient,
   actor: MediaUploadActor,
   requestedWeddingId: string | null
 ): Promise<{ weddingId: string | null } | { error: MediaScopeError }> {
-  if (!actor.guestDraft && !actor.userId) {
+  if (!actor.userId) {
     return { error: { status: 401, message: "Authentication required" } };
   }
 
   const weddingId = requestedWeddingId ?? actor.activeGuestWeddingId;
 
   if (weddingId) {
-    const belongsToGuest = actor.guestDraft !== null && weddingId === actor.activeGuestWeddingId;
-    if (!belongsToGuest) {
-      if (!actor.userId) {
-        return { error: { status: 403, message: "Wedding does not belong to this session" } };
-      }
-
+    const belongsToBuilder =
+      actor.builderDraft !== null && weddingId === actor.activeGuestWeddingId;
+    if (!belongsToBuilder) {
       const { data: wedding } = await admin
         .from("weddings")
         .select("id")
@@ -99,7 +99,7 @@ export async function authorizeMediaDestination(
         .maybeSingle();
       if (!wedding) return { error: { status: 403, message: "Wedding not owned by you" } };
     }
-  } else if (!actor.guestDraft) {
+  } else if (!actor.builderDraft) {
     return { error: { status: 403, message: "Unknown upload scope" } };
   }
 

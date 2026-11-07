@@ -2,11 +2,14 @@ import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
-import { getGuestDraft } from "@/lib/services/guest";
+import {
+  builderTokenFromCookies,
+  getOwnedBuilderDraft,
+  type BuilderDraft,
+} from "@/lib/services/builder";
 import { createRazorpayOrder } from "@/lib/services/payments";
 import { createDraftWedding, invitationUrl } from "@/lib/services/weddings";
-import { guestTokenFromCookies, type GuestDraft } from "@/lib/services/guest";
-import { getCurrentProfile, jsonError, readBody, type AuthSession } from "@/lib/services/helpers";
+import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
 import { currencyFromRequest } from "@/lib/services/geo";
 import { quoteFor, type TemplatePricingInput } from "@/lib/services/pricing";
@@ -32,17 +35,19 @@ const bodySchema = z.object({
   celebrantName: z.string().trim().min(1).max(120).optional(),
   weddingDate: z.string().min(1).optional(),
   email: z.string().trim().email().optional().nullable(),
-  // Guest session token. Optional because the httpOnly cookie is the normal
-  // path; the explicit field covers fetch clients without cookies.
+  // Builder token. Optional because the httpOnly cookie is the normal path;
+  // the explicit field covers fetch clients without cookies.
   token: z.string().min(10).optional(),
 });
 
 export const dynamic = "force-dynamic";
 
 /**
- * Creates the draft wedding + a Razorpay order. The guest token (from an
- * httpOnly cookie, or the Authorization header / body for fetch clients)
- * authorizes the draft ownership.
+ * Creates the draft wedding + a Razorpay order.
+ *
+ * Checkout is account-only. The Supabase session identifies the customer; the
+ * builder token (from an httpOnly cookie, or the Authorization header / body
+ * for fetch clients) identifies the draft, and both must agree.
  */
 export async function POST(req: Request) {
   try {
@@ -52,11 +57,17 @@ export async function POST(req: Request) {
       return jsonError(400, "Invalid order payload", parsed.error.flatten());
     }
 
-    const cookieToken = guestTokenFromCookies(req.headers.get("cookie"));
+    const cookieToken = builderTokenFromCookies(req.headers.get("cookie"));
     const authToken = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
     const token = parsed.data.token ?? cookieToken ?? authToken;
 
-    if (!token) return jsonError(401, "Guest session required");
+    if (!token) return jsonError(401, "Sign in to continue with your invitation.");
+
+    const authClient = await createServerClient();
+    const authSession = await getCurrentProfile(authClient);
+    if (!authSession) {
+      return jsonError(401, "Sign in to continue with your invitation.");
+    }
 
     const limit = await consumeRateLimit({
       bucket: "order_create",
@@ -69,28 +80,21 @@ export async function POST(req: Request) {
     }
 
     const supabase = createAdminClient();
-    const draft = await getGuestDraft(supabase, token);
-    if (!draft) return jsonError(404, "Draft not found for this session");
+    const draft = await getOwnedBuilderDraft(supabase, token, authSession.user.id);
+    if (!draft) {
+      return jsonError(403, "This draft does not belong to your account.");
+    }
 
     // A planner draft may only be checked out by the planner who owns it. This
-    // prevents a leaked guest cookie from spending another studio's slots or
+    // prevents a leaked builder cookie from spending another studio's slots or
     // stamping their brand on someone else's invitation.
     const plannerId = draft.planner_id;
     let plannerSubscriptionId: string | null = null;
     let coveredByPlan = false;
     let claimedSlot = false;
 
-    // A guest (not signed in) must supply an email before anything is
-    // published. Signed-in owners can fall back to their account address, and
-    // planner drafts always need the session check below.
-    let authSession: AuthSession | null = null;
-    if (plannerId || !parsed.data.email) {
-      const authClient = await createServerClient();
-      authSession = await getCurrentProfile(authClient);
-    }
-
     if (plannerId) {
-      if (!authSession || authSession.user.id !== plannerId) {
+      if (authSession.user.id !== plannerId) {
         return jsonError(403, "Sign in as the planner account that started this invitation.");
       }
 
@@ -107,9 +111,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // The account address is the fallback only for a signed-in owner; a guest
-    // checkout must carry the email entered in the publish step.
-    const email = parsed.data.email?.trim() || authSession?.user.email?.trim() || null;
+    // The account address is the fallback; a signed-in customer can also type
+    // a different publish address in the review step.
+    const email = parsed.data.email?.trim() || authSession.user.email?.trim() || null;
     if (!email) {
       return jsonError(400, "Please enter your email address to publish this invitation.");
     }
@@ -139,7 +143,7 @@ export async function POST(req: Request) {
     // so its stored form type is not trusted here.
     const formType = formTypeOrDefault(product.data.form_type);
     const checkoutData = normalizeWeddingData({
-      ...((draft as GuestDraft).wedding_data as Record<string, unknown>),
+      ...((draft as BuilderDraft).wedding_data as Record<string, unknown>),
       ...(parsed.data.brideName !== undefined ? { brideName: parsed.data.brideName } : {}),
       ...(parsed.data.groomName !== undefined ? { groomName: parsed.data.groomName } : {}),
       ...(parsed.data.celebrantName !== undefined
@@ -190,11 +194,11 @@ export async function POST(req: Request) {
         celebrantName: checkoutData.celebrantName || undefined,
         weddingDate:
           formType === "birthday_wishes" ? undefined : checkoutData.weddingDate || undefined,
-        guestSessionId: (draft as GuestDraft).session_id,
+        guestSessionId: (draft as BuilderDraft).session_id,
         email,
-        weddingData: (draft as GuestDraft).wedding_data as Record<string, unknown>,
+        weddingData: (draft as BuilderDraft).wedding_data as Record<string, unknown>,
         productId: productRow.data.id,
-        userId: plannerId,
+        userId: authSession.user.id,
         plannerId: coveredByPlan ? plannerId : null,
         plannerSubscriptionId,
         billingSource: coveredByPlan ? "planner_plan" : "one_time",
@@ -214,9 +218,9 @@ export async function POST(req: Request) {
       const { data: planOrder, error: planOrderError } = await supabase
         .from("orders")
         .insert({
-          user_id: plannerId,
-          guest_session_id: (draft as GuestDraft).session_id,
-          draft_id: (draft as GuestDraft).id,
+          user_id: authSession.user.id,
+          guest_session_id: (draft as BuilderDraft).session_id,
+          draft_id: (draft as BuilderDraft).id,
           wedding_id: wedding.id,
           template_id: parsed.data.templateId,
           template_version_id: parsed.data.templateVersionId,
@@ -295,9 +299,9 @@ export async function POST(req: Request) {
     // no server-side record of what was owed, so the customer must not be sent
     // to Razorpay -- fail loudly instead of silently losing the linkage.
     const { error: orderError } = await supabase.from("orders").insert({
-      user_id: null,
-      guest_session_id: (draft as GuestDraft).session_id,
-      draft_id: (draft as GuestDraft).id,
+      user_id: authSession.user.id,
+      guest_session_id: (draft as BuilderDraft).session_id,
+      draft_id: (draft as BuilderDraft).id,
       wedding_id: wedding.id,
       template_id: parsed.data.templateId,
       template_version_id: parsed.data.templateVersionId,

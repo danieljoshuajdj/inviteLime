@@ -14,6 +14,7 @@ import { MediaFields } from "@/components/builder/sections/MediaFields";
 import { toast } from "@/components/account/toast";
 import {
   EMPTY_EVENT,
+  MAX_GALLERY_PHOTOS,
   defaultWeddingData,
   normalizeWeddingData,
   type BuilderEvent,
@@ -177,7 +178,7 @@ export function WeddingEditor({ weddingId }: { weddingId: string }) {
               weddingId={weddingId}
               data={form}
               onChange={applyMedia}
-              maxGallery={wishes ? 3 : undefined}
+              maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
             />
           ) : (
             <MediaFields weddingId={weddingId} data={form} onChange={applyMedia} />

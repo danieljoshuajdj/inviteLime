@@ -2,10 +2,10 @@ import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
-import { createGuestSession } from "@/lib/services/guest";
+import { createBuilderSession, BUILDER_TOKEN_COOKIE } from "@/lib/services/builder";
 import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
 import { getPlannerEntitlement } from "@/lib/services/planner-plans";
-import { clientKey, consumeRateLimit } from "@/lib/services/ops";
+import { consumeRateLimit } from "@/lib/services/ops";
 import { defaultWeddingData } from "@/lib/builder/defaults";
 
 const startSchema = z.object({
@@ -15,23 +15,33 @@ const startSchema = z.object({
 export const dynamic = "force-dynamic";
 
 /**
- * Starts a guest creation session and an initial draft. Body carries the
- * template slug (optional — falls back to the default template).
+ * Starts an authenticated builder session and its initial draft.
+ *
+ * Template creation is account-only. The caller's Supabase session is verified
+ * server-side; an anonymous request receives 401 and never reaches the draft
+ * tables. The returned token is bound to that user id and is checked again by
+ * every draft, preview, upload and checkout endpoint.
  */
 export async function POST(req: Request) {
   try {
+    const authClient = await createServerClient();
+    const sessionUser = await getCurrentProfile(authClient);
+    if (!sessionUser) {
+      return jsonError(401, "Sign in with Google to create and customize your templates.");
+    }
+
     const body = await readBody(req);
     const parsed = startSchema.safeParse(body);
     if (!parsed.success) return jsonError(400, "Invalid start payload");
 
     const limit = await consumeRateLimit({
-      bucket: "guest_session",
-      key: clientKey(req),
+      bucket: "builder_session",
+      key: sessionUser.user.id,
       limit: 30,
       windowSeconds: 3600,
     });
     if (!limit.allowed) {
-      return jsonError(429, "Too many invitation sessions started from this device. Please try again later.");
+      return jsonError(429, "Too many invitation sessions started from this account. Please try again later.");
     }
 
     const supabase = createAdminClient();
@@ -77,21 +87,19 @@ export async function POST(req: Request) {
     // lets the checkout screen explain an expired plan before publishing.
     let plannerId: string | null = null;
     let plannerSubscriptionId: string | null = null;
-    try {
-      const authClient = await createServerClient();
-      const sessionUser = await getCurrentProfile(authClient);
-      if (sessionUser?.profile?.role === "planner") {
-        const entitlement = await getPlannerEntitlement(sessionUser.user.id, { client: supabase });
-        if (entitlement.active && entitlement.subscription) {
-          plannerId = sessionUser.user.id;
-          plannerSubscriptionId = entitlement.subscription.id;
-        }
+    if (sessionUser.profile?.role === "planner") {
+      const entitlement = await getPlannerEntitlement(sessionUser.user.id, { client: supabase });
+      if (entitlement.active && entitlement.subscription) {
+        plannerId = sessionUser.user.id;
+        plannerSubscriptionId = entitlement.subscription.id;
       }
-    } catch {
-      // Guest creation must keep working when auth cookies are absent/invalid.
     }
 
-    const session = await createGuestSession();
+    const session = await createBuilderSession({
+      userId: sessionUser.user.id,
+      ipAddress: req.headers.get("x-forwarded-for"),
+      userAgent: req.headers.get("user-agent"),
+    });
 
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + 3);
@@ -111,11 +119,14 @@ export async function POST(req: Request) {
       .single();
     if (draftError) return jsonError(500, draftError.message);
 
+    const maxAge = Math.floor((new Date(session.expires_at).getTime() - Date.now()) / 1000);
+    const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+
     return Response.json(
       { token: session.access_token, draftId: draft.id },
       {
         headers: {
-          "Set-Cookie": `vc_guest_token=${session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=7776000; ${process.env.NODE_ENV === "production" ? "Secure; " : ""}`,
+          "Set-Cookie": `${BUILDER_TOKEN_COOKIE}=${session.access_token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`,
         },
       }
     );

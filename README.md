@@ -62,6 +62,42 @@ account's email and Resend testing addresses. To fall back to Supabase's
 built-in sender again, clear the SMTP host in the dashboard
 (Authentication → SMTP) or PATCH `config/auth` with `smtp_host: ""`.
 
+## Google sign-in
+
+Customer accounts are **Google-only**. The login screen offers **Continue with
+Google** through Supabase Auth's Google OAuth 2.0 provider, and `/register` and
+`/forgot-password` redirect back to `/login`. No Google secret is stored in this
+repository or shipped to the browser; Supabase holds the client secret and
+performs the code exchange server-side.
+
+Administrators sign in separately at `/admin/login` with an email and password.
+That route verifies the credentials with Supabase Auth **and** checks
+`profiles.role = 'admin'` server-side before opening the studio.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   create an **OAuth client ID → Web application**.
+2. Add the authorized redirect URI:
+   `https://<project-ref>.supabase.co/auth/v1/callback`
+   (for local development the same Supabase project URL is used).
+3. In Supabase → **Authentication → Sign In / Providers → Google**, enable the
+   provider and paste the same **Client ID** and **Client secret**.
+4. In Supabase → **Authentication → URL Configuration**, set the **Site URL** to
+   your app origin and add both redirect URLs:
+   `http://localhost:3000/auth/callback` and
+   `https://your-domain.com/auth/callback`.
+5. Apply migration `00021_google_profile_fields.sql` so Google's name and
+   profile picture are copied into the existing `profiles` table, and migration
+   `00022_authenticated_builder_sessions.sql` so builder drafts are owned by the
+   signed-in account.
+6. Set `NEXT_PUBLIC_APP_URL` to the deployed origin (already required by the
+   rest of the app).
+
+Google sign-in reuses Supabase's normal cookie session. Accounts are linked by
+verified email automatically; an existing password account with the same
+verified Google email is signed in, not duplicated. The Google account ID is
+stored by Supabase in `auth.identities.provider_id` and mirrored to
+`profiles.google_id` after sign-in.
+
 Scripts: `npm run dev`, `npm run build`, `npm run start`, `npm run lint`,
 `npm run typecheck`, `npm test`, `npm run promote-admin`, `npm run auth:smtp`.
 
@@ -70,12 +106,12 @@ Scripts: `npm run dev`, `npm run build`, `npm run start`, `npm run lint`,
 | Area | Routes |
 | --- | --- |
 | Public site | `/`, `/templates`, `/templates/[slug]`, `/templates/[slug]/demo`, `/live-demos`, `/how-it-works`, `/features`, `/pricing`, `/about`, `/contact`, `/faq`, `/privacy`, `/terms` |
-| Auth | `/login`, `/register`, `/forgot-password`, `/auth/update-password`, `/auth/callback` |
-| Guest creation | `/create/new`, `/create/browse`, `/create/[token]` (builder: autosave draft, uploads, preview, checkout) |
+| Auth | `/login` (Google-only), `/auth/callback`, `/auth/update-password` (legacy email link), `/register` and `/forgot-password` redirect to `/login`, `/admin/login` (email + password) |
+| Customer creation (sign-in required) | `/create/browse` (public browsing), `/create/new`, `/create/blank`, `/create/[token]` (builder: autosave draft, uploads, preview, checkout), `/create/success` |
 | Customer app | `/app/explore` (default after login), `/app/favorites`, `/app/invitations`, `/app/invitations/[id]`, `/app/invitations/[id]/edit`, `/app/account` |
 | Admin | `/admin/dashboard`, `/admin/templates`, `/admin/categories`, `/admin/users` |
 | Invitation runtime | `/w/[slug]` |
-| APIs | `/api/guest/*`, `/api/uploads`, `/api/assets/*` (hero imagery served from `src/assets`), `/api/orders`, `/api/payments/razorpay/verify`, `/api/payments/webhook`, `/api/rsvp`, `/api/weddings/[id]/*`, `/api/admin/*`, `/api/contact`, `/api/cron/maintenance` |
+| APIs | `/api/builder/*`, `/api/uploads`, `/api/assets/*` (hero imagery served from `src/assets`), `/api/orders`, `/api/payments/razorpay/verify`, `/api/payments/webhook`, `/api/rsvp`, `/api/weddings/[id]/*`, `/api/admin/*`, `/api/admin/login`, `/api/contact`, `/api/cron/maintenance` |
 
 ## Getting Started
 
@@ -126,8 +162,9 @@ React runtime so a published invitation is never blank.
 
 ## Payments
 
-1. `/api/orders` verifies the guest session, resolves the product price
-   **server-side**, creates the draft wedding + Razorpay order and records it.
+1. `/api/orders` verifies the signed-in Supabase user and the owned builder
+   session, resolves the product price **server-side**, creates the draft
+   wedding + Razorpay order and records it.
 2. Razorpay Checkout collects payment in the browser.
 3. `/api/payments/razorpay/verify` verifies the signature, fetches the order and
    payment from Razorpay, reconciles the amount against the product price, marks
@@ -186,9 +223,9 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://app.example.com/api/cron/ma
 * Admin APIs answer 401 for anonymous callers, 403 for signed-in non-admins
   (`src/lib/services/admin.ts` → `adminApiError`).
 * Rate limiting lives in Postgres (`consume_rate_limit`, migration `00002_ops.sql`
-  + `src/lib/services/ops.ts`) for guest session start, draft autosave, uploads,
-  order creation, RSVP, email resend and admin destructive routes. It fails open
-  so a database hiccup cannot take the platform down.
+  + `src/lib/services/ops.ts`) for builder session start, draft autosave, uploads,
+  order creation, admin login, RSVP, email resend and admin destructive routes.
+  It fails open so a database hiccup cannot take the platform down.
 * Uploads are type/size validated (`src/lib/services/storage.ts`); template ZIPs
   are size-limited, path-traversal filtered and versioned.
 * Security headers (`X-Content-Type-Options`, `Referrer-Policy`,

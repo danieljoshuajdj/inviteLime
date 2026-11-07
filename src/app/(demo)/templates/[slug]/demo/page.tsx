@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
+import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { TemplateFrame } from "@/components/runtime/TemplateFrame";
 import { createServerClient } from "@/lib/supabase/server";
 import { getTemplateBySlug } from "@/lib/services/templates";
@@ -217,11 +218,11 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
                 Browse templates
               </Button>
             </Link>
-            <Link href={`/create/new?template=${template.slug}`}>
+            <StartCreationLink templateSlug={template.slug}>
               <Button variant="outline" icon="auto_awesome">
                 Customise it anyway
               </Button>
-            </Link>
+            </StartCreationLink>
           </div>
         </div>
       )}

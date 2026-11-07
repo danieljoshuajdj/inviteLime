@@ -182,6 +182,28 @@ describe("/api/weddings/[id] media", () => {
     expect(json.weddingTime).toBe("18:00");
   });
 
+  it("persists the independent photo and gallery switches", async () => {
+    const res = await patch({
+      brideName: "Bride",
+      groomName: "Groom",
+      dress: null,
+      weddingDate: "2026-12-12",
+      weddingTime: "18:00",
+      venue: "The Hall",
+      address: "",
+      mapsUrl: null,
+      events: [],
+      ...media,
+      includePhotos: false,
+      includeGallery: true,
+    });
+
+    expect(res.status).toBe(200);
+    const stored = (state.update?.wedding_data ?? {}) as Record<string, unknown>;
+    expect(stored.includePhotos).toBe(false);
+    expect(stored.includeGallery).toBe(true);
+  });
+
   it("persists photo, gallery and music edits into wedding_data", async () => {
     const res = await patch({
       brideName: "Bride",

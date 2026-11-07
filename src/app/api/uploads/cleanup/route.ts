@@ -28,9 +28,9 @@ const cleanupSchema = z.object({
  * also call it after replacing a portrait. Objects still referenced by the
  * saved draft or the live invitation are kept; the next save retries them.
  *
- * Auth mirrors `/api/uploads`: a guest token for draft folders, or a logged-in
- * owner for a wedding folder. A caller can never clean up another session's or
- * another wedding's objects.
+ * Auth mirrors `/api/uploads`: a signed-in owner plus a builder token for draft
+ * folders, or a signed-in owner for a wedding folder. A caller can never clean
+ * up another session's or another wedding's objects.
  */
 export async function POST(req: Request) {
   try {
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const keys = normalizeMediaCleanupKeys(parsed.data.urls).filter((key) =>
       isMediaCleanupAllowed(key, {
         weddingId: destination.weddingId,
-        guestToken: actor.guestToken,
+        guestToken: actor.builderToken,
       })
     );
 
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
 
     const result = await deleteUnreferencedMediaKeys(keys, {
       weddingId: destination.weddingId,
-      guestSessionId: actor.guestDraft?.session_id ?? null,
+      guestSessionId: actor.builderDraft?.session_id ?? null,
       admin,
     });
 

@@ -22,6 +22,13 @@ export const dynamic = "force-dynamic";
 const patchSchema = z
   .object({
     name: z.string().trim().min(2).max(100).optional(),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(100)
+      .regex(/^[a-z0-9-]+$/, "Slug must use lowercase letters, numbers, and dashes")
+      .optional(),
     description: z.string().max(1000).nullable().optional(),
     status: z.enum(["active", "disabled", "draft"]).optional(),
     product_id: z.string().uuid().nullable().optional(),
@@ -55,6 +62,18 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (!parsed.success) return Response.json({ error: "Invalid template update", details: parsed.error.flatten() }, { status: 400 });
 
     const adminClient = createAdminClient();
+
+    // A slug is the public demo URL, so it must stay unique across templates.
+    if (parsed.data.slug !== undefined) {
+      const { data: sameSlug, error: slugErr } = await adminClient
+        .from("templates")
+        .select("id")
+        .eq("slug", parsed.data.slug);
+      if (slugErr) return Response.json({ error: slugErr.message }, { status: 500 });
+      if ((sameSlug ?? []).some((row) => row.id !== id)) {
+        return Response.json({ error: "A template with this slug already exists" }, { status: 400 });
+      }
+    }
 
     if (parsed.data.price_paise !== undefined) {
       const { data: tpl } = await adminClient.from("templates").select("product_id").eq("id", id).maybeSingle();
@@ -93,6 +112,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const update = {
       ...(derivedFormType ? { form_type: derivedFormType } : {}),
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+      ...(parsed.data.slug !== undefined ? { slug: parsed.data.slug } : {}),
       ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
       ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
       ...(parsed.data.product_id !== undefined ? { product_id: parsed.data.product_id } : {}),

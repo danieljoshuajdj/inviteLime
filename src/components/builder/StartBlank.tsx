@@ -13,7 +13,11 @@ export function StartBlank() {
     const controller = new AbortController();
     const t = setTimeout(async () => {
       try {
-        const res = await fetch("/api/guest/start", { method: "POST", body: "{}", signal: controller.signal });
+        const res = await fetch("/api/builder/start", { method: "POST", body: "{}", signal: controller.signal });
+        if (res.status === 401) {
+          window.location.href = `/login?next=${encodeURIComponent("/create/blank")}`;
+          return;
+        }
         const json = (await res.json()) as { token?: string; error?: string };
         if (res.ok && json.token) {
           router.replace(`/create/${json.token}`);

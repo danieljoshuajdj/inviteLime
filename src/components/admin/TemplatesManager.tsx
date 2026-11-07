@@ -458,14 +458,47 @@ export function TemplatesManager({
     finally { setSaving(false); }
   }
 
-  async function savePrice(id: string, pricePaise: number) {
+  async function saveTemplateDetails(
+    id: string,
+    values: {
+      name: string;
+      slug: string;
+      status: "active" | "disabled" | "draft";
+      pricePaise: number | null;
+    }
+  ) {
     setSaving(true);
     try {
-      await api(id, { price_paise: pricePaise });
-      setRows((rs) => rs.map((r) => (r.id === id && r.product ? { ...r, product: { ...r.product, pricePaise } } : r)));
-      toast("Price saved");
-    } catch (e) { toast("Price update failed", (e as Error).message); }
-    finally { setSaving(false); }
+      const payload: Record<string, unknown> = {
+        name: values.name,
+        slug: values.slug,
+        status: values.status,
+      };
+      if (values.pricePaise !== null) payload.price_paise = values.pricePaise;
+
+      const template = await api(id, payload);
+      setRows((rs) =>
+        rs.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                name: template?.name ?? values.name,
+                slug: template?.slug ?? values.slug,
+                status: template?.status ?? values.status,
+                product:
+                  values.pricePaise !== null && r.product
+                    ? { ...r.product, pricePaise: values.pricePaise }
+                    : r.product,
+              }
+            : r
+        )
+      );
+      toast("Template saved", "Name, slug, price, and status updated");
+    } catch (e) {
+      toast("Update failed", (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   /** Assigns demo sources. Every picker change saves immediately. */
@@ -1311,13 +1344,58 @@ export function TemplatesManager({
                   className="grid gap-4 lg:grid-cols-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    const fd = new FormData(e.currentTarget);
-                    const price = Number((fd.get("price") as string) ?? "");
-                    void savePrice(t.id, Math.round(price * 100));
+                    const form = e.currentTarget;
+                    const fd = new FormData(form);
+                    const name = String(fd.get("name") ?? "").trim();
+                    const slug = String(fd.get("slug") ?? "")
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9-]+/g, "-")
+                      .replace(/^-+|-+$/g, "");
+                    const priceRaw = String(fd.get("price") ?? "").trim();
+                    const pricePaise =
+                      priceRaw === "" ? null : Math.round(Number(priceRaw) * 100);
+                    const status = String(fd.get("status") ?? "draft") as
+                      | "active"
+                      | "disabled"
+                      | "draft";
+
+                    const slugInput = form.elements.namedItem("slug") as HTMLInputElement | null;
+                    if (slugInput) slugInput.value = slug;
+
+                    if (name.length < 2) {
+                      toast("Check the form", "Template name must be at least 2 characters");
+                      return;
+                    }
+                    if (slug.length < 2) {
+                      toast("Check the form", "Slug must be at least 2 characters");
+                      return;
+                    }
+                    if (pricePaise !== null && (!Number.isFinite(pricePaise) || pricePaise < 0)) {
+                      toast("Check the form", "Enter a valid non-negative price");
+                      return;
+                    }
+
+                    void saveTemplateDetails(t.id, { name, slug, status, pricePaise });
                   }}
                 >
-                  <TextInput label="Template name" name="name" defaultValue={t.name} disabled />
-                  <TextInput label="Slug" name="slug" defaultValue={t.slug} disabled />
+                  <TextInput
+                    label="Template name"
+                    name="name"
+                    defaultValue={t.name}
+                    required
+                    minLength={2}
+                    maxLength={100}
+                  />
+                  <TextInput
+                    label="Slug"
+                    name="slug"
+                    defaultValue={t.slug}
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    hint="Lowercase letters, numbers, and dashes. Used in the public demo URL."
+                  />
                   <TextInput label="Price ₹ (display)" name="price" defaultValue={t.product ? (t.product.pricePaise / 100).toFixed(0) : ""} />
                   <Select
                     label="Status"
@@ -1330,7 +1408,7 @@ export function TemplatesManager({
                     ]}
                   />
                   <div className="lg:col-span-2 flex items-center gap-2">
-                    <Button type="submit" size="sm" loading={saving} icon="save">Save price</Button>
+                    <Button type="submit" size="sm" loading={saving} icon="save">Save changes</Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -1593,4 +1671,4 @@ function PackageUpload({
       </Button>
     </div>
   );
-}
+} 

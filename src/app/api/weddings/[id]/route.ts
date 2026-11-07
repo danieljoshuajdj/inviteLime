@@ -71,6 +71,8 @@ const upsertSchema = z.object({
   bridePhoto: z.string().trim().max(2000).nullable().optional(),
   groomPhoto: z.string().trim().max(2000).nullable().optional(),
   couplePhoto: z.string().trim().max(2000).nullable().optional(),
+  includePhotos: z.boolean().optional(),
+  includeGallery: z.boolean().optional(),
   music: mediaItemSchema.nullable().optional(),
 });
 
@@ -126,6 +128,11 @@ export async function GET(_req: Request, { params }: RouteContext) {
     bridePhoto: (wd.bridePhoto as string | null) ?? null,
     groomPhoto: (wd.groomPhoto as string | null) ?? null,
     couplePhoto: (wd.couplePhoto as string | null) ?? null,
+    // Omit the switches when a legacy row has no value so the client's
+    // normalizer can infer them from the stored media instead of defaulting
+    // to OFF and hiding photos the couple already saved.
+    ...(typeof wd.includePhotos === "boolean" ? { includePhotos: wd.includePhotos } : {}),
+    ...(typeof wd.includeGallery === "boolean" ? { includeGallery: wd.includeGallery } : {}),
     music: wd.music ?? null,
     status: data.status,
     slug: data.slug,
@@ -211,6 +218,12 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       : {}),
     ...(!birthday && parsed.data.couplePhoto !== undefined
       ? { couplePhoto: parsed.data.couplePhoto }
+      : {}),
+    ...(!birthday && parsed.data.includePhotos !== undefined
+      ? { includePhotos: parsed.data.includePhotos }
+      : {}),
+    ...(parsed.data.includeGallery !== undefined
+      ? { includeGallery: parsed.data.includeGallery }
       : {}),
     ...(!birthday && parsed.data.music !== undefined ? { music: parsed.data.music } : {}),
     ...(!wishes && parsed.data.weddingDate !== undefined

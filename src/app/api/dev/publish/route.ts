@@ -3,11 +3,12 @@ import "server-only";
 import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGuestDraft, guestTokenFromCookies } from "@/lib/services/guest";
+import { createServerClient } from "@/lib/supabase/server";
+import { builderTokenFromCookies, getOwnedBuilderDraft } from "@/lib/services/builder";
 import { createDraftWedding, invitationUrl } from "@/lib/services/weddings";
 import { finalizePaidWedding } from "@/lib/services/finalize-purchase";
 import { isPaymentBypassEnabled } from "@/lib/services/dev-bypass";
-import { jsonError, readBody } from "@/lib/services/helpers";
+import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
 import { normalizeWeddingData } from "@/lib/builder/defaults";
 import { formTypeOrDefault } from "@/lib/builder/forms";
@@ -32,9 +33,9 @@ const bodySchema = z.object({
  * draft-media relocation, account linking and both emails are the production
  * code paths. Only the charge itself is skipped.
  *
- * The caller must present the guest session token, so this can only finalize a
- * draft that session already owns — it is not a way to publish someone else's
- * invitation.
+ * The caller must be signed in and present the builder token, so this can only
+ * finalize a draft their account owns — it is not a way to publish someone
+ * else's invitation.
  */
 export async function POST(req: Request) {
   if (!isPaymentBypassEnabled()) {
@@ -46,10 +47,14 @@ export async function POST(req: Request) {
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) return jsonError(400, "Invalid payload");
 
-    const cookieToken = guestTokenFromCookies(req.headers.get("cookie"));
+    const cookieToken = builderTokenFromCookies(req.headers.get("cookie"));
     const authToken = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
     const token = parsed.data.token ?? cookieToken ?? authToken;
-    if (!token) return jsonError(401, "Guest session required");
+    if (!token) return jsonError(401, "Sign in to continue with your invitation.");
+
+    const authClient = await createServerClient();
+    const authSession = await getCurrentProfile(authClient);
+    if (!authSession) return jsonError(401, "Sign in to continue with your invitation.");
 
     const limit = await consumeRateLimit({
       bucket: "dev_publish",
@@ -62,8 +67,8 @@ export async function POST(req: Request) {
     }
 
     const supabase = createAdminClient();
-    const draft = await getGuestDraft(supabase, token);
-    if (!draft) return jsonError(404, "Draft not found for this session");
+    const draft = await getOwnedBuilderDraft(supabase, token, authSession.user.id);
+    if (!draft) return jsonError(403, "This draft does not belong to your account.");
 
     const data = (draft.wedding_data ?? {}) as Record<string, unknown>;
 
@@ -123,6 +128,7 @@ export async function POST(req: Request) {
         email: draft.email,
         weddingData: data,
         productId: product.product_id,
+        userId: authSession.user.id,
       });
       weddingId = created.id;
     }

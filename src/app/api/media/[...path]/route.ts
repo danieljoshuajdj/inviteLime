@@ -1,7 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { isAdmin, jsonError } from "@/lib/services/helpers";
-import { guestTokenFromCookies, getGuestDraft } from "@/lib/services/guest";
+import {
+  builderTokenFromCookies,
+  getOwnedBuilderDraft,
+  type BuilderDraft,
+} from "@/lib/services/builder";
 import { getActiveGuestWedding } from "@/lib/services/guest-wedding";
 import {
   isLibraryFolder,
@@ -42,8 +46,8 @@ export async function GET(
   const admin = createAdminClient();
   const weddingFolder = isWeddingFolder(segments.folder);
   let publiclyReadable = false;
-  /** Cookie-authenticated guest token, used to fall back to migrated media. */
-  let draftToken: string | null = null;
+  /** Cookie-authenticated builder draft, used to fall back to migrated media. */
+  let ownedDraft: BuilderDraft | null = null;
 
   if (isLibraryFolder(segments.folder)) {
     // A library object belongs to the platform, not to a caller, so there is no
@@ -93,30 +97,37 @@ export async function GET(
       }
     }
   } else {
-    // A draft is normally authorized by the caller's session cookie. The
-    // builder's preview is the exception: it renders in a `srcDoc` frame
-    // sandboxed without `allow-same-origin`, so that frame has an opaque origin
-    // and can never send the cookie, and the object would be unreachable even
-    // though the payload handed the template a URL for it. A short-lived
-    // signature over the exact object key stands in for the cookie there, and
-    // is scoped tightly enough that it cannot authorize any other object.
+    // A draft is normally authorized by the caller's builder cookie together
+    // with their Supabase session. The builder's preview is the exception: it
+    // renders in a `srcDoc` frame sandboxed without `allow-same-origin`, so
+    // that frame has an opaque origin and can never send the cookie, and the
+    // object would be unreachable even though the payload handed the template a
+    // URL for it. A short-lived signature over the exact object key stands in
+    // for the cookie there, and is scoped tightly enough that it cannot
+    // authorize any other object.
     //
     // The library photo role never parses outside the library folder, so this
     // guard is unreachable in practice; it narrows the type for the role-salt
     // lookup in guestFolderMatches.
     if (!isWeddingMediaRole(segments.role)) return jsonError(404, "Not found");
-    const token = guestTokenFromCookies(req.headers.get("cookie"));
+    const token = builderTokenFromCookies(req.headers.get("cookie"));
     const sig = new URL(req.url).searchParams.get("sig");
     const signed = sig !== null && verifyMediaToken(sig, objectPath);
 
-    let ownsDraft = signed || guestFolderMatches(segments.folder, segments.role, token);
-    if (!ownsDraft && token) {
-      // A live session is required; the folder shape alone is not enough.
-      const draft = await getGuestDraft(admin, token).catch(() => null);
-      ownsDraft = !!draft && guestFolderMatches(segments.folder, segments.role, token);
+    if (token) {
+      const server = await createServerClient();
+      const {
+        data: { user },
+      } = await server.auth.getUser();
+      if (user) {
+        ownedDraft = await getOwnedBuilderDraft(admin, token, user.id).catch(() => null);
+      }
     }
+
+    const ownsDraft =
+      signed ||
+      (ownedDraft !== null && guestFolderMatches(segments.folder, segments.role, token));
     if (!ownsDraft) return jsonError(403, "You do not have access to this media");
-    if (token) draftToken = token;
   }
 
   const storage = await getObjectStorage();
@@ -128,11 +139,8 @@ export async function GET(
   // the portraits and gallery do not turn into alt text. Only the session that
   // owns the draft (verified above) may use this bridge, and only after the
   // original object is gone.
-  if (!object && draftToken) {
-    const draft = await getGuestDraft(admin, draftToken).catch(() => null);
-    const live = draft
-      ? await getActiveGuestWedding(admin, draft.session_id).catch(() => null)
-      : null;
+  if (!object && ownedDraft) {
+    const live = await getActiveGuestWedding(admin, ownedDraft.session_id).catch(() => null);
     if (live) {
       object = await storage.download(
         WEDDING_BUCKET,

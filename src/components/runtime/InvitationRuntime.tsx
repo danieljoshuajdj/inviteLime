@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { normalizeWhatsappNumber, whatsappChatUrl } from "@/lib/phone";
 import { buildRsvpWhatsappText } from "@/lib/runtime/rsvp-bridge";
 import type { PublicWeddingRecord } from "@/lib/services/weddings";
-import type { WeddingData } from "@/lib/builder/defaults";
+import { withVisibleMedia, type WeddingData } from "@/lib/builder/defaults";
 import { firstName, formDefinition, formTypeOf, isBirthdayForm, ordinal } from "@/lib/builder/forms";
 
 interface PlannerBrand {
@@ -43,8 +43,9 @@ export function invitationNav(
   weddingData: WeddingData,
   rsvpEnabled = weddingData.rsvpEnabled
 ): InvitationNavItem[] {
-  const hasGallery = (weddingData.gallery ?? []).length > 0;
-  const formType = formTypeOf(weddingData);
+  const visible = withVisibleMedia(weddingData);
+  const hasGallery = (visible.gallery ?? []).length > 0;
+  const formType = formTypeOf(visible);
   if (isBirthdayForm(formType)) {
     // A birthday has no couple story or ceremonies. The celebration still has
     // a date and venue, while a wish has only its message and images.
@@ -66,6 +67,9 @@ export function invitationNav(
 }
 
 export function InvitationRuntime({ wedding, weddingData, attendingCount, planner }: Props) {
+  // The saved URLs stay untouched so re-enabling a section restores them; only
+  // what the guest sees is filtered by the two media switches.
+  const visibleData = withVisibleMedia(weddingData);
   const [opened, setOpened] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [section, setSection] = useState<Section>("home");
@@ -77,30 +81,30 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
 
   function openInvitation() {
     setOpened(true);
-    if (weddingData.music?.url && audioRef.current) {
+    if (visibleData.music?.url && audioRef.current) {
       audioRef.current.play().catch(() => {});
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const nav = invitationNav(weddingData, wedding.rsvp_toggle);
-  const gallery = weddingData.gallery ?? [];
+  const nav = invitationNav(visibleData, wedding.rsvp_toggle);
+  const gallery = visibleData.gallery ?? [];
   const hasGallery = nav.some((item) => item.id === "gallery");
-  const formType = formTypeOf(weddingData);
+  const formType = formTypeOf(visibleData);
   const birthday = isBirthdayForm(formType);
   const wishes = formType === "birthday_wishes";
   const definition = formDefinition(formType);
-  const celebrantName = (wedding.celebrant_name ?? weddingData.celebrantName ?? "").trim();
-  const groomName = wedding.groom_name ?? weddingData.groomName ?? "";
-  const brideName = wedding.bride_name ?? weddingData.brideName ?? "";
+  const celebrantName = (wedding.celebrant_name ?? visibleData.celebrantName ?? "").trim();
+  const groomName = wedding.groom_name ?? visibleData.groomName ?? "";
+  const brideName = wedding.bride_name ?? visibleData.brideName ?? "";
   const displayName = birthday
     ? celebrantName || "Birthday Star"
     : groomName && brideName
       ? `${firstName(groomName)} & ${firstName(brideName)}`
       : firstName(groomName) || firstName(brideName) || "Our Invitation";
   const heroImg = birthday
-    ? weddingData.mainPhoto ?? weddingData.couplePhoto ?? gallery[0]?.url ?? null
-    : weddingData.couplePhoto ?? gallery[0]?.url ?? null;
+    ? visibleData.mainPhoto ?? visibleData.couplePhoto ?? gallery[0]?.url ?? null
+    : visibleData.couplePhoto ?? gallery[0]?.url ?? null;
   const rsvpEnabled = !birthday && wedding.rsvp_toggle;
 
   if (!opened) {
@@ -120,9 +124,9 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
             {birthday ? definition.invitationLabel : "You're invited"}
           </p>
           <h1 className="max-w-3xl font-heading-3xl !text-ivory-50">{displayName}</h1>
-          {wishes && typeof weddingData.birthdayNumber === "number" && (
+          {wishes && typeof visibleData.birthdayNumber === "number" && (
             <p className="font-heading-lg text-gold-200">
-              {ordinal(weddingData.birthdayNumber)} Birthday
+              {ordinal(visibleData.birthdayNumber)} Birthday
             </p>
           )}
           <button
@@ -133,7 +137,7 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
           >
             <Icon name="play_circle" size="xl" weight="w600" />
           </button>
-          {weddingData.music && <audio ref={audioRef} src={weddingData.music.url} loop preload="none" />}
+          {visibleData.music && <audio ref={audioRef} src={visibleData.music.url} loop preload="none" />}
           <p className="font-body-sm text-ivory-300">Tap to open ✨</p>
         </div>
       </div>
@@ -210,14 +214,14 @@ export function InvitationRuntime({ wedding, weddingData, attendingCount, planne
         {section === "home" && (
           <HomeSection
             wedding={wedding}
-            weddingData={weddingData}
+            weddingData={visibleData}
             visits={visits}
             onNav={setSection}
             rsvpEnabled={rsvpEnabled}
           />
         )}
-        {section === "story" && !birthday && <StorySection weddingData={weddingData} />}
-        {section === "events" && !wishes && <EventsSection weddingData={weddingData} />}
+        {section === "story" && !birthday && <StorySection weddingData={visibleData} />}
+        {section === "events" && !wishes && <EventsSection weddingData={visibleData} />}
         {section === "gallery" && hasGallery && (
           <GallerySection gallery={gallery} birthday={birthday} />
         )}

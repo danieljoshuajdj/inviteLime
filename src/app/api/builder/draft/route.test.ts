@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * The builder autosaves after every step, so the first save carries only the
  * couple names — no wedding date, no venue. Requiring those here made the very
  * first "Continue" fail its save and surface a misleading "fix the fields
- * above" toast. Drafts must accept whatever the guest has filled so far; the
- * strict `weddingDataSchema` still guards publishing.
+ * above" toast. Drafts must accept whatever the customer has filled so far;
+ * the strict `weddingDataSchema` still guards publishing.
  */
 
-const saveGuestDraft = vi.fn<
+const USER_ID = "99999999-9999-4999-8999-999999999999";
+
+const saveBuilderDraft = vi.fn<
   (input: Record<string, unknown>) => Promise<{
     id: string;
     session_id: string;
@@ -20,7 +22,7 @@ const saveGuestDraft = vi.fn<
   wedding_data: {},
 }));
 
-const getGuestDraft = vi.fn(async () => null as Record<string, unknown> | null);
+const getOwnedBuilderDraft = vi.fn(async () => null as Record<string, unknown> | null);
 
 const syncActiveWeddingFromDraft = vi.fn<
   (input: Record<string, unknown>) => Promise<{
@@ -37,9 +39,9 @@ const deleteUnreferencedMediaKeys = vi.fn(async () => ({
   failures: [],
 }));
 
-vi.mock("@/lib/services/guest", () => ({
-  getGuestDraft: (...args: unknown[]) => getGuestDraft(...(args as [])),
-  saveGuestDraft: (input: Record<string, unknown>) => saveGuestDraft(input),
+vi.mock("@/lib/services/builder", () => ({
+  getOwnedBuilderDraft: (...args: unknown[]) => getOwnedBuilderDraft(...(args as [])),
+  saveBuilderDraft: (input: Record<string, unknown>) => saveBuilderDraft(input),
 }));
 
 vi.mock("@/lib/services/guest-wedding", () => ({
@@ -56,6 +58,21 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({}),
 }));
 
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: async () => ({
+    auth: {
+      getUser: async () => ({ data: { user: { id: USER_ID, email: "meera@example.com" } } }),
+    },
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({ data: { id: USER_ID, role: "customer" }, error: null }),
+        }),
+      }),
+    }),
+  }),
+}));
+
 vi.mock("@/lib/services/ops", () => ({
   clientKey: () => "test-client",
   consumeRateLimit: async () => ({ allowed: true }),
@@ -63,12 +80,12 @@ vi.mock("@/lib/services/ops", () => ({
 
 import { POST } from "./route";
 
-const TOKEN = "guest-token-1234567890";
+const TOKEN = "builder-token-1234567890";
 const TEMPLATE_ID = "11111111-1111-4111-8111-111111111111";
 const VERSION_ID = "22222222-2222-4222-8222-222222222222";
 
 function request(body: unknown): Request {
-  return new Request("http://localhost/api/guest/draft", {
+  return new Request("http://localhost/api/builder/draft", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -78,12 +95,17 @@ function request(body: unknown): Request {
 /** Mirrors `weddingDataForDb`: empty fields are stripped before saving. */
 const stepOneData = { brideName: "Meera", groomName: "Aarav" };
 
-describe("POST /api/guest/draft", () => {
+describe("POST /api/builder/draft", () => {
   beforeEach(() => {
-    saveGuestDraft.mockClear();
+    saveBuilderDraft.mockClear();
     syncActiveWeddingFromDraft.mockClear();
-    getGuestDraft.mockReset();
-    getGuestDraft.mockResolvedValue(null);
+    getOwnedBuilderDraft.mockReset();
+    getOwnedBuilderDraft.mockResolvedValue({
+      id: "draft-1",
+      session_id: "session-1",
+      user_id: USER_ID,
+      wedding_data: {},
+    });
     deleteUnreferencedMediaKeys.mockClear();
     syncActiveWeddingFromDraft.mockResolvedValue(null);
   });
@@ -98,13 +120,28 @@ describe("POST /api/guest/draft", () => {
     }));
 
     expect(res.status).toBe(200);
-    expect(saveGuestDraft).toHaveBeenCalledTimes(1);
-    expect(saveGuestDraft.mock.calls[0][0]).toMatchObject({
+    expect(saveBuilderDraft).toHaveBeenCalledTimes(1);
+    expect(saveBuilderDraft.mock.calls[0][0]).toMatchObject({
       token: TOKEN,
+      userId: USER_ID,
       templateId: TEMPLATE_ID,
       templateVersionId: VERSION_ID,
       weddingData: stepOneData,
     });
+  });
+
+  it("rejects a draft that belongs to another account", async () => {
+    getOwnedBuilderDraft.mockResolvedValue(null);
+
+    const res = await POST(request({
+      token: TOKEN,
+      templateId: TEMPLATE_ID,
+      templateVersionId: VERSION_ID,
+      weddingData: stepOneData,
+    }));
+
+    expect(res.status).toBe(403);
+    expect(saveBuilderDraft).not.toHaveBeenCalled();
   });
 
   it("mirrors a save onto the session's published invitation", async () => {
@@ -126,9 +163,10 @@ describe("POST /api/guest/draft", () => {
 
   it("offers media from the previous draft to the reference-aware cleanup", async () => {
     const oldKey = "0123456789abcdef-4-42/gallery/gallery-old.webp";
-    getGuestDraft.mockResolvedValue({
+    getOwnedBuilderDraft.mockResolvedValue({
       id: "draft-1",
       session_id: "session-1",
+      user_id: USER_ID,
       wedding_data: {
         gallery: [{ role: "gallery", url: `/api/media/${oldKey}`, name: "old.webp" }],
       },
@@ -205,7 +243,7 @@ describe("POST /api/guest/draft", () => {
     }));
 
     expect(res.status).toBe(200);
-    expect(saveGuestDraft).toHaveBeenCalledTimes(1);
+    expect(saveBuilderDraft).toHaveBeenCalledTimes(1);
   });
 
   it("still enforces per-field limits on the fields that are present", async () => {
@@ -218,7 +256,7 @@ describe("POST /api/guest/draft", () => {
     }));
 
     expect(res.status).toBe(400);
-    expect(saveGuestDraft).not.toHaveBeenCalled();
+    expect(saveBuilderDraft).not.toHaveBeenCalled();
   });
 
   it("still bounds collection sizes", async () => {
@@ -234,7 +272,7 @@ describe("POST /api/guest/draft", () => {
     }));
 
     expect(res.status).toBe(400);
-    expect(saveGuestDraft).not.toHaveBeenCalled();
+    expect(saveBuilderDraft).not.toHaveBeenCalled();
   });
 
   it("rejects a non-uuid template id", async () => {
@@ -246,6 +284,6 @@ describe("POST /api/guest/draft", () => {
     }));
 
     expect(res.status).toBe(400);
-    expect(saveGuestDraft).not.toHaveBeenCalled();
+    expect(saveBuilderDraft).not.toHaveBeenCalled();
   });
 });

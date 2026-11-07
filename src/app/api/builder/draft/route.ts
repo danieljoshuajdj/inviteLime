@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGuestDraft, saveGuestDraft } from "@/lib/services/guest";
+import { createServerClient } from "@/lib/supabase/server";
+import { getOwnedBuilderDraft, saveBuilderDraft } from "@/lib/services/builder";
 import { syncActiveWeddingFromDraft } from "@/lib/services/guest-wedding";
-import { readBody, jsonError } from "@/lib/services/helpers";
+import { getCurrentProfile, readBody, jsonError } from "@/lib/services/helpers";
 import { mediaKeysInWeddingData } from "@/lib/services/invitation-deletion";
 import { deleteUnreferencedMediaKeys } from "@/lib/services/media-cleanup";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
@@ -21,8 +22,18 @@ const saveDraftSchema = z.object({
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Authenticated builder autosave. The token identifies a draft, but the
+ * Supabase session identifies its owner; both must match.
+ */
 export async function POST(req: Request) {
   try {
+    const authClient = await createServerClient();
+    const sessionUser = await getCurrentProfile(authClient);
+    if (!sessionUser) {
+      return jsonError(401, "Sign in to continue editing your invitation.");
+    }
+
     const body = await readBody(req);
     const parsed = saveDraftSchema.safeParse(body);
     if (!parsed.success) {
@@ -30,10 +41,10 @@ export async function POST(req: Request) {
     }
 
     // The builder autosaves while typing; the ceiling is generous but stops
-    // scripted abuse of the guest draft endpoint.
+    // scripted abuse of the draft endpoint.
     const limit = await consumeRateLimit({
-      bucket: "guest_draft",
-      key: clientKey(req),
+      bucket: "builder_draft",
+      key: sessionUser.user.id || clientKey(req),
       limit: 600,
       windowSeconds: 3600,
     });
@@ -42,12 +53,20 @@ export async function POST(req: Request) {
     }
 
     const admin = createAdminClient();
-    // Needed to find media the save replaced or removed. A failed read must not
-    // block the save itself; the next autosave can retry the cleanup.
-    const previousDraft = await getGuestDraft(admin, parsed.data.token).catch(() => null);
+    // Ownership and the previous content come from the same read. A failed
+    // read is an authorization failure, not something to paper over.
+    const previousDraft = await getOwnedBuilderDraft(
+      admin,
+      parsed.data.token,
+      sessionUser.user.id
+    );
+    if (!previousDraft) {
+      return jsonError(403, "This draft does not belong to your account.");
+    }
 
-    const draft = await saveGuestDraft({
+    const draft = await saveBuilderDraft({
       token: parsed.data.token,
+      userId: sessionUser.user.id,
       templateId: parsed.data.templateId,
       templateVersionId: parsed.data.templateVersionId,
       weddingData: parsed.data.weddingData as Record<string, unknown>,
@@ -92,7 +111,7 @@ export async function POST(req: Request) {
         ...mediaKeysInWeddingData(live?.data),
       ]);
       const candidates = [
-        ...mediaKeysInWeddingData(previousDraft?.wedding_data),
+        ...mediaKeysInWeddingData(previousDraft.wedding_data),
         ...mediaKeysInWeddingData(live?.previousData),
       ].filter((key) => !stillUsed.has(key));
 
@@ -105,13 +124,13 @@ export async function POST(req: Request) {
       });
 
       if (cleanup.failures.length > 0) {
-        console.warn("[guest-draft] media cleanup incomplete", {
+        console.warn("[builder-draft] media cleanup incomplete", {
           failures: cleanup.failures.slice(0, 5),
         });
       }
     } catch (err) {
       // Never fail a save that has already committed because cleanup did not.
-      console.warn("[guest-draft] media cleanup failed", err);
+      console.warn("[builder-draft] media cleanup failed", err);
     }
 
     return Response.json({ draft, live });

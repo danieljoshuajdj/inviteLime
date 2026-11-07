@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useCallback, useEffect, useRef } from "react";
 
 import { Icon } from "@/components/shared/Icon";
+import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { InfiniteScrollFooter } from "@/components/shared/InfiniteScrollFooter";
 import { categorySlug, matchesSelectedCategories } from "@/components/account/explore-filter";
 import type { RuntimePlannerBrand } from "@/lib/runtime/payload";
@@ -351,12 +352,12 @@ export function ExploreGrid({
                     <Icon name="visibility" size="sm" />
                     Demo
                   </button>
-                  <Link
-                    href={`/create/new?template=${t.slug}`}
+                  <StartCreationLink
+                    templateSlug={t.slug}
                     className="inline-flex h-9 w-full items-center justify-center rounded-full bg-primary px-3 font-body-sm font-semibold tracking-wide text-white transition-all hover:bg-[#2a2a26] active:scale-[0.98]"
                   >
                     Use
-                  </Link>
+                  </StartCreationLink>
                 </div>
               </div>
             </article>
@@ -427,14 +428,14 @@ export function ExploreGrid({
                 >
                   <Icon name="open_in_new" size="sm" />
                 </Link>
-                <Link
-                  href={`/create/new?template=${demoTemplate.slug}`}
+                <StartCreationLink
+                  templateSlug={demoTemplate.slug}
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-primary px-3 font-body-sm font-semibold tracking-wide text-white transition-all hover:bg-[#2a2a26] active:scale-[0.98] sm:px-4"
                 >
                   <span className="hidden sm:inline">Choose this template</span>
                   <span className="sm:hidden">Use</span>
                   <Icon name="arrow_forward" size="sm" />
-                </Link>
+                </StartCreationLink>
               </div>
             </div>
 
