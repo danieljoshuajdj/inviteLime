@@ -27,21 +27,21 @@ const steps: { icon: IconName; title: string; body: string }[] = [
 
 export function Workflow() {
   return (
-    <section className="bg-ivory-100/70 py-20">
+    <section className="bg-ivory-100/70 py-10 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-sapphire-600">
             How it works
           </p>
-          <h2 className="mt-3 font-heading-2xl text-ivory-950">
+          <h2 className="mt-2 font-heading-2xl text-ivory-950 sm:mt-3">
             From first idea to RSVPs rolling in
           </h2>
-          <p className="mt-4 font-body-lg text-navy-800">
+          <p className="mt-3 font-body-lg text-navy-800 sm:mt-4">
             A personal website experience, ready in minutes — beautifully.
           </p>
         </div>
 
-        <div className="relative mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative mt-8 grid gap-6 sm:mt-14 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
           <div className="pointer-events-none absolute left-0 right-0 top-[52px] hidden border-t-2 border-dashed border-sapphire-300/60 lg:block" />
           {steps.map((s, i) => (
             <div key={s.title} className="relative">
@@ -51,13 +51,13 @@ export function Workflow() {
                   {i + 1}
                 </span>
               </div>
-              <h3 className="mt-5 font-heading-md font-semibold text-ivory-950">{s.title}</h3>
+              <h3 className="mt-4 font-heading-md font-semibold text-ivory-950 sm:mt-5">{s.title}</h3>
               <p className="mt-2 font-body-sm leading-relaxed text-navy-800">{s.body}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-14 text-center">
+        <div className="mt-8 text-center sm:mt-14">
           <Link
             href="/create/browse"
             className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-ivory-950 px-8 font-body-md font-semibold text-ivory-50 transition-transform hover:scale-[1.02]"

@@ -6,6 +6,9 @@
  *   <h1 data-wedding="couple.bride.name"></h1>
  *   <img data-wedding-image="couple.bride.photo">
  *   <a data-wedding-href="wedding.mapsUrl">View Location</a>
+ *   <a data-wedding-href="site.websiteUrl" target="_blank" rel="noopener noreferrer">
+ *     Visit Our Website
+ *   </a>
  *
  * and the platform fills them in. Templates never query the database and never
  * see platform credentials; they only receive public invitation data.
@@ -30,6 +33,15 @@ const PATH_ALIASES = new Map<string, string>([
   ["couple.groom.photo", "wedding.photos.groom"],
   ["couple.couplePhoto", "wedding.photos.couple"],
   ["couple.story", "wedding.story"],
+  ["celebrant.name", "wedding.celebrantName"],
+  ["celebrant.photo", "wedding.photos.main"],
+  ["birthday.person.name", "wedding.celebrantName"],
+  ["birthday.number", "wedding.birthdayNumber"],
+  ["birthday.ordinal", "wedding.birthdayOrdinal"],
+  ["birthday.message", "wedding.specialMessage"],
+  ["birthday.mainPhoto", "wedding.photos.main"],
+  // Compatibility alias for templates written against the website vocabulary.
+  ["website.url", "site.websiteUrl"],
 ]);
 
 /** URL prefixes a template may be handed. Everything else is dropped. */
@@ -121,6 +133,14 @@ function inviteLimeBindingRuntime(): void {
     ["couple.groom.photo", "wedding.photos.groom"],
     ["couple.couplePhoto", "wedding.photos.couple"],
     ["couple.story", "wedding.story"],
+    ["celebrant.name", "wedding.celebrantName"],
+    ["celebrant.photo", "wedding.photos.main"],
+    ["birthday.person.name", "wedding.celebrantName"],
+    ["birthday.number", "wedding.birthdayNumber"],
+    ["birthday.ordinal", "wedding.birthdayOrdinal"],
+    ["birthday.message", "wedding.specialMessage"],
+    ["birthday.mainPhoto", "wedding.photos.main"],
+    ["website.url", "site.websiteUrl"],
   ]);
   const SAFE_URL = /^(?:https?:|mailto:|tel:|\/|#)/i;
   const HAS_SCHEME = /^[a-z][a-z0-9+.\-]*:/i;

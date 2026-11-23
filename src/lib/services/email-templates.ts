@@ -4,10 +4,16 @@ interface InvitationEmailData {
   invitationUrl: string;
   expirationDate: string;
   appUrl: string;
+  /** e.g. "Wedding Invitation", "Birthday Celebration". */
+  invitationLabel?: string;
+  /** Label above the date, e.g. "Engagement Date". Omitted for wishes. */
+  dateLabel?: string;
 }
 
 export function renderInvitationPublishedEmail(data: InvitationEmailData) {
-  const subject = `Wedding Invitation Ready — ${data.coupleNames}`;
+  const invitationLabel = data.invitationLabel?.trim() || "Wedding Invitation";
+  const dateLabel = data.dateLabel?.trim() || "Wedding Date";
+  const subject = `${invitationLabel} Ready — ${data.coupleNames}`;
   const html = `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background:#fef9f2;font-family:'Helvetica Neue',Arial,sans-serif;">
@@ -19,7 +25,7 @@ export function renderInvitationPublishedEmail(data: InvitationEmailData) {
         </tr>
         <tr><td style="padding:36px 32px;">
           <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#775a19;font-weight:700;margin-bottom:12px;">Invite Lime Atelier</div>
-          <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-weight:500;color:#1d1c18;font-size:26px;">Your Wedding Invitation is Ready &amp; Live</h1>
+          <h1 style="margin:0 0 8px 0;font-family:Georgia,'Times New Roman',serif;font-weight:500;color:#1d1c18;font-size:26px;">Your ${invitationLabel} is Ready &amp; Live</h1>
           <p style="margin:0 0 24px 0;color:#45464c;font-size:15px;line-height:1.6;">
             Congratulations, <strong>${data.coupleNames}</strong>! Your personalized invitation website has been
             published and is now visible to every guest you share it with.
@@ -27,9 +33,13 @@ export function renderInvitationPublishedEmail(data: InvitationEmailData) {
 
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f3ec;border-radius:10px;">
             <tr><td style="padding:20px;">
-              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#76777d;margin-bottom:6px;">Wedding Date</div>
+              ${
+                data.weddingDate
+                  ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#76777d;margin-bottom:6px;">${dateLabel}</div>
               <div style="font-size:16px;color:#1d1c18;font-weight:600;">${data.weddingDate}</div>
-              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#76777d;margin:16px 0 6px;">Active Until</div>
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#76777d;margin:16px 0 6px;">Active Until</div>`
+                  : `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#76777d;margin-bottom:6px;">Active Until</div>`
+              }
               <div style="font-size:16px;color:#1d1c18;font-weight:600;">${data.expirationDate}</div>
             </td></tr>
           </table>
@@ -59,9 +69,8 @@ export function renderInvitationPublishedEmail(data: InvitationEmailData) {
   </table>
 </body>
 </html>`;
-  const text = `Your Wedding Invitation is Ready, ${data.coupleNames}.
-
-Wedding Date: ${data.weddingDate}
+  const text = `Your ${invitationLabel} is Ready, ${data.coupleNames}.
+${data.weddingDate ? `\n${dateLabel}: ${data.weddingDate}` : ""}
 Active Until: ${data.expirationDate}
 Invitation Link: ${data.invitationUrl}
 

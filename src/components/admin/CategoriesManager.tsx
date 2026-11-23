@@ -4,9 +4,10 @@ import { useState } from "react";
 
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
-import { TextInput, Textarea, FieldWrap } from "@/components/shared/Field";
+import { TextInput, Textarea, FieldWrap, Select } from "@/components/shared/Field";
 import { Modal } from "@/components/shared/Modal";
 import { toast } from "@/components/account/toast";
+import { EVENT_CATEGORIES, formTypeFromCategorySlug } from "@/lib/builder/forms";
 
 interface CategoryRow {
   id: string;
@@ -14,6 +15,11 @@ interface CategoryRow {
   slug: string;
   description: string | null;
   templateCount: number;
+}
+
+/** The four slugs that define the builder's event forms (see forms.ts). */
+function isBuiltIn(slug: string): boolean {
+  return formTypeFromCategorySlug(slug) !== null;
 }
 
 /**
@@ -36,21 +42,25 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
   const [deleting, setDeleting] = useState<CategoryRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
-  // Create form: the slug trails the name until the admin types their own.
+  // Create form: the category is chosen from the built-in event forms, so its
+  // slug (and therefore its form) can never be arbitrary.
   const [draftName, setDraftName] = useState("");
   const [draftSlug, setDraftSlug] = useState("");
-  const [slugLocked, setSlugLocked] = useState(false);
-  // Edit form: only a slug that still matches its name follows renames — a
-  // hand-written slug must not be overwritten by accident.
+  // Edit form: only a legacy, non-event slug that still matches its name
+  // follows renames. Built-in slugs are fixed.
   const [editName, setEditName] = useState("");
   const [editSlug, setEditSlug] = useState("");
   const [editSlugLocked, setEditSlugLocked] = useState(false);
 
+  const missing = EVENT_CATEGORIES.filter(
+    (category) => !rows.some((row) => row.slug === category.slug)
+  );
+
   function openCreate() {
     setDirty(false);
-    setDraftName("");
-    setDraftSlug("");
-    setSlugLocked(false);
+    const first = missing[0];
+    setDraftName(first?.name ?? "");
+    setDraftSlug(first?.slug ?? "");
     setCreating(true);
   }
 
@@ -58,7 +68,7 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
     setDirty(false);
     setEditName(category.name);
     setEditSlug(category.slug);
-    setEditSlugLocked(category.slug !== slugify(category.name));
+    setEditSlugLocked(isBuiltIn(category.slug) || category.slug !== slugify(category.name));
     setEditing(category);
   }
 
@@ -72,7 +82,7 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: draftName.trim(),
-          slug: slugify(draftSlug),
+          slug: draftSlug,
           description: String(fd.get("description") ?? ""),
         }),
       });
@@ -84,7 +94,6 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
       setDirty(false);
       setDraftName("");
       setDraftSlug("");
-      setSlugLocked(false);
     } catch (err) {
       toast("Could not create category", (err as Error).message);
     } finally {
@@ -98,12 +107,16 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
     const fd = new FormData(e.currentTarget);
     setBusy(true);
     try {
+      const slug = slugify(editSlug);
       const res = await fetch(`/api/admin/categories/${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editName.trim(),
-          slug: slugify(editSlug),
+          // A built-in slug is fixed: it selects the builder form, and the API
+          // rejects arbitrary replacements. Send it only when a legacy row's
+          // slug was actually edited.
+          ...(slug !== editing.slug ? { slug } : {}),
           description: String(fd.get("description") ?? ""),
         }),
       });
@@ -144,13 +157,21 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
         <div>
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">Library</p>
           <h1 className="mt-1 font-heading-2xl !text-on-surface">Categories</h1>
+          <p className="mt-1 max-w-2xl font-body-sm text-on-surface-variant">
+            The four event categories decide which builder form a template opens. Their
+            slugs are fixed, and each template belongs to exactly one of them.
+          </p>
         </div>
-        <Button icon="add" onClick={openCreate}>New category</Button>
+        <Button icon="add" onClick={openCreate} disabled={missing.length === 0}>
+          {missing.length === 0 ? "All categories present" : "Add missing category"}
+        </Button>
       </div>
 
       {rows.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-outline-variant p-12 text-center">
-          <p className="font-body-sm text-on-surface-variant">No categories yet. Create the first one to organize your template library.</p>
+          <p className="font-body-sm text-on-surface-variant">
+            No categories yet. Add the four event categories to organize your template library.
+          </p>
         </div>
       ) : (
         <div className="mt-6 flex flex-col gap-3">
@@ -167,7 +188,9 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" icon="edit" onClick={() => openEdit(c)}>Edit</Button>
-                <Button variant="danger" size="sm" icon="delete" onClick={() => setDeleting(c)}>Delete</Button>
+                {!isBuiltIn(c.slug) && (
+                  <Button variant="danger" size="sm" icon="delete" onClick={() => setDeleting(c)}>Delete</Button>
+                )}
               </div>
             </div>
           ))}
@@ -176,28 +199,30 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
 
       <Modal open={creating} onClose={() => { setDirty(false); setCreating(false); }} title="New category" icon="category" blockBackdropClose={dirty}>
         <form onSubmit={create} onInput={() => setDirty(true)} className="flex flex-col gap-4">
-          <TextInput
-            label="Name"
-            name="name"
-            placeholder="e.g. Villa destination"
+          <Select
+            label="Event category"
+            name="category"
             required
-            value={draftName}
+            value={draftSlug}
+            placeholder="Select an event category"
+            options={missing.map((category) => ({
+              value: category.slug,
+              label: category.name,
+            }))}
+            hint="The category determines which builder form every template in it uses."
             onChange={(e) => {
-              setDraftName(e.target.value);
-              if (!slugLocked) setDraftSlug(slugify(e.target.value));
+              const slug = (e.target as HTMLSelectElement).value;
+              setDraftSlug(slug);
+              setDraftName(EVENT_CATEGORIES.find((category) => category.slug === slug)?.name ?? "");
             }}
           />
           <TextInput
-            label="Slug"
-            name="slug"
-            placeholder="villa-destination"
+            label="Display name"
+            name="name"
+            placeholder="e.g. Birthday Celebration"
             required
-            hint="Auto-filled from the name. Typing your own locks it. Lowercase letters, numbers and dashes."
-            value={draftSlug}
-            onChange={(e) => {
-              setDraftSlug(e.target.value);
-              setSlugLocked(true);
-            }}
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
           />
           <Textarea label="Description" name="description" rows={2} />
           <FieldWrap>
@@ -223,7 +248,12 @@ export function CategoriesManager({ categories }: { categories: CategoryRow[] })
               label="Slug"
               name="slug"
               required
-              hint="Follows the name unless it was set manually. Lowercase letters, numbers and dashes."
+              disabled={isBuiltIn(editing.slug)}
+              hint={
+                isBuiltIn(editing.slug)
+                  ? "Fixed — the slug selects the builder form this category opens."
+                  : "Follows the name unless it was set manually. Lowercase letters, numbers and dashes."
+              }
               value={editSlug}
               onChange={(e) => {
                 setEditSlug(e.target.value);

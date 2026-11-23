@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isFormType, type FormType } from "@/lib/builder/forms";
 import {
   MAX_MEDIA_BYTES as CLIENT_MAX_MEDIA_BYTES,
   MEDIA_PACK_ROLES,
@@ -54,6 +55,7 @@ interface RawPackRow {
   id: string;
   name: string;
   description: string | null;
+  form_type: FormType | string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,7 +71,7 @@ interface RawItemRow {
   created_at: string;
 }
 
-const PACK_COLUMNS = "id, name, description, created_at, updated_at";
+const PACK_COLUMNS = "id, name, description, form_type, created_at, updated_at";
 const ITEM_COLUMNS =
   "id, pack_id, role, public_url, mime_type, size_bytes, sort_order, created_at";
 
@@ -78,6 +80,9 @@ function mapPack(row: RawPackRow): Omit<MediaPack, "items" | "templateCount"> {
     id: row.id,
     name: row.name,
     description: row.description,
+    // Older rows predate categories; the migration backfills them to wedding,
+    // and this fallback keeps a partially migrated database readable.
+    formType: isFormType(row.form_type) ? row.form_type : "wedding",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -106,7 +111,8 @@ export class MediaPackValidationError extends Error {
       | "FILE_TOO_LARGE"
       | "MISSING_FILE"
       | "INVALID_NAME"
-      | "INVALID_ROLE",
+      | "INVALID_ROLE"
+      | "INVALID_FORM",
     message: string
   ) {
     super(message);
@@ -239,6 +245,15 @@ export function normalizePackDescription(raw: unknown): string | null {
   return description.length > 0 ? description.slice(0, 300) : null;
 }
 
+/** The category/form a pack belongs to. Required on create, immutable afterwards. */
+export function normalizePackFormType(raw: unknown): FormType {
+  const value = typeof raw === "string" ? raw.trim() : raw;
+  if (!isFormType(value)) {
+    throw new MediaPackValidationError("INVALID_FORM", "Choose an event category for this pack");
+  }
+  return value;
+}
+
 export function normalizePackRole(raw: unknown): MediaPackRole {
   const role = typeof raw === "string" ? raw.trim().toLowerCase() : "";
   if (!(MEDIA_PACK_ROLES as readonly string[]).includes(role)) {
@@ -294,14 +309,16 @@ export async function listMediaPacks(): Promise<MediaPack[]> {
 export async function createMediaPack(input: {
   name: unknown;
   description: unknown;
+  formType: unknown;
 }): Promise<MediaPack> {
   const name = normalizePackName(input.name);
   const description = normalizePackDescription(input.description);
+  const formType = normalizePackFormType(input.formType);
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("media_packs")
-    .insert({ name, description })
+    .insert({ name, description, form_type: formType })
     .select(PACK_COLUMNS)
     .single();
   if (error) throw new Error(error.message);
@@ -311,11 +328,12 @@ export async function createMediaPack(input: {
 
 export async function updateMediaPack(
   id: string,
-  input: { name?: unknown; description?: unknown }
+  input: { name?: unknown; description?: unknown; formType?: unknown }
 ): Promise<void> {
-  const update: { name?: string; description?: string | null } = {};
+  const update: { name?: string; description?: string | null; form_type?: FormType } = {};
   if (input.name !== undefined) update.name = normalizePackName(input.name);
   if (input.description !== undefined) update.description = normalizePackDescription(input.description);
+  if (input.formType !== undefined) update.form_type = normalizePackFormType(input.formType);
   if (Object.keys(update).length === 0) {
     throw new MediaPackValidationError("INVALID_NAME", "Nothing to update");
   }
@@ -430,18 +448,50 @@ export async function uploadMediaPackItem(input: {
   const item = mapItem(data as unknown as RawItemRow);
 
   if (input.role !== "gallery") {
-    const { data: previous } = await admin
+    const { data: previous, error: previousError } = await admin
       .from("media_pack_items")
       .select("id, storage_key")
       .eq("pack_id", input.packId)
       .eq("role", input.role)
       .neq("id", item.id);
 
+    if (previousError) {
+      console.warn("[media-packs] could not list replaced photos", {
+        packId: input.packId,
+        role: input.role,
+        error: previousError.message,
+      });
+    }
+
     const stale = (previous ?? []) as Array<{ id: string; storage_key: string }>;
-    if (stale.length > 0) {
-      await admin.from("media_pack_items").delete().in("id", stale.map((row) => row.id));
-      for (const row of stale) {
-        await storage.delete(WEDDING_BUCKET, row.storage_key).catch(() => {});
+    const removedIds: string[] = [];
+    for (const row of stale) {
+      try {
+        // Object first: if B2 refuses, the row survives and a later replacement
+        // finds it again instead of leaving an unreachable orphan behind.
+        await storage.delete(WEDDING_BUCKET, row.storage_key);
+        removedIds.push(row.id);
+      } catch (err) {
+        console.warn("[media-packs] replaced photo object could not be removed; row kept for retry", {
+          packId: input.packId,
+          role: input.role,
+          storageKey: row.storage_key,
+          error: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+
+    if (removedIds.length > 0) {
+      const { error: deleteError } = await admin
+        .from("media_pack_items")
+        .delete()
+        .in("id", removedIds);
+      if (deleteError) {
+        console.warn("[media-packs] replaced photo rows could not be removed", {
+          packId: input.packId,
+          role: input.role,
+          error: deleteError.message,
+        });
       }
     }
   }
@@ -538,19 +588,36 @@ export function buildPackDemoMedia(
 }
 
 /**
- * Pack media for rendering a demo, or null when the pack is missing or empty,
- * so callers keep the stock demo data.
+ * Pack media for rendering a demo, or null when the pack is missing, empty or
+ * authored for another category, so callers keep the stock demo data.
+ *
+ * `expectedFormType` is the form the template renders. Passing it here keeps a
+ * wedding pack out of a birthday demo even if a stale assignment survived a
+ * category change.
  */
-export async function getPackDemoMedia(packId: string): Promise<PackDemoMedia | null> {
+export async function getPackDemoMedia(
+  packId: string,
+  expectedFormType?: FormType
+): Promise<PackDemoMedia | null> {
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("media_pack_items")
-    .select(ITEM_COLUMNS)
-    .eq("pack_id", packId)
-    .order("sort_order", { ascending: true });
-  if (error) throw new Error(error.message);
+  const [packRes, itemsRes] = await Promise.all([
+    admin.from("media_packs").select("form_type").eq("id", packId).maybeSingle(),
+    admin
+      .from("media_pack_items")
+      .select(ITEM_COLUMNS)
+      .eq("pack_id", packId)
+      .order("sort_order", { ascending: true }),
+  ]);
+  if (packRes.error) throw new Error(packRes.error.message);
+  if (itemsRes.error) throw new Error(itemsRes.error.message);
 
-  const items = ((data ?? []) as unknown as RawItemRow[]).map(mapItem);
+  const pack = packRes.data as { form_type: FormType | string | null } | null;
+  if (!pack) return null;
+
+  const packFormType = isFormType(pack.form_type) ? pack.form_type : "wedding";
+  if (expectedFormType && packFormType !== expectedFormType) return null;
+
+  const items = ((itemsRes.data ?? []) as unknown as RawItemRow[]).map(mapItem);
   if (items.length === 0) return null;
   return buildPackDemoMedia(items);
 }

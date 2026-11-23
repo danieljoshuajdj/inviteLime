@@ -12,7 +12,15 @@ function navMarkup(initialData: WeddingData): string {
       token: "token",
       initialData,
       draftEmail: null,
-      template: { id: "t1", name: "Testing", slug: "testing", pricePaise: 0, currency: "INR", versionId: "v1" },
+      template: {
+        id: "t1",
+        name: "Testing",
+        slug: "testing",
+        pricePaise: 0,
+        currency: "INR",
+        versionId: "v1",
+        allowsImageUpload: true,
+      },
       devBypassEnabled: false,
     } satisfies BuilderProps)
   );

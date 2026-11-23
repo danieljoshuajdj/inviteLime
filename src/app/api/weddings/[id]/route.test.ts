@@ -16,6 +16,7 @@ interface WeddingRow {
   rsvp_toggle: boolean;
   status: string;
   slug: string;
+  guest_session_id?: string | null;
   wedding_data: Record<string, unknown>;
 }
 
@@ -62,6 +63,11 @@ const purgeWedding = vi.fn(async () => ({
   prefixes: [],
 }));
 const consumeRateLimit = vi.fn(async () => ({ allowed: true }));
+const deleteUnreferencedMediaKeys = vi.fn(async () => ({
+  deleted: [],
+  kept: [],
+  failures: [],
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
@@ -82,6 +88,10 @@ vi.mock("@/lib/services/wedding-purge", () => ({
     objectsDeleted = 0;
     failures: Array<{ key: string; detail: string }> = [];
   },
+}));
+vi.mock("@/lib/services/media-cleanup", () => ({
+  deleteUnreferencedMediaKeys: (...args: unknown[]) =>
+    deleteUnreferencedMediaKeys(...(args as [])),
 }));
 
 const media = {
@@ -110,6 +120,7 @@ function seedWedding() {
     rsvp_toggle: true,
     status: "active",
     slug: "bride-and-groom",
+    guest_session_id: null,
     wedding_data: {
       ...media,
       // Legacy rows can contain null here; the editor must receive a safe
@@ -149,6 +160,8 @@ describe("/api/weddings/[id] media", () => {
     state.update = null;
     state.profileRole = "planner";
     seedWedding();
+    deleteUnreferencedMediaKeys.mockClear();
+    deleteUnreferencedMediaKeys.mockResolvedValue({ deleted: [], kept: [], failures: [] });
   });
 
   it("returns photos, gallery and music for the account editor", async () => {
@@ -167,6 +180,28 @@ describe("/api/weddings/[id] media", () => {
     expect(json.music).toEqual(media.music);
     expect(json.mapsUrl).toBeNull();
     expect(json.weddingTime).toBe("18:00");
+  });
+
+  it("persists the independent photo and gallery switches", async () => {
+    const res = await patch({
+      brideName: "Bride",
+      groomName: "Groom",
+      dress: null,
+      weddingDate: "2026-12-12",
+      weddingTime: "18:00",
+      venue: "The Hall",
+      address: "",
+      mapsUrl: null,
+      events: [],
+      ...media,
+      includePhotos: false,
+      includeGallery: true,
+    });
+
+    expect(res.status).toBe(200);
+    const stored = (state.update?.wedding_data ?? {}) as Record<string, unknown>;
+    expect(stored.includePhotos).toBe(false);
+    expect(stored.includeGallery).toBe(true);
   });
 
   it("persists photo, gallery and music edits into wedding_data", async () => {
@@ -217,6 +252,20 @@ describe("/api/weddings/[id] media", () => {
     expect(stored.groomPhoto).toBeNull();
     expect(stored.couplePhoto).toBeNull();
     expect(stored.music).toBeNull();
+
+    expect(deleteUnreferencedMediaKeys).toHaveBeenCalledWith(
+      [
+        "wedding/bride/bride.webp",
+        "wedding/groom/groom.webp",
+        "wedding/couple/couple.webp",
+        "wedding/gallery/one.webp",
+        "wedding/music/track.mp3",
+      ],
+      expect.objectContaining({
+        weddingId: WEDDING_ID,
+        includeStaleWeddingMedia: true,
+      })
+    );
   });
 });
 

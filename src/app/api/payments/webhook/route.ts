@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { publishWedding, invitationUrl } from "@/lib/services/weddings";
+import { resolveConfiguredAppOrigin } from "@/lib/services/app-origin";
 import { sendEmail, renderInvitationPublishedEmail } from "@/lib/services/email";
 import { recordEvent } from "@/lib/services/analytics";
 import { linkInvitationToCustomer } from "@/lib/services/account-linking";
@@ -228,8 +229,12 @@ export async function POST(req: Request) {
 
   void recordEvent("wedding_published", { wedding_id: weddingId, source: "webhook" });
 
+  // A webhook has no browser request, so only the configured deployment
+  // origin is safe for permanent links and emails.
+  const appOrigin = resolveConfiguredAppOrigin();
+
   // Attach the invitation to the buyer's account and email the access link.
-  void linkInvitationToCustomer(weddingId).then((linked) => {
+  void linkInvitationToCustomer(weddingId, { origin: appOrigin }).then((linked) => {
     if (!linked.linked) {
       console.warn("[payments] account linking skipped", { weddingId, reason: linked.reason });
     }
@@ -242,9 +247,9 @@ export async function POST(req: Request) {
         ...renderInvitationPublishedEmail({
           coupleNames: `${published.groom_name ?? "—"} & ${published.bride_name ?? "—"}`,
           weddingDate: published.wedding_date ?? "",
-          invitationUrl: invitationUrl(published.slug),
+          invitationUrl: invitationUrl(published.slug, appOrigin),
           expirationDate: published.expiration_date ?? "",
-          appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000/app/explore",
+          appUrl: `${appOrigin}/app/explore`,
         }),
         templateKey: "invitation_published",
         weddingId,

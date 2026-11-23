@@ -27,6 +27,8 @@ export interface BuilderProps {
     /** ISO-4217 currency the price is denominated in (geo-detected). */
     currency: string;
     versionId: string;
+    /** When false the create form hides every photo control. */
+    allowsImageUpload: boolean;
   };
   /** Present only when this draft belongs to a planner account. */
   planner?: {
@@ -70,7 +72,7 @@ export function BuilderHost({
     dataRef.current = data;
   }, [data]);
 
-  const steps = buildStepper(data);
+  const steps = buildStepper(data, data.formType);
 
   const pushToast = useCallback((kind: ToastMessage["kind"], title: string, description?: string) => {
     const id = Date.now() + Math.random();
@@ -85,7 +87,7 @@ export function BuilderHost({
   const save = useCallback(
     async (payload = dataRef.current, opts: { silent?: boolean } = {}) => {
       try {
-        const res = await fetch("/api/guest/draft", {
+        const res = await fetch("/api/builder/draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -96,6 +98,10 @@ export function BuilderHost({
             email,
           }),
         });
+        if (res.status === 401) {
+          window.location.href = `/login?next=${encodeURIComponent(`/create/${token}`)}`;
+          return false;
+        }
         const json = (await res.json()) as { draft?: unknown; error?: string };
         if (!res.ok) throw new Error(json.error ?? "Autosave failed");
         setDirty(false);
@@ -252,7 +258,13 @@ export function BuilderHost({
       {/* Step body */}
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
         {step === 0 && (
-          <StepDetails token={token} data={data} onChange={update} onNext={goNext} />
+          <StepDetails
+            token={token}
+            data={data}
+            onChange={update}
+            onNext={goNext}
+            showPhotos={template.allowsImageUpload !== false}
+          />
         )}
         {step === 1 && (
           <StepPreview

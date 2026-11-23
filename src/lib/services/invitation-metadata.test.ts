@@ -36,6 +36,21 @@ describe("invitation link metadata", () => {
     expect(metadata.alternates?.canonical).toContain("/w/khan-weds-maya");
   });
 
+  it("uses the resolved public origin for canonical and Open Graph URLs", () => {
+    const metadata = buildInvitationMetadata({
+      ...invitation,
+      brandName: null,
+      origin: "https://tunnel.example.com",
+    });
+
+    expect(metadata.alternates?.canonical).toBe(
+      "https://tunnel.example.com/w/khan-weds-maya"
+    );
+    expect(metadata.openGraph?.url).toBe(
+      "https://tunnel.example.com/w/khan-weds-maya"
+    );
+  });
+
   it("keeps one-time invitations unbranded", () => {
     const metadata = buildInvitationMetadata({
       ...invitation,

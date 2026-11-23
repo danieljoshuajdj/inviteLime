@@ -1,7 +1,9 @@
 import { publishWedding, invitationUrl, type PublishedInvitation } from "./weddings";
+import { resolveConfiguredAppOrigin } from "./app-origin";
 import { sendEmail, renderInvitationPublishedEmail } from "./email";
 import { recordEvent } from "./analytics";
 import { linkInvitationToCustomer } from "./account-linking";
+import { formDefinition, formTypeOrDefault, isBirthdayForm } from "@/lib/builder/forms";
 
 /**
  * The step that turns a paid draft into a live invitation.
@@ -25,15 +27,23 @@ export async function finalizePaidWedding(input: {
   currency: string;
   /** Distinguishes the browser verify path from the webhook path in logs. */
   source: "verify" | "webhook" | "dev" | "planner_plan";
+  /**
+   * Canonical public origin for links and emails. Request-driven callers pass
+   * the resolved public origin; webhooks/background jobs omit it and use the
+   * configured deployment origin.
+   */
+  appOrigin?: string;
 }): Promise<{ published: PublishedInvitation; coupleEmail: { to: string; subject: string; html: string } | null }> {
   const published = await publishWedding(input.weddingId);
+  const appOrigin = input.appOrigin ?? resolveConfiguredAppOrigin();
+  const liveInvitationUrl = invitationUrl(published.slug, appOrigin);
 
   void recordEvent("wedding_published", { wedding_id: input.weddingId });
 
   // Post-purchase account linking: attaches the invitation to the buyer's
   // account (creating a passwordless customer account when needed) and emails
   // the account access link. A failure here never invalidates the purchase.
-  void linkInvitationToCustomer(input.weddingId).then((linked) => {
+  void linkInvitationToCustomer(input.weddingId, { origin: appOrigin }).then((linked) => {
     if (!linked.linked) {
       console.warn("[finalize] account linking skipped", {
         weddingId: input.weddingId,
@@ -45,12 +55,20 @@ export async function finalizePaidWedding(input: {
   // Notify the couple with their live link (deduped per recipient).
   let coupleEmail: { to: string; subject: string; html: string } | null = null;
   if (published.email) {
+    const formType = formTypeOrDefault(published.form_type);
+    const definition = formDefinition(formType);
+    const birthday = isBirthdayForm(formType);
+    const subjectName = birthday
+      ? published.celebrant_name?.trim() || "Birthday Star"
+      : [published.groom_name, published.bride_name].filter(Boolean).join(" & ") || "Your invitation";
     const rendered = renderInvitationPublishedEmail({
-      coupleNames: `${published.groom_name ?? "—"} & ${published.bride_name ?? "—"}`,
+      coupleNames: subjectName,
       weddingDate: published.wedding_date ?? "",
-      invitationUrl: invitationUrl(published.slug),
+      invitationLabel: definition.invitationLabel,
+      dateLabel: definition.dateLabel || undefined,
+      invitationUrl: liveInvitationUrl,
       expirationDate: published.expiration_date ?? "",
-      appUrl: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000/app/explore",
+      appUrl: `${appOrigin}/app/explore`,
     });
     coupleEmail = { to: published.email, subject: rendered.subject, html: rendered.html };
     void sendEmail(
@@ -65,7 +83,7 @@ export async function finalizePaidWedding(input: {
     void sendEmail({
       to: process.env.EMAIL_FROM || "orders@invite-lime.example",
       subject: `[Invite Lime] New order ${input.weddingId} — ${input.pricePaise / 100} ${input.currency}`,
-      html: `<p>Wedding ${input.weddingId} published (${input.source}): <a href="${invitationUrl(published.slug)}">${invitationUrl(published.slug)}</a></p>`,
+      html: `<p>Invitation ${input.weddingId} published (${input.source}): <a href="${liveInvitationUrl}">${liveInvitationUrl}</a></p>`,
       templateKey: "notify_admin_order",
       weddingId: input.weddingId,
     }).catch(() => {});

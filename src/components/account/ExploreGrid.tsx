@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState, useCallback, useEffect, useRef } from "react";
 
 import { Icon } from "@/components/shared/Icon";
+import { PulseLoader } from "@/components/shared/PulseLoader";
+import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { InfiniteScrollFooter } from "@/components/shared/InfiniteScrollFooter";
 import { categorySlug, matchesSelectedCategories } from "@/components/account/explore-filter";
 import type { RuntimePlannerBrand } from "@/lib/runtime/payload";
@@ -351,12 +353,12 @@ export function ExploreGrid({
                     <Icon name="visibility" size="sm" />
                     Demo
                   </button>
-                  <Link
-                    href={`/create/new?template=${t.slug}`}
+                  <StartCreationLink
+                    templateSlug={t.slug}
                     className="inline-flex h-9 w-full items-center justify-center rounded-full bg-primary px-3 font-body-sm font-semibold tracking-wide text-white transition-all hover:bg-[#2a2a26] active:scale-[0.98]"
                   >
                     Use
-                  </Link>
+                  </StartCreationLink>
                 </div>
               </div>
             </article>
@@ -427,14 +429,14 @@ export function ExploreGrid({
                 >
                   <Icon name="open_in_new" size="sm" />
                 </Link>
-                <Link
-                  href={`/create/new?template=${demoTemplate.slug}`}
+                <StartCreationLink
+                  templateSlug={demoTemplate.slug}
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-primary px-3 font-body-sm font-semibold tracking-wide text-white transition-all hover:bg-[#2a2a26] active:scale-[0.98] sm:px-4"
                 >
                   <span className="hidden sm:inline">Choose this template</span>
                   <span className="sm:hidden">Use</span>
                   <Icon name="arrow_forward" size="sm" />
-                </Link>
+                </StartCreationLink>
               </div>
             </div>
 
@@ -482,9 +484,10 @@ export function ExploreGrid({
                         >
                           {!demoReady && (
                             <span
+                              aria-hidden
                               className={cn(
-                                "h-3 w-3 animate-spin rounded-full border-2 border-t-transparent",
-                                withBranding ? "border-secondary" : "border-on-surface/60"
+                                "h-2.5 w-2.5 animate-pulse rounded-full motion-reduce:animate-none",
+                                withBranding ? "bg-secondary" : "bg-on-surface/60"
                               )}
                             />
                           )}
@@ -520,9 +523,8 @@ export function ExploreGrid({
                 </div>
                 <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.8rem] bg-ivory-950">
                   {!demoReady && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-surface-low text-on-surface-variant">
-                      <Icon name="refresh" size="lg" className="animate-spin text-secondary" />
-                      <p className="font-body-sm">Opening live demo…</p>
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface px-6 text-center">
+                      <PulseLoader label="Opening live demo…" />
                     </div>
                   )}
                   <iframe

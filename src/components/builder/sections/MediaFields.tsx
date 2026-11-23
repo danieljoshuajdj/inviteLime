@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/shared/Button";
+import { Toggle } from "@/components/shared/Field";
 import { Icon } from "@/components/shared/Icon";
+import { Modal } from "@/components/shared/Modal";
 import { MusicLibraryPicker } from "@/components/builder/MusicLibraryPicker";
-import { isLibraryMediaUrl, libraryTrackName } from "@/lib/library-media";
-import type { WeddingData } from "@/lib/builder/defaults";
+import { MAX_MEDIA_BYTES, isLibraryMediaUrl, libraryTrackName } from "@/lib/library-media";
+import { MAX_GALLERY_PHOTOS, type WeddingData } from "@/lib/builder/defaults";
+import { categorySlugForFormType, formTypeOf } from "@/lib/builder/forms";
 
 interface Props {
   /** Guest session token for draft uploads. Omit in the account editor. */
@@ -15,9 +18,17 @@ interface Props {
   weddingId?: string;
   data: WeddingData;
   onChange: (patch: Partial<WeddingData> | ((prev: WeddingData) => Partial<WeddingData>)) => void;
+  /**
+   * Whether this template accepts photos. When false only the background song
+   * is rendered — no photo toggles, slots or gallery.
+   */
+  showPhotos?: boolean;
 }
 
 type SlotRole = "bridePhoto" | "groomPhoto" | "couplePhoto" | "music";
+
+/** Shown in the oversized-image notice; kept in step with the server limit. */
+const MAX_IMAGE_MB = Math.round(MAX_MEDIA_BYTES / (1024 * 1024));
 
 /** A picked file shown from a local blob URL while its upload is in flight. */
 interface PendingGalleryItem {
@@ -26,7 +37,7 @@ interface PendingGalleryItem {
   preview: string;
 }
 
-export function MediaFields({ token, weddingId, data, onChange }: Props) {
+export function MediaFields({ token, weddingId, data, onChange, showPhotos = true }: Props) {
   const [uploadingRole, setUploadingRole] = useState<SlotRole | null>(null);
   const [error, setError] = useState<string | null>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
@@ -37,6 +48,15 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
    */
   const [previews, setPreviews] = useState<Partial<Record<SlotRole, string>>>({});
   const [pendingGallery, setPendingGallery] = useState<PendingGalleryItem[]>([]);
+  /** URL of the gallery photo currently being swapped for a new upload. */
+  const [replacingGalleryUrl, setReplacingGalleryUrl] = useState<string | null>(null);
+  /**
+   * Oversized images are rejected before upload and listed in a dedicated
+   * dialog. They must not use the form's inline error slot, which is reserved
+   * for uploads that actually failed.
+   */
+  const [oversizedNames, setOversizedNames] = useState<string[]>([]);
+  const [showOversized, setShowOversized] = useState(false);
   /** Every blob URL we mint, so unloading mid-upload cannot leak them. */
   const objectUrls = useRef<string[]>([]);
   const nextPendingId = useRef(0);
@@ -67,11 +87,27 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     });
   }
 
-  async function uploadFile(
+  function isOversized(file: File) {
+    return file.size > MAX_MEDIA_BYTES;
+  }
+
+  function reportOversized(files: File[]) {
+    const names = files.map((file) => file.name).filter(Boolean);
+    if (names.length === 0) return;
+    setOversizedNames((prev) => Array.from(new Set([...prev, ...names])));
+    setShowOversized(true);
+  }
+
+  function closeOversized() {
+    setShowOversized(false);
+    setOversizedNames([]);
+  }
+
+  async function uploadMedia(
     file: File,
     role: "bride" | "groom" | "couple" | "gallery" | "music",
-    slot: SlotRole | "gallery"
-  ) {
+    replaces?: string | null
+  ): Promise<string> {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("role", role);
@@ -79,6 +115,9 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     // The account editor uploads into an existing wedding and authenticates
     // with its cookie session; the builder sends its guest token instead.
     if (weddingId) fd.append("weddingId", weddingId);
+    // Lets the server delete the object this upload just superseded. It only
+    // removes it when no saved draft/live invitation still references it.
+    if (replaces) fd.append("replaces", replaces);
     const res = await fetch("/api/uploads", {
       method: "POST",
       headers: token ? { authorization: `Bearer ${token}` } : undefined,
@@ -86,33 +125,83 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     });
     const json = (await res.json()) as { url?: string; error?: string };
     if (!res.ok || !json.url) throw new Error(json.error ?? "Upload failed");
+    return json.url;
+  }
+
+  async function uploadFile(
+    file: File,
+    role: "bride" | "groom" | "couple" | "gallery" | "music",
+    slot: SlotRole | "gallery",
+    replaces?: string | null
+  ) {
+    const url = await uploadMedia(file, role, replaces);
     if (slot === "gallery") {
       // Appends must be relative to the latest list: several photos can be
       // uploading at once, and each one finishes independently.
-      const item = { role, url: json.url, name: file.name };
+      const item = { role, url, name: file.name };
       onChange((prev) => ({ gallery: [...prev.gallery, item] }));
     } else if (slot === "music") {
-      onChange({ music: { role: "music", url: json.url, name: file.name } });
+      onChange({ music: { role: "music", url, name: file.name } });
     } else {
-      onChange({ [slot]: json.url } as Partial<WeddingData>);
+      onChange({ [slot]: url } as Partial<WeddingData>);
     }
   }
 
-  async function handleSlotPick(slot: SlotRole, role: "bride" | "groom" | "couple") {
+  /**
+   * Best-effort removal of an object the editor no longer displays.
+   *
+   * The server keeps it while the saved draft/live invitation still references
+   * it, so this is safe to call before the autosave. The save endpoint retries
+   * the same cleanup once the new state is committed.
+   */
+  async function cleanupMedia(urls: Array<string | null | undefined>) {
+    const values = urls.filter((url): url is string => typeof url === "string" && url.length > 0);
+    if (values.length === 0) return;
+
+    try {
+      await fetch("/api/uploads/cleanup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          urls: values,
+          ...(weddingId ? { weddingId } : {}),
+        }),
+      });
+    } catch {
+      // Not user-facing: the next save cleans up whatever is still unused.
+    }
+  }
+
+  async function handleSlotPick(
+    slot: "bridePhoto" | "groomPhoto" | "couplePhoto",
+    role: "bride" | "groom" | "couple"
+  ) {
+    // Two uploads racing for the same slot would leave the first one with no
+    // recorded superseder, so it could never be cleaned up.
+    if (uploadingRole === slot) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/jpeg,image/png,image/webp";
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      setError(null);
+      if (isOversized(file)) {
+        reportOversized([file]);
+        return;
+      }
+      const previous = data[slot];
       const preview = makePreview(file);
       setPreviews((prev) => ({ ...prev, [slot]: preview }));
       setUploadingRole(slot);
-      setError(null);
       try {
-        await uploadFile(file, role, slot);
+        await uploadFile(file, role, slot, previous);
       } catch (err) {
-        setError((err as Error).message);
+        if ((err as Error).message === "FILE_TOO_LARGE") reportOversized([file]);
+        else setError((err as Error).message);
       } finally {
         clearPreview(slot);
         releasePreview(preview);
@@ -125,7 +214,33 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
   async function handleGallery(files: FileList | null) {
     if (!files || files.length === 0) return;
     setError(null);
-    const picked = Array.from(files).map((file) => {
+    const all = Array.from(files);
+    const oversized = all.filter(isOversized);
+    const accepted = all.filter((file) => !isOversized(file));
+    if (oversized.length > 0) reportOversized(oversized);
+    if (accepted.length === 0) return;
+
+    // Count photos already saved plus ones still uploading, so two batches
+    // racing each other can never push the gallery past the cap.
+    const capacity = Math.max(
+      0,
+      MAX_GALLERY_PHOTOS - data.gallery.length - pendingGallery.length
+    );
+    if (capacity <= 0) {
+      setError(`You can add up to ${MAX_GALLERY_PHOTOS} gallery photos.`);
+      return;
+    }
+    const selected = accepted.slice(0, capacity);
+    if (selected.length < accepted.length) {
+      const skipped = accepted.length - selected.length;
+      setError(
+        `Only ${MAX_GALLERY_PHOTOS} gallery photos are allowed — ${skipped} ${
+          skipped === 1 ? "was" : "were"
+        } not added.`
+      );
+    }
+
+    const picked = selected.map((file) => {
       const preview = makePreview(file);
       return { id: nextPendingId.current++, file, preview };
     });
@@ -144,9 +259,18 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
       })
     );
 
-    const failed = results.filter((r) => r.status === "rejected");
+    const oversizedRejections: File[] = [];
+    const failed: Error[] = [];
+    results.forEach((result, index) => {
+      if (result.status !== "rejected") return;
+      const reason = result.reason as Error;
+      if (reason.message === "FILE_TOO_LARGE") oversizedRejections.push(picked[index].file);
+      else failed.push(reason);
+    });
+
+    if (oversizedRejections.length > 0) reportOversized(oversizedRejections);
     if (failed.length === 1) {
-      setError(((failed[0] as PromiseRejectedResult).reason as Error).message);
+      setError(failed[0].message);
     } else if (failed.length > 1) {
       setError(`${failed.length} photos could not be uploaded. Please try again.`);
     }
@@ -159,10 +283,11 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      const previous = data.music?.url ?? null;
       setUploadingRole("music");
       setError(null);
       try {
-        await uploadFile(file, "music", "music");
+        await uploadFile(file, "music", "music", previous);
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -172,114 +297,202 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
     input.click();
   }
 
+  function removeGalleryItem(item: WeddingData["gallery"][number]) {
+    onChange((prev) => ({ gallery: prev.gallery.filter((x) => x !== item) }));
+    void cleanupMedia([item.url]);
+  }
+
+  async function handleGalleryReplace(item: WeddingData["gallery"][number]) {
+    if (replacingGalleryUrl) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/jpeg,image/png,image/webp";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setError(null);
+      if (isOversized(file)) {
+        reportOversized([file]);
+        return;
+      }
+      setReplacingGalleryUrl(item.url);
+      try {
+        const url = await uploadMedia(file, "gallery", item.url);
+        onChange((prev) => ({
+          gallery: prev.gallery.map((x) =>
+            x === item ? { role: "gallery" as const, url, name: file.name } : x
+          ),
+        }));
+        void cleanupMedia([item.url]);
+      } catch (err) {
+        if ((err as Error).message === "FILE_TOO_LARGE") reportOversized([file]);
+        else setError((err as Error).message);
+      } finally {
+        setReplacingGalleryUrl(null);
+      }
+    };
+    input.click();
+  }
+
+  function removeMusic() {
+    const previous = data.music?.url ?? null;
+    onChange({ music: null });
+    void cleanupMedia([previous]);
+  }
+
   const slots = [
-    { slot: "groomPhoto" as SlotRole, role: "groom" as const, label: "Groom's photo", url: data.groomPhoto },
-    { slot: "bridePhoto" as SlotRole, role: "bride" as const, label: "Bride's photo", url: data.bridePhoto },
-    { slot: "couplePhoto" as SlotRole, role: "couple" as const, label: "Couple's photo", url: data.couplePhoto },
-  ];
+    { slot: "groomPhoto", role: "groom", label: "Groom's photo", url: data.groomPhoto },
+    { slot: "bridePhoto", role: "bride", label: "Bride's photo", url: data.bridePhoto },
+    { slot: "couplePhoto", role: "couple", label: "Couple's photo", url: data.couplePhoto },
+  ] as const;
+
+  const galleryCount = data.gallery.length;
+  const galleryRemaining = Math.max(
+    0,
+    MAX_GALLERY_PHOTOS - galleryCount - pendingGallery.length
+  );
+  const galleryAtCap = galleryRemaining <= 0;
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="grid gap-4 sm:grid-cols-3">
-        {slots.map((s) => {
-          const preview = previews[s.slot];
-          const shown = preview ?? s.url;
-          const busy = uploadingRole === s.slot;
-          return (
-            <button
-              key={s.slot}
-              type="button"
-              onClick={() => void handleSlotPick(s.slot, s.role)}
-              aria-busy={busy || undefined}
-              className="group relative aspect-[3/4] overflow-hidden rounded-2xl border-2 border-dashed border-outline-variant bg-surface-container-low text-start transition-colors hover:border-secondary"
-            >
-              {shown ? (
-                <img src={shown} alt={s.label} className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
-                  <Icon name="image" size="xl" weight="w200" className="text-on-surface-variant" />
-                  <span className="font-body-xs font-semibold text-on-surface-variant">{s.label}</span>
-                </span>
-              )}
-              {busy ? (
-                // Uploading: the picked photo is already on screen under the
-                // spinner (blob URL below), and clears to full when it lands.
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white">
-                    <Icon name="refresh" size="md" className="animate-spin" />
-                  </span>
-                </span>
-              ) : (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    <Icon name={s.url ? "edit" : "add"} size="sm" />
-                  </span>
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Gallery */}
-      <div>
-        {/* Stacked on phones so the button sits under the heading rather than
-            beside it; the original row from `sm` up. */}
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="font-heading-md font-semibold !text-on-surface">Photo gallery</h3>
-          <input
-            ref={galleryInput}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            hidden
-            onChange={(e) => {
-              void handleGallery(e.target.files);
-              // The input keeps its value, so re-picking the same photo (after
-              // removing it) would fire no change event at all.
-              e.target.value = "";
-            }}
+      {showPhotos && (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+          <Toggle
+            label="Include Photos?"
+            description="Add a bride, groom or couple photo — one, two or all three are fine."
+            checked={data.includePhotos}
+            onChange={(checked) => onChange({ includePhotos: checked })}
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            icon={pendingGallery.length ? "refresh" : "add_circle"}
-            loading={pendingGallery.length > 0}
-            onClick={() => galleryInput.current?.click()}
-          >
-            Upload photos
-          </Button>
         </div>
-        {data.gallery.length === 0 && pendingGallery.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-6 text-center font-body-sm text-on-surface-variant">
-            No gallery photos yet. Guests love a peek into your world.
-          </p>
-        ) : (
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {data.gallery.map((g, i) => (
-              <GalleryThumb
-                key={`${g.url}-${i}`}
-                url={g.url}
-                onRemove={() => onChange((prev) => ({ gallery: prev.gallery.filter((x) => x !== g) }))}
-              />
-            ))}
-            {/* Picked but not uploaded yet: the local preview with a spinner. */}
-            {pendingGallery.map((p) => (
-              <div
-                key={p.id}
-                aria-busy
-                className="relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
-              >
-                <img src={p.preview} alt="" className="h-full w-full object-cover" />
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
-                  <Icon name="refresh" size="md" className="animate-spin" />
-                </span>
-              </div>
-            ))}
+
+        {data.includePhotos && (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {slots.map((s) => {
+              const preview = previews[s.slot];
+              const shown = preview ?? s.url;
+              const busy = uploadingRole === s.slot;
+              return (
+                <button
+                  key={s.slot}
+                  type="button"
+                  onClick={() => void handleSlotPick(s.slot, s.role)}
+                  aria-busy={busy || undefined}
+                  className="group relative aspect-[3/4] overflow-hidden rounded-2xl border-2 border-dashed border-outline-variant bg-surface-container-low text-start transition-colors hover:border-secondary"
+                >
+                  {shown ? (
+                    <img src={shown} alt={s.label} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
+                      <Icon name="image" size="xl" weight="w200" className="text-on-surface-variant" />
+                      <span className="font-body-xs font-semibold text-on-surface-variant">{s.label}</span>
+                    </span>
+                  )}
+                  {busy ? (
+                    // Uploading: the picked photo is already on screen under the
+                    // spinner (blob URL below), and clears to full when it lands.
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white">
+                        <Icon name="refresh" size="md" className="animate-spin" />
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/25">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        <Icon name={s.url ? "edit" : "add"} size="sm" />
+                      </span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
+      )}
+
+      {/* Gallery */}
+      {showPhotos && (
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+          <Toggle
+            label="Include Photo Gallery?"
+            description={`Share up to ${MAX_GALLERY_PHOTOS} of your favourite moments.`}
+            checked={data.includeGallery}
+            onChange={(checked) => onChange({ includeGallery: checked })}
+          />
+        </div>
+
+        {data.includeGallery && (
+          <div>
+            {/* Stacked on phones so the button sits under the heading rather
+                than beside it; the original row from `sm` up. */}
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-heading-md font-semibold !text-on-surface">Photo gallery</h3>
+                <p className="mt-1 font-body-xs text-on-surface-variant">
+                  {galleryCount}/{MAX_GALLERY_PHOTOS} Photos Uploaded
+                </p>
+              </div>
+              <input
+                ref={galleryInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                hidden
+                onChange={(e) => {
+                  void handleGallery(e.target.files);
+                  // The input keeps its value, so re-picking the same photo (after
+                  // removing it) would fire no change event at all.
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={pendingGallery.length ? "refresh" : "add_circle"}
+                loading={pendingGallery.length > 0}
+                disabled={galleryAtCap}
+                onClick={() => galleryInput.current?.click()}
+              >
+                Upload photos
+              </Button>
+            </div>
+            {data.gallery.length === 0 && pendingGallery.length === 0 ? (
+              <p className="mt-3 rounded-xl border border-dashed border-outline-variant p-6 text-center font-body-sm text-on-surface-variant">
+                No gallery photos yet. Guests love a peek into your world.
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {data.gallery.map((g, i) => (
+                  <GalleryThumb
+                    key={`${g.url}-${i}`}
+                    url={g.url}
+                    busy={replacingGalleryUrl === g.url}
+                    onReplace={() => void handleGalleryReplace(g)}
+                    onRemove={() => removeGalleryItem(g)}
+                  />
+                ))}
+                {/* Picked but not uploaded yet: the local preview with a spinner. */}
+                {pendingGallery.map((p) => (
+                  <div
+                    key={p.id}
+                    aria-busy
+                    className="relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest"
+                  >
+                    <img src={p.preview} alt="" className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                      <Icon name="refresh" size="md" className="animate-spin" />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      )}
 
       {/* Music */}
       <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
@@ -291,7 +504,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
               <Icon name="music_note" size="lg" />
             </span>
             <div>
-              <p className="font-body-sm font-semibold !text-on-surface">Wedding soundtrack</p>
+              <p className="font-body-sm font-semibold !text-on-surface">Background song</p>
               <p className="font-body-xs text-on-surface-variant">
                 {data.music
                   ? isLibraryMediaUrl(data.music.url)
@@ -303,7 +516,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
           </div>
           <div className="flex items-center gap-2 sm:shrink-0">
             {data.music && (
-              <Button type="button" variant="ghost" size="sm" icon="close" onClick={() => onChange({ music: null })}>
+              <Button type="button" variant="ghost" size="sm" icon="close" onClick={removeMusic}>
                 Remove
               </Button>
             )}
@@ -323,12 +536,15 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
         {data.music && <audio controls src={data.music.url} className="mt-3 w-full" preload="none" />}
 
         <MusicLibraryPicker
+          categorySlug={categorySlugForFormType(formTypeOf(data))}
           selectedUrl={data.music && isLibraryMediaUrl(data.music.url) ? data.music.url : null}
-          onSelect={(track) =>
+          onSelect={(track) => {
+            const previous = data.music?.url ?? null;
             onChange({
               music: { role: "music", url: track.url, name: libraryTrackName(track) },
-            })
-          }
+            });
+            if (previous && !isLibraryMediaUrl(previous)) void cleanupMedia([previous]);
+          }}
         />
       </div>
 
@@ -337,22 +553,83 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
           <Icon name="error" size="sm" /> {error}
         </p>
       )}
+
+      <Modal
+        open={showOversized}
+        onClose={closeOversized}
+        title={oversizedNames.length === 1 ? "Image too large" : "Images too large"}
+        icon="warning"
+        size="sm"
+        footer={
+          <Button type="button" onClick={closeOversized}>
+            OK
+          </Button>
+        }
+      >
+        <p className="font-body-sm text-on-surface-variant">
+          {oversizedNames.length === 1
+            ? `This image is larger than ${MAX_IMAGE_MB} MB, so it was not uploaded:`
+            : `These images are larger than ${MAX_IMAGE_MB} MB, so they were not uploaded:`}
+        </p>
+        <ul className="mt-3 flex flex-col gap-1.5">
+          {oversizedNames.map((name) => (
+            <li key={name} className="flex items-start gap-2 break-all font-body-sm text-on-surface">
+              <Icon name="image" size="sm" className="mt-0.5 shrink-0 text-on-surface-variant" />
+              <span>{name}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 font-body-xs text-on-surface-variant">
+          Please choose {oversizedNames.length === 1 ? "a smaller file" : "smaller files"}.
+        </p>
+      </Modal>
     </div>
   );
 }
 
-function GalleryThumb({ url, onRemove }: { url: string; onRemove: () => void }) {
+function GalleryThumb({
+  url,
+  busy,
+  onReplace,
+  onRemove,
+}: {
+  url: string;
+  busy?: boolean;
+  onReplace: () => void;
+  onRemove: () => void;
+}) {
   return (
     <div className="group relative aspect-square overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
       <img src={url} alt="" className="h-full w-full object-cover" />
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
-        aria-label="Remove photo"
-      >
-        <Icon name="close" size="sm" />
-      </button>
+      {/* Kept visible at all sizes: touch devices have no hover state. */}
+      <div className="absolute right-1 top-1 flex gap-1">
+        <button
+          type="button"
+          onClick={onReplace}
+          disabled={busy}
+          className="rounded-full bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          aria-label="Replace photo"
+        >
+          <Icon name="edit" size="sm" />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={busy}
+          className="rounded-full bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          aria-label="Remove photo"
+        >
+          <Icon name="close" size="sm" />
+        </button>
+      </div>
+      {busy && (
+        <span
+          aria-busy
+          className="absolute inset-0 flex items-center justify-center bg-black/50 text-white"
+        >
+          <Icon name="refresh" size="md" className="animate-spin" />
+        </span>
+      )}
     </div>
   );
 }

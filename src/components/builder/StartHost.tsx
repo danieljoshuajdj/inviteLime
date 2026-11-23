@@ -22,11 +22,11 @@ function LoadingDots() {
 }
 
 /**
- * Starts a guest studio directly for a chosen template.
+ * Starts an authenticated studio directly for a chosen template.
  *
- * The old "pick a template or skip it" chooser was removed: generic creation
- * now begins on the template library, while template CTAs deep-link here and
- * skip straight into the builder.
+ * The page itself is guarded server-side; this client start route creates the
+ * owned draft and returns its token. If the session expired between render and
+ * start, the visitor is sent back through Google and returned to this template.
  */
 export function StartHost({ initialTemplateSlug }: { initialTemplateSlug: string }) {
   const router = useRouter();
@@ -38,11 +38,17 @@ export function StartHost({ initialTemplateSlug }: { initialTemplateSlug: string
     startedRef.current = true;
     (async () => {
       try {
-        const res = await fetch("/api/guest/start", {
+        const res = await fetch("/api/builder/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ slug: initialTemplateSlug }),
         });
+        if (res.status === 401) {
+          window.location.href = `/login?next=${encodeURIComponent(
+            `/create/new?template=${initialTemplateSlug}`
+          )}`;
+          return;
+        }
         const json = (await res.json()) as { token?: string; error?: string };
         if (!res.ok || !json.token) throw new Error(json.error ?? "Could not open this template.");
         router.replace(`/create/${json.token}`);

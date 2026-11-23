@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
-import { cn, formatPrice } from "@/lib/utils";
+import { formatPrice } from "@/lib/utils";
 import type { WeddingData } from "@/lib/builder/defaults";
+import { coverTitle, formDefinition, formTypeOf, isBirthdayForm, ordinal } from "@/lib/builder/forms";
 
 interface Props {
   isOpen: boolean;
@@ -37,25 +37,17 @@ export function PaymentConfirmationModal({
   email,
   loading = false,
 }: Props) {
-  const [isVisible, setIsVisible] = useState(false);
+  if (!isOpen) return null;
 
-  useEffect(() => {
-    if (isOpen) {
-      setIsVisible(true);
-    } else {
-      setIsVisible(false);
-    }
-  }, [isOpen]);
+  const formType = formTypeOf(data);
+  const birthday = isBirthdayForm(formType);
+  const wishes = formType === "birthday_wishes";
+  const definition = formDefinition(formType);
+  const invitationTitle = coverTitle(data);
 
-  if (!isVisible && !isOpen) return null;
-
-  const coverTitle =
-    data.brideName && data.groomName
-      ? `${data.groomName.split(" ")[0]} & ${data.brideName.split(" ")[0]}`
-      : "Your names here";
-
-  const weddingDate = data.weddingDate
-    ? new Date(`${data.weddingDate}T00:00:00`).toLocaleDateString("en-IN", {
+  const eventDate = wishes ? "" : data.weddingDate;
+  const weddingDate = eventDate
+    ? new Date(`${eventDate}T00:00:00`).toLocaleDateString("en-IN", {
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -63,14 +55,22 @@ export function PaymentConfirmationModal({
       })
     : "—";
 
-  const expirationDate = data.weddingDate
-    ? new Date(new Date(`${data.weddingDate}T00:00:00`).setMonth(new Date(`${data.weddingDate}T00:00:00`).getMonth() + 2))
+  // Birthday Wishes has no event date, so its archive window runs from publish
+  // rather than from the invitation date — the same fallback publishing uses.
+  const expirationDate = eventDate
+    ? new Date(new Date(`${eventDate}T00:00:00`).setMonth(new Date(`${eventDate}T00:00:00`).getMonth() + 2))
         .toLocaleDateString("en-IN", {
           day: "numeric",
           month: "long",
           year: "numeric",
         })
-    : "—";
+    : wishes
+      ? new Date(new Date().setMonth(new Date().getMonth() + 2)).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+      : "—";
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) onClose();
@@ -78,21 +78,13 @@ export function PaymentConfirmationModal({
 
   return (
     <div
-      className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm",
-        isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-      )}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/40 backdrop-blur-sm"
       onClick={handleOverlayClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="payment-modal-title"
     >
-      <div
-        className={cn(
-          "w-full max-w-lg bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200",
-          isVisible ? "translate-y-0" : "translate-y-4"
-        )}
-      >
+      <div className="w-full max-w-lg bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-secondary/5 blur-2xl pointer-events-none" />
 
         <div className="p-6 lg:p-8">
@@ -117,7 +109,13 @@ export function PaymentConfirmationModal({
             Own Your Invitation Suite
           </h2>
           <p className="font-body-md text-on-surface-variant mb-6 leading-relaxed">
-            You are purchasing the perpetual animated celebration suite for your wedding milestone.
+            You are purchasing the perpetual animated celebration suite for your{" "}
+            {birthday
+              ? definition.label.toLowerCase()
+              : formType === "engagement"
+                ? "engagement"
+                : "wedding"}{" "}
+            milestone.
             No upfront account registration or password required — your license is linked immediately to your email address.
           </p>
 
@@ -135,18 +133,37 @@ export function PaymentConfirmationModal({
                 <p className="font-body-md font-semibold text-on-surface">{template.name}</p>
               </div>
               <div>
-                <p className="font-body-xs uppercase tracking-wider text-on-surface-variant">Honored Couple</p>
-                <p className="font-body-md font-semibold text-on-surface">{coverTitle}</p>
+                <p className="font-body-xs uppercase tracking-wider text-on-surface-variant">
+                  {birthday ? "Birthday Person" : "Honored Couple"}
+                </p>
+                <p className="font-body-md font-semibold text-on-surface">{invitationTitle}</p>
               </div>
               <div>
-                <p className="font-body-xs uppercase tracking-wider text-on-surface-variant">Ceremony Date</p>
-                <p className="font-body-md font-semibold text-on-surface">{weddingDate}</p>
+                <p className="font-body-xs uppercase tracking-wider text-on-surface-variant">
+                  {wishes ? "Birthday" : definition.dateLabel}
+                </p>
+                <p className="font-body-md font-semibold text-on-surface">
+                  {wishes
+                    ? typeof data.birthdayNumber === "number"
+                      ? `${ordinal(data.birthdayNumber)} Birthday`
+                      : "—"
+                    : weddingDate}
+                </p>
               </div>
               <div>
                 <p className="font-body-xs uppercase tracking-wider text-on-surface-variant">Archival Window</p>
                 <p className="font-body-md font-semibold text-on-surface flex items-center gap-1">
                   Active until {expirationDate}
-                  <Icon name="info" size="sm" className="text-secondary" ariaLabel="Calculated: Wedding + 2 Full Months" />
+                  <Icon
+                    name="info"
+                    size="sm"
+                    className="text-secondary"
+                    ariaLabel={
+                      wishes
+                        ? "Calculated: publish + 2 full months"
+                        : "Calculated: event date + 2 full months"
+                    }
+                  />
                 </p>
               </div>
             </div>
@@ -160,7 +177,9 @@ export function PaymentConfirmationModal({
               <p className="font-body-xs uppercase tracking-wider text-on-surface font-semibold">Immediate Dispatch Recipient</p>
               <p className="font-body-sm text-secondary font-bold truncate">{email || "Not provided"}</p>
               <p className="font-body-xs text-on-surface-variant">
-                Your passwordless magic link to edit & inspect RSVPs will be routed here upon confirmation.
+                {birthday
+                  ? "Your passwordless magic link to edit your invitation will be routed here upon confirmation."
+                  : "Your passwordless magic link to edit & inspect RSVPs will be routed here upon confirmation."}
               </p>
             </div>
           </div>
@@ -176,7 +195,11 @@ export function PaymentConfirmationModal({
               <span className="font-body-xs font-bold text-secondary uppercase">Included</span>
             </div>
             <div className="flex items-center justify-between text-body-sm text-on-surface-variant">
-              <span>Global CDN Hosting & WhatsApp RSVP Webhook Bridge</span>
+              <span>
+                {birthday
+                  ? "Global CDN Hosting & Photo Gallery Delivery"
+                  : "Global CDN Hosting & WhatsApp RSVP Webhook Bridge"}
+              </span>
               <span className="font-body-xs font-bold text-secondary uppercase">Complimentary</span>
             </div>
 

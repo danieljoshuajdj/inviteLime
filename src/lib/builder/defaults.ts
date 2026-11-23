@@ -1,3 +1,5 @@
+import { formTypeOrDefault, type FormType } from "./forms";
+
 export interface BuilderEvent {
   id?: string;
   name: string;
@@ -40,6 +42,16 @@ export function validDressColor(value: unknown): string | null {
 }
 
 export interface WeddingData {
+  /** Which form this invitation uses. Derived from its template's category. */
+  formType: FormType;
+  /** Person being celebrated by a birthday form. */
+  celebrantName: string;
+  /** Age being marked by a birthday-wishes invitation, 1–150. */
+  birthdayNumber: number | null;
+  /** Birthday-wishes message shown on the invitation. */
+  specialMessage: string;
+  /** Birthday main image; stored under the existing `couple` upload role. */
+  mainPhoto: string | null;
   brideName: string;
   groomName: string;
   brideBio: string;
@@ -64,11 +76,27 @@ export interface WeddingData {
   bridePhoto?: string | null;
   groomPhoto?: string | null;
   couplePhoto?: string | null;
+  /**
+   * Whether the portrait uploads are part of the invitation. Off by default so
+   * a couple can publish without any photos. Uploaded URLs are kept while the
+   * switch is off, so turning it back on restores them without re-uploading.
+   */
+  includePhotos: boolean;
+  /**
+   * Whether the photo gallery is part of the invitation. Off by default, and
+   * independent of the portrait switch.
+   */
+  includeGallery: boolean;
   music?: BuilderMediaUrl | null;
 }
 
 export function defaultWeddingData(partial: Partial<WeddingData> = {}): WeddingData {
   return {
+    formType: "wedding",
+    celebrantName: "",
+    birthdayNumber: null,
+    specialMessage: "",
+    mainPhoto: null,
     brideName: "",
     groomName: "",
     brideBio: "",
@@ -92,6 +120,8 @@ export function defaultWeddingData(partial: Partial<WeddingData> = {}): WeddingD
     bridePhoto: null,
     groomPhoto: null,
     couplePhoto: null,
+    includePhotos: false,
+    includeGallery: false,
     music: null,
     ...partial,
   };
@@ -115,9 +145,24 @@ function normalizeDress(value: unknown): BuilderDressCode | null {
   };
 }
 
+function normalizeBirthdayNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+    return Number(value);
+  }
+  return null;
+}
+
 export function normalizeWeddingData(raw: unknown): WeddingData {
   const r = (raw ?? {}) as Record<string, unknown>;
+  const hasStoredPhotos = Boolean(r.bridePhoto || r.groomPhoto || r.couplePhoto || r.mainPhoto);
+  const hasStoredGallery = Array.isArray(r.gallery) && r.gallery.length > 0;
   return defaultWeddingData({
+    formType: formTypeOrDefault(r.formType),
+    celebrantName: String(r.celebrantName ?? ""),
+    birthdayNumber: normalizeBirthdayNumber(r.birthdayNumber),
+    specialMessage: String(r.specialMessage ?? ""),
+    mainPhoto: r.mainPhoto ? String(r.mainPhoto) : null,
     brideName: String(r.brideName ?? ""),
     groomName: String(r.groomName ?? ""),
     brideBio: String(r.brideBio ?? ""),
@@ -141,8 +186,35 @@ export function normalizeWeddingData(raw: unknown): WeddingData {
     bridePhoto: r.bridePhoto ? String(r.bridePhoto) : null,
     groomPhoto: r.groomPhoto ? String(r.groomPhoto) : null,
     couplePhoto: r.couplePhoto ? String(r.couplePhoto) : null,
+    // Respect an explicit switch (including a deliberate OFF) and only infer
+    // for legacy data saved before the switches existed. Inferring from stored
+    // media unconditionally would make it impossible to turn a populated
+    // section off without deleting the uploads.
+    includePhotos:
+      typeof r.includePhotos === "boolean" ? r.includePhotos : hasStoredPhotos,
+    includeGallery:
+      typeof r.includeGallery === "boolean" ? r.includeGallery : hasStoredGallery,
     music: r.music ? (r.music as BuilderMediaUrl) : null,
   });
+}
+
+/** Editor/upload ceiling for the wedding photo gallery. */
+export const MAX_GALLERY_PHOTOS = 6;
+
+/**
+ * Applies the two media switches to builder data before it is rendered.
+ *
+ * Uploaded URLs stay in the saved data while a switch is off — only the
+ * runtime view is filtered — so re-enabling a section restores its media.
+ */
+export function withVisibleMedia(data: WeddingData): WeddingData {
+  return {
+    ...data,
+    bridePhoto: data.includePhotos ? data.bridePhoto : null,
+    groomPhoto: data.includePhotos ? data.groomPhoto : null,
+    couplePhoto: data.includePhotos ? data.couplePhoto : null,
+    gallery: data.includeGallery ? data.gallery : [],
+  };
 }
 
 export function weddingDataForDb(data: WeddingData): Record<string, unknown> {
@@ -159,9 +231,16 @@ export function weddingDataForDb(data: WeddingData): Record<string, unknown> {
     if (
       key === "brideDesignation" ||
       key === "groomDesignation" ||
-      key === "rsvpWhatsapp"
+      key === "rsvpWhatsapp" ||
+      key === "celebrantName" ||
+      key === "specialMessage" ||
+      key === "mainPhoto"
     ) {
-      if (typeof v !== "string") delete out[key];
+      if (typeof v !== "string" && v !== null) delete out[key];
+      continue;
+    }
+    if (key === "birthdayNumber") {
+      if (v !== null && typeof v !== "number") delete out[key];
       continue;
     }
     if (v === null || v === undefined || v === "") delete out[key];

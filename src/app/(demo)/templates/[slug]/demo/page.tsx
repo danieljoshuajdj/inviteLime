@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
+import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { TemplateFrame } from "@/components/runtime/TemplateFrame";
 import { createServerClient } from "@/lib/supabase/server";
 import { getTemplateBySlug } from "@/lib/services/templates";
@@ -22,11 +23,19 @@ import { getDemoDetailPack } from "@/lib/services/demo-details";
 import { getPackDemoMedia } from "@/lib/services/media-packs";
 import { getMusicTrack } from "@/lib/services/music-library";
 import { absolutizeMediaUrl, rewriteRuntimeMedia } from "@/lib/services/media-urls";
+import { getPublicAppOrigin, getRuntimeAppOrigin } from "@/lib/services/app-origin-server";
+import { getWebsiteRedirectState } from "@/lib/services/website-redirect";
 import {
   getPlannerBrand,
   isPlannerBrandComplete,
   normalizeMapsUrl,
 } from "@/lib/services/planner-branding";
+import {
+  categorySlugForFormType,
+  formTypeOrDefault,
+  isBirthdayForm,
+} from "@/lib/builder/forms";
+import { musicTrackInCategory } from "@/lib/library-media";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -100,18 +109,31 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
     }
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
-  const demoUrl = `${appUrl}/templates/${template.slug}/demo`;
+  // Demo media must follow the origin the visitor actually reached, while the
+  // demo's public link follows the canonical production domain when configured.
+  const [publicAppOrigin, runtimeAppOrigin] = await Promise.all([
+    getPublicAppOrigin(),
+    getRuntimeAppOrigin(),
+  ]);
+  const demoUrl = `${publicAppOrigin}/templates/${template.slug}/demo`;
+  // Demo and live invitations use the same permanent platform link. The demo
+  // therefore also follows a destination changed in the admin panel.
+  const site = await getWebsiteRedirectState(runtimeAppOrigin);
 
   // Three independent demo layers, each assigned at template upload:
   //   details → who/what the demo is about (names, venue, events, dress code)
   //   media   → photos for the bride/groom/couple and gallery slots
   //   music   → one background song from the shared library
-  // A failed lookup (or content deleted since assignment) degrades to the
-  // stock demo rather than breaking the page.
-  const [packMedia, detailPack, track] = await Promise.all([
+  // A layer authored for a different category is ignored: a birthday demo must
+  // never render a wedding pack, and a track offered only in another category
+  // must not leak into this category's demo. A failed lookup (or content
+  // deleted since assignment) degrades to the stock demo rather than breaking
+  // the page.
+  const formType = formTypeOrDefault(template.form_type);
+  const categorySlug = template.categories[0]?.slug ?? categorySlugForFormType(formType);
+  const [packMedia, detailCandidate, trackCandidate] = await Promise.all([
     template.media_pack_id
-      ? getPackDemoMedia(template.media_pack_id).catch(() => null)
+      ? getPackDemoMedia(template.media_pack_id, formType).catch(() => null)
       : Promise.resolve(null),
     template.demo_detail_pack_id
       ? getDemoDetailPack(template.demo_detail_pack_id).catch(() => null)
@@ -120,10 +142,30 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
       ? getMusicTrack(template.music_track_id).catch(() => null)
       : Promise.resolve(null),
   ]);
+  const detailPack = detailCandidate?.formType === formType ? detailCandidate : null;
+  const track =
+    trackCandidate && musicTrackInCategory(trackCandidate, categorySlug) ? trackCandidate : null;
 
   const baseData = detailPack ? demoDetailsToWeddingData(detailPack) : DEMO_WEDDING_DATA;
   const withPhotos = packMedia ? withPackMedia(baseData, packMedia) : baseData;
-  const demoData = track ? withDemoMusic(withPhotos, track) : withPhotos;
+  const layered = track ? withDemoMusic(withPhotos, track) : withPhotos;
+
+  // The template's category decides which form the demo shows. A birthday
+  // template reuses the stock demo photos as its main image and has no RSVP.
+  const birthday = isBirthdayForm(formType);
+  const demoData = birthday
+    ? {
+        ...layered,
+        formType,
+        celebrantName: layered.celebrantName || "Ananya",
+        birthdayNumber:
+          formType === "birthday_wishes" ? layered.birthdayNumber ?? 21 : layered.birthdayNumber,
+        specialMessage:
+          layered.specialMessage ||
+          "Wishing you a day filled with laughter, cake and everyone who loves you.",
+        mainPhoto: layered.mainPhoto ?? layered.couplePhoto ?? null,
+      }
+    : { ...layered, formType };
 
   // Demo detail packs author their own designations and dress-code swatches.
   // Layer them over the builder-shaped data only in demo mode; live payloads
@@ -132,9 +174,10 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
 
   const payload = buildRuntimePayload({
     mode: "demo",
-    assetsBaseUrl: appUrl,
+    assetsBaseUrl: runtimeAppOrigin,
     invitationUrl: demoUrl,
     expiresAt: null,
+    site,
     planner: plannerBrand,
     // Same as the live invitation: the template package injects a <base href>
     // of its own, so app-relative pack URLs must become absolute to load.
@@ -143,10 +186,10 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
         ...weddingDataToRuntimeInput({ id: "demo", slug: `${template.slug}-demo` }, demoData),
         ...extras,
       },
-      (url) => absolutizeMediaUrl(url, appUrl)
+      (url) => absolutizeMediaUrl(url, runtimeAppOrigin)
     ),
     rsvp: {
-      enabled: true,
+      enabled: !birthday,
       preview: true,
       deadline: detailPack?.rsvpDeadline ?? null,
       attendingCount: 0,
@@ -186,11 +229,11 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
                 Browse templates
               </Button>
             </Link>
-            <Link href={`/create/new?template=${template.slug}`}>
+            <StartCreationLink templateSlug={template.slug}>
               <Button variant="outline" icon="auto_awesome">
                 Customise it anyway
               </Button>
-            </Link>
+            </StartCreationLink>
           </div>
         </div>
       )}

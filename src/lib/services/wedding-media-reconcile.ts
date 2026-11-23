@@ -28,7 +28,7 @@ import { mediaObjectKey } from "./media-urls";
 type JsonRecord = Record<string, unknown>;
 type WeddingUpdate = Database["public"]["Tables"]["weddings"]["Update"];
 
-const PORTRAIT_SLOTS = ["bridePhoto", "groomPhoto", "couplePhoto"] as const;
+const PORTRAIT_SLOTS = ["bridePhoto", "groomPhoto", "couplePhoto", "mainPhoto"] as const;
 
 function recordOf(value: unknown): JsonRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -175,7 +175,7 @@ export function weddingColumnsFromData(data: unknown): WeddingUpdate {
 
   const setRequiredText = (
     key: string,
-    column: "bride_name" | "groom_name" | "wedding_date" | "venue"
+    column: "bride_name" | "groom_name" | "celebrant_name" | "wedding_date" | "venue"
   ) => {
     const value = trimmed(source[key]);
     if (value) columns[column] = value;
@@ -183,6 +183,7 @@ export function weddingColumnsFromData(data: unknown): WeddingUpdate {
 
   setRequiredText("brideName", "bride_name");
   setRequiredText("groomName", "groom_name");
+  setRequiredText("celebrantName", "celebrant_name");
   setRequiredText("weddingDate", "wedding_date");
   setRequiredText("venue", "venue");
 

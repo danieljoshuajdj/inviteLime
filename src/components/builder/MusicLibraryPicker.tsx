@@ -10,6 +10,8 @@ interface Props {
   /** URL of the track currently chosen from the library, if any. */
   selectedUrl: string | null;
   onSelect: (track: MusicTrack) => void;
+  /** Event category slug; only tracks offered in it are listed. */
+  categorySlug?: string | null;
 }
 
 /**
@@ -19,32 +21,46 @@ interface Props {
  * and disappears, leaving the always-available "upload your own" path. A guest
  * with no audio in the library must still be able to finish their invitation.
  */
-export function MusicLibraryPicker({ selectedUrl, onSelect }: Props) {
+export function MusicLibraryPicker({ selectedUrl, onSelect, categorySlug }: Props) {
   const [tracks, setTracks] = useState<MusicTrack[] | null>(null);
   const [failed, setFailed] = useState(false);
+  /** Category the current `tracks`/`failed` pair was loaded for. */
+  const [loadedCategory, setLoadedCategory] = useState<string | null | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);
+  const categoryKey = categorySlug ?? null;
 
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
+    const key = categorySlug ?? null;
+    const query = categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : "";
 
-    fetch("/api/music/library", { signal: controller.signal })
+    fetch(`/api/music/library${query}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("unavailable"))))
       .then((json: { tracks?: MusicTrack[] }) => {
         if (!active) return;
         setTracks(Array.isArray(json.tracks) ? json.tracks : []);
+        setFailed(false);
+        setLoadedCategory(key);
       })
       .catch(() => {
         // Abort is not a failure worth surfacing.
-        if (active && controller.signal.aborted === false) setFailed(true);
+        if (active && controller.signal.aborted === false) {
+          setTracks(null);
+          setFailed(true);
+          setLoadedCategory(key);
+        }
       });
 
     return () => {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [categorySlug]);
 
+  // A category change re-queries; never show the previous category's tracks
+  // while the new list is in flight.
+  if (loadedCategory !== categoryKey) return null;
   if (failed) return null;
   if (tracks === null) return null;
   if (tracks.length === 0) return null;

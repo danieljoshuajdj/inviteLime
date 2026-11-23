@@ -1,0 +1,9 @@
+1) clicking an expired link should redirect to the site homw page to make the people create templates cuz some people get the link then they 
+go the old link send by theri frnd and relatives to make their own and they click then there should be a toast the link expired and make
+
+2) i have bg songs for the bithday celebration and birthday wishes  too it can be either selected from the form or upload their own.
+
+3) make the planners to number of invitations based cost with minimum 5 or 10 templates allocation- need to refine this idea
+
+4) the heading on the UI should be editable from the admin panel to adervertise and change the images on the hero sections,
+ redirect links these link will reflected on the footer of the each template 

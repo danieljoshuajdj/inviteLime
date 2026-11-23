@@ -81,6 +81,12 @@ export const ROLE_SALT: Record<MediaRole, number> = {
 export interface SaveMediaResult {
   path: string;
   publicUrl: string;
+  /**
+   * Previously recorded objects for a single-file role that this upload
+   * superseded. Callers use them to remove the old objects once they are no
+   * longer referenced by `wedding_data`.
+   */
+  replacedPaths: string[];
 }
 
 /**
@@ -208,20 +214,44 @@ export async function saveWeddingMedia(input: {
 
   const publicUrl = mediaUrlForPath(path);
 
-  const result: SaveMediaResult = { path, publicUrl };
+  const result: SaveMediaResult = { path, publicUrl, replacedPaths: [] };
 
   // married/account media: record rows only when the wedding already exists;
   // draft-phase uploads live in the guest_draft wedding_data until checkout.
   if (input.weddingId) {
-    // Single-file roles keep exactly one row, so the previous file's row goes.
-    // Accumulative roles must not be cleared, or each new upload would erase
-    // the record of the images already in the gallery.
+    // Single-file roles supersede every previous row for the role. Those rows
+    // are returned to the caller instead of deleted here: the object is removed
+    // first, and only then its row. A failed object delete therefore keeps the
+    // row available for a later save/cleanup retry. Accumulative roles must not
+    // be touched, or each new upload would erase the gallery's record.
     if (!ACCUMULATIVE_MEDIA_ROLES.includes(safeRole)) {
-      await supabase
+      const { data: previousRows } = await supabase
+        .from("wedding_media")
+        .select("storage_key")
+        .eq("wedding_id", input.weddingId)
+        .eq("role", input.role);
+
+      result.replacedPaths = (previousRows ?? [])
+        .map((row) => row.storage_key)
+        .filter((key): key is string => typeof key === "string" && key !== path);
+
+      // The stable object name for a single-file role is overwritten in place,
+      // so an old row for the same key would merely duplicate the row inserted
+      // below. Rows for a different key (e.g. the extension changed) stay until
+      // their object is actually removed.
+      const { error: sameKeyRowsError } = await supabase
         .from("wedding_media")
         .delete()
         .eq("wedding_id", input.weddingId)
-        .eq("role", input.role);
+        .eq("role", input.role)
+        .eq("storage_key", path);
+      if (sameKeyRowsError) {
+        console.warn("[storage] could not replace the same-key media row", {
+          weddingId: input.weddingId,
+          role: input.role,
+          error: sameKeyRowsError.message,
+        });
+      }
     }
 
     const mediaRow = await supabase

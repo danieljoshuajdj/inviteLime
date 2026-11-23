@@ -147,6 +147,45 @@ describe("buildRuntimePayload", () => {
     expect(p.planner).toEqual(planner);
   });
 
+  it("exposes the permanent website redirect link and its configured state", () => {
+    const p = buildRuntimePayload({
+      wedding,
+      mode: "live",
+      invitationUrl: "https://invite-lime.example/w/aarav-weds-meera-2027",
+      assetsBaseUrl: "https://invite-lime.example/",
+      site: {
+        websiteUrl: "https://invite-lime.example/visit-website",
+        websiteConfigured: true,
+      },
+    });
+    expect(p.site).toEqual({
+      websiteUrl: "https://invite-lime.example/visit-website",
+      websiteConfigured: true,
+    });
+  });
+
+  it("defaults the website block safely and drops unsafe links", () => {
+    expect(payload().site).toEqual({
+      websiteUrl: null,
+      websiteConfigured: false,
+    });
+
+    const unsafe = buildRuntimePayload({
+      wedding,
+      mode: "live",
+      invitationUrl: "https://invite-lime.example/w/aarav-weds-meera-2027",
+      assetsBaseUrl: "https://invite-lime.example/",
+      site: {
+        websiteUrl: "javascript:alert(document.cookie)",
+        websiteConfigured: true,
+      },
+    });
+    expect(unsafe.site).toEqual({
+      websiteUrl: null,
+      websiteConfigured: false,
+    });
+  });
+
   it("defaults demo-only extras and passes them through when supplied", () => {
     const plain = payload();
     expect(plain.wedding.brideDesignation).toBeNull();

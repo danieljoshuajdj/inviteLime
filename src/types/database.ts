@@ -17,6 +17,7 @@ export type WeddingBillingSource = "one_time" | "planner_plan";
 export type MediaType = "image" | "video" | "audio";
 export type MediaRole = "bride" | "groom" | "couple" | "gallery" | "music" | "video";
 export type MediaPackRole = "bride" | "groom" | "couple" | "gallery";
+export type EventFormType = "wedding" | "engagement" | "birthday_celebration" | "birthday_wishes";
 
 export interface Database {
   public: {
@@ -29,6 +30,7 @@ export interface Database {
           role: ProfileRole;
           status: string;
           avatar_url: string | null;
+          google_id: string | null;
           last_seen_at: string | null;
           created_at: string;
           updated_at: string;
@@ -40,6 +42,7 @@ export interface Database {
           role?: ProfileRole;
           status?: string;
           avatar_url?: string | null;
+          google_id?: string | null;
           last_seen_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -51,6 +54,7 @@ export interface Database {
           role?: ProfileRole;
           status?: string;
           avatar_url?: string | null;
+          google_id?: string | null;
           last_seen_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -204,6 +208,7 @@ export interface Database {
           name: string;
           slug: string;
           description: string | null;
+          form_type: EventFormType;
           created_at: string;
         };
         Insert: {
@@ -211,6 +216,7 @@ export interface Database {
           name: string;
           slug: string;
           description?: string | null;
+          form_type: EventFormType;
           created_at?: string;
         };
         Update: {
@@ -218,6 +224,7 @@ export interface Database {
           name?: string;
           slug?: string;
           description?: string | null;
+          form_type?: EventFormType;
           created_at?: string;
         };
         Relationships: [];
@@ -298,6 +305,8 @@ export interface Database {
           media_pack_id: string | null;
           demo_detail_pack_id: string | null;
           music_track_id: string | null;
+          form_type: EventFormType;
+          allows_image_upload: boolean;
           tags: string[];
           created_at: string;
           updated_at: string;
@@ -314,6 +323,8 @@ export interface Database {
           media_pack_id?: string | null;
           demo_detail_pack_id?: string | null;
           music_track_id?: string | null;
+          form_type?: EventFormType;
+          allows_image_upload?: boolean;
           tags?: string[];
           created_at?: string;
           updated_at?: string;
@@ -330,6 +341,8 @@ export interface Database {
           media_pack_id?: string | null;
           demo_detail_pack_id?: string | null;
           music_track_id?: string | null;
+          form_type?: EventFormType;
+          allows_image_upload?: boolean;
           tags?: string[];
           created_at?: string;
           updated_at?: string;
@@ -389,6 +402,8 @@ export interface Database {
           slug: string | null;
           bride_name: string | null;
           groom_name: string | null;
+          celebrant_name: string | null;
+          form_type: EventFormType;
           couple_bio: string | null;
           story: string | null;
           wedding_date: string | null;
@@ -422,6 +437,8 @@ export interface Database {
           slug?: string | null;
           bride_name?: string | null;
           groom_name?: string | null;
+          celebrant_name?: string | null;
+          form_type?: EventFormType;
           couple_bio?: string | null;
           story?: string | null;
           wedding_date?: string | null;
@@ -455,6 +472,8 @@ export interface Database {
           slug?: string | null;
           bride_name?: string | null;
           groom_name?: string | null;
+          celebrant_name?: string | null;
+          form_type?: EventFormType;
           couple_bio?: string | null;
           story?: string | null;
           wedding_date?: string | null;
@@ -639,11 +658,30 @@ export interface Database {
         };
         Relationships: [];
       };
+      music_track_categories: {
+        Row: {
+          music_track_id: string;
+          category_id: string;
+          created_at: string;
+        };
+        Insert: {
+          music_track_id: string;
+          category_id: string;
+          created_at?: string;
+        };
+        Update: {
+          music_track_id?: string;
+          category_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       media_packs: {
         Row: {
           id: string;
           name: string;
           description: string | null;
+          form_type: EventFormType;
           created_at: string;
           updated_at: string;
         };
@@ -651,6 +689,7 @@ export interface Database {
           id?: string;
           name: string;
           description?: string | null;
+          form_type?: EventFormType;
           created_at?: string;
           updated_at?: string;
         };
@@ -658,6 +697,7 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string | null;
+          form_type?: EventFormType;
           created_at?: string;
           updated_at?: string;
         };
@@ -704,8 +744,12 @@ export interface Database {
           id: string;
           name: string;
           description: string | null;
-          bride_name: string;
-          groom_name: string;
+          form_type: EventFormType;
+          bride_name: string | null;
+          groom_name: string | null;
+          celebrant_name: string | null;
+          birthday_number: number | null;
+          special_message: string | null;
           bride_designation: string | null;
           groom_designation: string | null;
           bride_bio: string | null;
@@ -734,8 +778,12 @@ export interface Database {
           id?: string;
           name: string;
           description?: string | null;
-          bride_name: string;
-          groom_name: string;
+          form_type?: EventFormType;
+          bride_name?: string | null;
+          groom_name?: string | null;
+          celebrant_name?: string | null;
+          birthday_number?: number | null;
+          special_message?: string | null;
           bride_designation?: string | null;
           groom_designation?: string | null;
           bride_bio?: string | null;
@@ -764,8 +812,12 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string | null;
-          bride_name?: string;
-          groom_name?: string;
+          form_type?: EventFormType;
+          bride_name?: string | null;
+          groom_name?: string | null;
+          celebrant_name?: string | null;
+          birthday_number?: number | null;
+          special_message?: string | null;
           bride_designation?: string | null;
           groom_designation?: string | null;
           bride_bio?: string | null;
@@ -852,6 +904,7 @@ export interface Database {
         Row: {
           id: string;
           access_token: string;
+          user_id: string | null;
           ip_address: string | null;
           user_agent: string | null;
           expires_at: string;
@@ -861,6 +914,7 @@ export interface Database {
         Insert: {
           id?: string;
           access_token: string;
+          user_id?: string | null;
           ip_address?: string | null;
           user_agent?: string | null;
           expires_at: string;
@@ -870,6 +924,7 @@ export interface Database {
         Update: {
           id?: string;
           access_token?: string;
+          user_id?: string | null;
           ip_address?: string | null;
           user_agent?: string | null;
           expires_at?: string;

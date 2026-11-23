@@ -121,8 +121,8 @@ export function TemplatesMarketplace({
       <div className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-end">
         <div className="max-w-xl">
           <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-sapphire-600">Template Library</p>
-          <h1 className="mt-3 font-heading-2xl text-ivory-950 sm:font-heading-3xl">Find your website style</h1>
-          <p className="mt-4 font-body-md leading-relaxed text-navy-800 sm:font-body-lg">
+          <h1 className="mt-3 hidden font-heading-2xl text-ivory-950 sm:font-heading-3xl lg:block">Find your website style</h1>
+          <p className="mt-4 hidden font-body-md leading-relaxed text-navy-800 sm:font-body-lg lg:block">
             Open any template as a live demo on your phone, personalize it in minutes,
             and publish with a reserved link of your choice.
           </p>

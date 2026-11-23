@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
 import { Badge } from "@/components/shared/Badge";
+import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { createServerClient } from "@/lib/supabase/server";
 import { getTemplateBySlug } from "@/lib/services/templates";
 import { TemplateFavoriteButton } from "@/components/public/TemplateFavoriteButton";
@@ -85,9 +86,9 @@ export default async function TemplateDetailPage({ params }: PageProps) {
                   <p className="mt-1 font-heading-2xl text-sapphire-700">{price}</p>
                   <p className="mt-0.5 font-body-xs text-navy-600">inclusive of taxes · one-time license</p>
                 </div>
-                <Link href={`/create/new?template=${t.slug}`}>
+                <StartCreationLink templateSlug={t.slug}>
                   <Button size="xl" icon="auto_awesome">Create</Button>
-                </Link>
+                </StartCreationLink>
               </div>
               <div className="mt-5 flex flex-col gap-2 border-t border-navy-200 pt-4 font-body-sm text-navy-800">
                 <p className="flex items-center gap-2"><Icon name="check_circle" size="sm" className="text-gold-500" /> Live until two months after your wedding date</p>

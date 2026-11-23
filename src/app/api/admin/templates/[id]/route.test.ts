@@ -206,6 +206,18 @@ async function runDelete(id: string) {
   });
 }
 
+async function runPatch(id: string, body: Record<string, unknown>) {
+  const { PATCH } = await import("./route");
+  return PATCH(
+    new Request(`http://localhost/api/admin/templates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ id }) }
+  );
+}
+
 function seedTemplate(id: string, name = "Test Template") {
   db.rows.templates = [{ id, name, slug: "test-template", status: "active" }];
   db.rows.template_versions = [
@@ -256,6 +268,27 @@ function assignDemoResources(templateId: string) {
     product_id: PRODUCT,
   });
 }
+
+describe("PATCH /api/admin/templates/[id] image uploads", () => {
+  it("stores the per-template photo capability", async () => {
+    seedProfiles();
+    seedTemplate(TPL);
+    db.rows.templates[0].allows_image_upload = true;
+
+    const res = await runPatch(TPL, { allows_image_upload: false });
+    expect(res.status).toBe(200);
+
+    const json = (await res.json()) as { template: { allows_image_upload: boolean } };
+    expect(json.template.allows_image_upload).toBe(false);
+    expect(db.writes).toContainEqual(
+      expect.objectContaining({
+        table: "templates",
+        kind: "update",
+        values: { allows_image_upload: false },
+      })
+    );
+  });
+});
 
 describe("DELETE /api/admin/templates/[id]", () => {
   it("rejects a non-admin with 403", async () => {

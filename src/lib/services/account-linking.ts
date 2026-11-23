@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/services/email";
 import { renderAccountAccessEmail } from "@/lib/services/email-templates";
+import { resolveConfiguredAppOrigin } from "@/lib/services/app-origin";
+import { invitationUrl } from "@/lib/services/weddings";
 
 export interface LinkInvitationResult {
   linked: boolean;
@@ -14,8 +16,18 @@ interface WeddingForLinking {
   user_id: string | null;
   email: string | null;
   slug: string | null;
+  form_type: string | null;
   bride_name: string | null;
   groom_name: string | null;
+  celebrant_name: string | null;
+}
+
+/** Human name for account copy: the couple, or the birthday person. */
+function displayName(wedding: WeddingForLinking): string {
+  if (wedding.form_type === "birthday_celebration" || wedding.form_type === "birthday_wishes") {
+    return wedding.celebrant_name?.trim() || "Birthday Star";
+  }
+  return [wedding.groom_name, wedding.bride_name].filter(Boolean).join(" & ") || "Your invitation";
 }
 
 /**
@@ -29,13 +41,16 @@ interface WeddingForLinking {
  *
  * Never throws: a linking/email failure must not invalidate a paid invitation.
  */
-export async function linkInvitationToCustomer(weddingId: string): Promise<LinkInvitationResult> {
+export async function linkInvitationToCustomer(
+  weddingId: string,
+  options: { origin?: string } = {}
+): Promise<LinkInvitationResult> {
   const supabase = createAdminClient();
 
   try {
     const { data, error } = await supabase
       .from("weddings")
-      .select("id, user_id, email, slug, bride_name, groom_name")
+      .select("id, user_id, email, slug, form_type, bride_name, groom_name, celebrant_name")
       .eq("id", weddingId)
       .maybeSingle();
 
@@ -45,7 +60,7 @@ export async function linkInvitationToCustomer(weddingId: string): Promise<LinkI
     if (!wedding.email) return { linked: false, userId: null, emailSent: false, reason: "no-email" };
     if (wedding.user_id) return { linked: true, userId: wedding.user_id, emailSent: false, reason: "already-linked" };
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+    const appUrl = options.origin ?? resolveConfiguredAppOrigin();
     const redirectTo = `${appUrl}/auth/callback?next=/app/explore`;
 
     let userId: string | null = null;
@@ -69,7 +84,7 @@ export async function linkInvitationToCustomer(weddingId: string): Promise<LinkI
         options: {
           redirectTo,
           data: {
-            full_name: `${wedding.groom_name ?? ""} & ${wedding.bride_name ?? ""}`.trim(),
+            full_name: displayName(wedding),
             source: "guest_checkout",
           },
         },
@@ -94,8 +109,8 @@ export async function linkInvitationToCustomer(weddingId: string): Promise<LinkI
     let emailSent = false;
     if (actionLink) {
       const email = renderAccountAccessEmail({
-        coupleNames: `${wedding.groom_name ?? "—"} & ${wedding.bride_name ?? "—"}`,
-        invitationUrl: wedding.slug ? `${appUrl}/w/${wedding.slug}` : appUrl,
+        coupleNames: displayName(wedding),
+        invitationUrl: wedding.slug ? invitationUrl(wedding.slug, appUrl) : appUrl,
         accessUrl: actionLink,
         appUrl,
       });

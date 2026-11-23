@@ -10,6 +10,7 @@ import {
   templateAssetBaseUrl,
   type RuntimePayload,
 } from "@/lib/runtime/payload";
+import { formTypeOrDefault, type FormType } from "@/lib/builder/forms";
 
 interface TemplateVersionRow {
   id: string;
@@ -17,13 +18,18 @@ interface TemplateVersionRow {
   storage_prefix: string;
   manifest: Record<string, unknown>;
   template_id: string;
-  templates: { id: string; name: string; slug: string } | { id: string; name: string; slug: string }[] | null;
+  templates:
+    | { id: string; name: string; slug: string; form_type: string | null }
+    | { id: string; name: string; slug: string; form_type: string | null }[]
+    | null;
 }
 
 export interface RuntimeTemplateSource {
   templateId: string;
   templateName: string;
   templateSlug: string;
+  /** The template's event form, used for previews of unpublished drafts. */
+  formType: FormType;
   versionId: string;
   version: string;
   storagePrefix: string;
@@ -49,7 +55,7 @@ export async function resolveRuntimeTemplate(
   const { data, error } = await supabase
     .from("template_versions")
     .select(
-      "id, version, storage_prefix, manifest, template_id, templates:template_id(id, name, slug)"
+      "id, version, storage_prefix, manifest, template_id, templates:template_id(id, name, slug, form_type)"
     )
     .eq("id", templateVersionId)
     .eq("status", "published")
@@ -60,8 +66,8 @@ export async function resolveRuntimeTemplate(
   const row = data as TemplateVersionRow;
   const manifest = (row.manifest ?? {}) as Record<string, unknown>;
   const template = row.templates as
-    | { id: string; name: string; slug: string }
-    | { id: string; name: string; slug: string }[]
+    | { id: string; name: string; slug: string; form_type: string | null }
+    | { id: string; name: string; slug: string; form_type: string | null }[]
     | null;
   const t = Array.isArray(template) ? template[0] : template;
   if (!t) return null;
@@ -70,6 +76,7 @@ export async function resolveRuntimeTemplate(
     templateId: row.template_id,
     templateName: t.name,
     templateSlug: t.slug,
+    formType: formTypeOrDefault(t.form_type),
     versionId: row.id,
     version: row.version,
     storagePrefix: row.storage_prefix,

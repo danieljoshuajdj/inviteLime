@@ -119,6 +119,19 @@ export function friendlyAuthError(error: unknown, mode: AuthMode): string {
     return "We couldn't reach the server. Check your internet connection and try again.";
   }
 
+  // Google OAuth failures surfaced by Supabase or the provider.
+  if (
+    says(/provider is not enabled|unsupported provider|provider.*not enabled|google.*not enabled/)
+  ) {
+    return "Google sign-in isn't available right now. Please try again later.";
+  }
+  if (says(/redirect_uri_mismatch|redirect url.*not allowed|invalid redirect/)) {
+    return "Google sign-in is not configured for this site yet. Please contact support.";
+  }
+  if (says(/access_denied|user (cancelled|canceled)|consent/)) {
+    return "Google sign-in was cancelled. Please try again.";
+  }
+
   return GENERIC[mode];
 }
 
@@ -133,6 +146,9 @@ export function friendlyAuthParam(key: string | null): string | null {
     missing_code: "That sign-in link looks incomplete. Please open the link from your email again.",
     session_expired: "That sign-in link has expired. Please open the most recent email or request a new one.",
     exchange_failed: "We couldn't complete sign-in. Please try again.",
+    google_cancelled: "Google sign-in was cancelled. Please try again.",
+    google_failed: "We couldn't sign you in with Google. Please try again.",
+    google_unavailable: "Google sign-in isn't available right now. Please try again later.",
   };
   return known[key] ?? "We couldn't complete sign-in. Please try again.";
 }

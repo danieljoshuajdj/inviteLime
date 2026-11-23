@@ -15,12 +15,20 @@ import { deleteMediaPack } from "@/lib/services/media-packs";
 import { deleteDemoDetailPack } from "@/lib/services/demo-details";
 import { deleteMusicTrack } from "@/lib/services/music-library";
 import { getObjectStorage, TEMPLATE_BUCKET } from "@/lib/services/storage";
+import { type FormType } from "@/lib/builder/forms";
 
 export const dynamic = "force-dynamic";
 
 const patchSchema = z
   .object({
     name: z.string().trim().min(2).max(100).optional(),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(100)
+      .regex(/^[a-z0-9-]+$/, "Slug must use lowercase letters, numbers, and dashes")
+      .optional(),
     description: z.string().max(1000).nullable().optional(),
     status: z.enum(["active", "disabled", "draft"]).optional(),
     product_id: z.string().uuid().nullable().optional(),
@@ -29,6 +37,10 @@ const patchSchema = z
     media_pack_id: z.string().uuid().nullable().optional(),
     demo_detail_pack_id: z.string().uuid().nullable().optional(),
     music_track_id: z.string().uuid().nullable().optional(),
+    // Whether the customer's create form asks for photos.
+    allows_image_upload: z.boolean().optional(),
+    // Replacing the single event category also re-derives the template's form.
+    category_ids: z.array(z.string().uuid()).length(1, "Select exactly one event category").optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
 interface RouteContext {
@@ -53,6 +65,18 @@ export async function PATCH(req: Request, { params }: RouteContext) {
 
     const adminClient = createAdminClient();
 
+    // A slug is the public demo URL, so it must stay unique across templates.
+    if (parsed.data.slug !== undefined) {
+      const { data: sameSlug, error: slugErr } = await adminClient
+        .from("templates")
+        .select("id")
+        .eq("slug", parsed.data.slug);
+      if (slugErr) return Response.json({ error: slugErr.message }, { status: 500 });
+      if ((sameSlug ?? []).some((row) => row.id !== id)) {
+        return Response.json({ error: "A template with this slug already exists" }, { status: 400 });
+      }
+    }
+
     if (parsed.data.price_paise !== undefined) {
       const { data: tpl } = await adminClient.from("templates").select("product_id").eq("id", id).maybeSingle();
       if (!tpl?.product_id) return Response.json({ error: "This template has no product to price" }, { status: 400 });
@@ -63,8 +87,34 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       if (priceErr) return Response.json({ error: priceErr.message }, { status: 500 });
     }
 
+    let derivedFormType: FormType | null = null;
+    if (parsed.data.category_ids !== undefined) {
+      const { data: category } = await adminClient
+        .from("categories")
+        .select("id, form_type")
+        .eq("id", parsed.data.category_ids[0])
+        .maybeSingle();
+      if (!category) {
+        return Response.json({ error: "The selected category no longer exists" }, { status: 400 });
+      }
+      derivedFormType = category.form_type;
+
+      const { error: unlinkError } = await adminClient
+        .from("template_categories")
+        .delete()
+        .eq("template_id", id);
+      if (unlinkError) return Response.json({ error: unlinkError.message }, { status: 500 });
+
+      const { error: linkError } = await adminClient
+        .from("template_categories")
+        .insert({ template_id: id, category_id: category.id });
+      if (linkError) return Response.json({ error: linkError.message }, { status: 500 });
+    }
+
     const update = {
+      ...(derivedFormType ? { form_type: derivedFormType } : {}),
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+      ...(parsed.data.slug !== undefined ? { slug: parsed.data.slug } : {}),
       ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
       ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
       ...(parsed.data.product_id !== undefined ? { product_id: parsed.data.product_id } : {}),
@@ -74,6 +124,9 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         : {}),
       ...(parsed.data.music_track_id !== undefined
         ? { music_track_id: parsed.data.music_track_id }
+        : {}),
+      ...(parsed.data.allows_image_upload !== undefined
+        ? { allows_image_upload: parsed.data.allows_image_upload }
         : {}),
     };
 

@@ -24,8 +24,14 @@ const eventSchema = z.object({
 const packSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().max(300).nullable().optional(),
-  brideName: z.string().trim().min(1).max(120),
-  groomName: z.string().trim().min(1).max(120),
+  // The form decides which of the following fields are required. The service
+  // enforces those rules so the API and the admin editor cannot drift apart.
+  formType: z.enum(["wedding", "engagement", "birthday_celebration", "birthday_wishes"]).optional(),
+  brideName: z.string().trim().max(120).nullable().optional(),
+  groomName: z.string().trim().max(120).nullable().optional(),
+  celebrantName: z.string().trim().max(120).nullable().optional(),
+  birthdayNumber: z.number().int().min(1).max(150).nullable().optional(),
+  specialMessage: z.string().max(4000).nullable().optional(),
   brideDesignation: z.string().max(200).nullable().optional(),
   groomDesignation: z.string().max(200).nullable().optional(),
   brideBio: z.string().max(2000).nullable().optional(),

@@ -5,6 +5,19 @@
  *   Uploads and validates a ZIP package, extracts it into storage, and creates
  *   a DRAFT template version. Does NOT auto-publish. Admin must explicitly publish.
  *
+ * Replacement lifecycle:
+ *  - The new version is claimed in the database with status "uploading" before
+ *    any object is written. The unique (template_id, version) constraint makes
+ *    concurrent uploads serialise: the loser gets a 409 instead of writing into
+ *    the winner's prefix.
+ *  - Files are written to the claimed version's prefix. A failed upload removes
+ *    the claim and its files, so a rejected package never leaves orphaned rows
+ *    or objects.
+ *  - Once the upload is committed as a draft, superseded draft versions are
+ *    removed. The currently published version is kept until the new draft is
+ *    published, because demos and live invitations still render it. The publish
+ *    route finishes the replacement.
+ *
  * Security:
  *  - requireAdmin() on every request
  *  - Full ZIP security scan via validateTemplateZip()
@@ -21,7 +34,17 @@ import { adminApiError, logAdminAction } from "@/lib/services/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { consumeRateLimit } from "@/lib/services/ops";
 import { validateTemplateZip } from "@/lib/services/template-validator";
-import { getObjectStorage, TEMPLATE_BUCKET } from "@/lib/services/storage";
+import {
+  getObjectStorage,
+  TEMPLATE_BUCKET,
+  type ObjectStorage,
+} from "@/lib/services/storage";
+import {
+  cleanupStaleVersionUploads,
+  cleanupSupersededTemplateVersions,
+  deleteTemplateVersionObjects,
+  type VersionCleanupResult,
+} from "@/lib/services/template-version-cleanup";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,6 +92,14 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (file.size > MAX_ZIP_BYTES)
       return Response.json({ error: "Package exceeds 60 MB limit" }, { status: 400 });
 
+    // Validate the thumbnail before claiming a version, so a bad image cannot
+    // leave a half-written package behind.
+    const thumbnailFile =
+      thumbnail instanceof File && thumbnail.size > 0 ? thumbnail : null;
+    if (thumbnailFile && !/^image\/(png|jpe?g|webp)$/.test(thumbnailFile.type)) {
+      return Response.json({ error: "Thumbnail must be PNG/JPEG/WebP" }, { status: 400 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // ── Full security + integrity validation ─────────────────────────────
@@ -85,6 +116,34 @@ export async function POST(req: Request, { params }: RouteContext) {
       );
     }
 
+    // ── Build the manifest before claiming the version ───────────────────
+    const manifestForStorage: Record<string, unknown> = validation.manifest
+      ? { ...(validation.manifest as unknown as Record<string, unknown>) }
+      : {};
+    if (!manifestForStorage.version) manifestForStorage.version = null;
+    if (!manifestForStorage.entry) manifestForStorage.entry = "index.html";
+
+    const storage = await getObjectStorage();
+
+    // A previous upload may have crashed after claiming a version. Clear stale
+    // claims first so they do not consume a version number forever.
+    try {
+      const stale = await cleanupStaleVersionUploads({
+        supabase: adminClient,
+        templateId: id,
+        storage,
+      });
+      if (stale.deletedVersions.length > 0) {
+        console.info("[template-upload] removed stale upload claims", {
+          templateId: id,
+          versions: stale.deletedVersions.map((version) => version.version),
+          objects: stale.deletedObjects,
+        });
+      }
+    } catch (err) {
+      console.warn("[template-upload] stale-claim cleanup failed", err);
+    }
+
     // ── Calculate next version ───────────────────────────────────────────
     const { data: versions } = await adminClient
       .from("template_versions")
@@ -96,12 +155,57 @@ export async function POST(req: Request, { params }: RouteContext) {
     const last = versions?.[0]?.version as string | undefined;
     const next = nextVersion(last);
     const prefix = `${id}/v${next}`;
+    if (manifestForStorage.version == null) manifestForStorage.version = next;
+
+    // ── Claim the version before writing any objects ─────────────────────
+    // The unique (template_id, version) constraint is the concurrency lock.
+    const { data: claimed, error: claimError } = await adminClient
+      .from("template_versions")
+      .insert({
+        template_id: id,
+        version: next,
+        storage_prefix: prefix,
+        manifest: manifestForStorage as never,
+        is_current: false,
+        status: "uploading",
+      })
+      .select("id, version, status, created_at")
+      .single();
+
+    if (claimError) {
+      if ((claimError as { code?: string }).code === "23505") {
+        return Response.json(
+          {
+            error:
+              "Another upload for this template is already in progress. Wait for it to finish and try again.",
+            code: "UPLOAD_IN_PROGRESS",
+          },
+          { status: 409 }
+        );
+      }
+      return Response.json({ error: claimError.message }, { status: 500 });
+    }
+
+    // We own this prefix now. Remove any orphaned files left by an earlier
+    // failed attempt at the same version before writing new ones.
+    const prepared = await deleteTemplateVersionObjects(storage, id, prefix);
+    if (prepared.error) {
+      await rollbackVersionClaim(adminClient, storage, id, claimed.id, prefix);
+      return Response.json(
+        {
+          error: "Upload could not start because its storage prefix could not be prepared.",
+          detail: prepared.error.message,
+        },
+        { status: 502 }
+      );
+    }
 
     // ── Extract ZIP safely into storage ─────────────────────────────────
     let zip: AdmZip;
     try {
       zip = new AdmZip(buffer);
     } catch {
+      await rollbackVersionClaim(adminClient, storage, id, claimed.id, prefix);
       return Response.json({ error: "Could not open ZIP archive" }, { status: 400 });
     }
 
@@ -112,7 +216,6 @@ export async function POST(req: Request, { params }: RouteContext) {
     const rootPrefix = getRootPrefix(allPaths);
 
     let uploadErr: string | null = null;
-    const storage = await getObjectStorage();
     for (const entry of entries) {
       const rawName = entry.entryName.replace(/\\/g, "/");
 
@@ -160,68 +263,126 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
 
     if (uploadErr) {
-      return Response.json({ error: `Upload failed: ${uploadErr}` }, { status: 502 });
+      const rollback = await rollbackVersionClaim(
+        adminClient,
+        storage,
+        id,
+        claimed.id,
+        prefix
+      );
+      return Response.json(
+        {
+          error: `Upload failed: ${uploadErr}`,
+          ...(rollback.warnings.length > 0 ? { warnings: rollback.warnings } : {}),
+        },
+        { status: 502 }
+      );
     }
 
+    // ── Commit the claimed row as a normal draft ─────────────────────────
+    const { data: draftRow, error: finalizeError } = await adminClient
+      .from("template_versions")
+      .update({ status: "draft" })
+      .eq("id", claimed.id)
+      .eq("status", "uploading")
+      .select("id")
+      .single();
+    if (finalizeError || !draftRow) {
+      const rollback = await rollbackVersionClaim(
+        adminClient,
+        storage,
+        id,
+        claimed.id,
+        prefix
+      );
+      return Response.json(
+        {
+          error:
+            finalizeError?.message ??
+            "Upload completed but the version could not be committed.",
+          ...(rollback.warnings.length > 0 ? { warnings: rollback.warnings } : {}),
+        },
+        { status: 500 }
+      );
+    }
+
+    const warnings: string[] = [];
+
     // ── Optional thumbnail upload ────────────────────────────────────────
+    // The package is already committed, so a thumbnail failure is a warning,
+    // not a failed upload. The previous thumbnail (or no thumbnail) stays.
     let thumbnailPath: string | null = null;
-    if (thumbnail instanceof File && thumbnail.size > 0) {
-      if (!/^image\/(png|jpe?g|webp)$/.test(thumbnail.type)) {
-        return Response.json({ error: "Thumbnail must be PNG/JPEG/WebP" }, { status: 400 });
-      }
+    if (thumbnailFile) {
       thumbnailPath = `${id}/thumbnail`;
       try {
         await storage.upload(
           TEMPLATE_BUCKET,
           thumbnailPath,
-          Buffer.from(await thumbnail.arrayBuffer()),
-          { contentType: thumbnail.type, upsert: true }
+          Buffer.from(await thumbnailFile.arrayBuffer()),
+          { contentType: thumbnailFile.type, upsert: true }
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return Response.json({ error: `Thumbnail upload failed: ${message}` }, { status: 502 });
+        warnings.push(`Package uploaded, but the thumbnail could not be saved: ${message}`);
+        thumbnailPath = null;
       }
     }
 
-    // ── Build manifest for storage ───────────────────────────────────────
-    const manifestForStorage: Record<string, unknown> = validation.manifest
-      ? { ...(validation.manifest as unknown as Record<string, unknown>) }
-      : {};
-    if (!manifestForStorage.version) manifestForStorage.version = next;
-    if (!manifestForStorage.entry) manifestForStorage.entry = "index.html";
-
-    // ── Insert new DRAFT version (admin must explicitly publish) ─────────
-    const { data: newVersion, error: vErr } = await adminClient
-      .from("template_versions")
-      .insert({
-        template_id: id,
-        version: next,
-        storage_prefix: prefix,
-        manifest: manifestForStorage as never,
-        is_current: false,  // Draft: not current until published
-        status: "draft",    // Requires explicit publish action
-      })
-      .select("id, version, status")
-      .single();
-    if (vErr) return Response.json({ error: vErr.message }, { status: 500 });
-
-    // Update thumbnail if provided
     if (thumbnailPath) {
-      await adminClient.from("templates").update({ thumbnail_path: thumbnailPath }).eq("id", id);
+      const { error: thumbnailError } = await adminClient
+        .from("templates")
+        .update({ thumbnail_path: thumbnailPath })
+        .eq("id", id);
+      if (thumbnailError) {
+        warnings.push(`Thumbnail saved but template record update failed: ${thumbnailError.message}`);
+      }
     }
 
     // Sync description from manifest if provided and template has no description yet
     if (manifestForStorage.description) {
       const { data: tpl } = await adminClient.from("templates").select("description").eq("id", id).maybeSingle();
       if (!tpl?.description) {
-        await adminClient.from("templates").update({ description: String(manifestForStorage.description) }).eq("id", id);
+        const { error: descriptionError } = await adminClient
+          .from("templates")
+          .update({ description: String(manifestForStorage.description) })
+          .eq("id", id);
+        if (descriptionError) {
+          warnings.push(`Description sync failed: ${descriptionError.message}`);
+        }
       }
+    }
+
+    // ── Remove superseded versions that are safe to delete now ───────────
+    // The published version is protected until the admin publishes this draft.
+    let cleanup: VersionCleanupResult | null = null;
+    try {
+      cleanup = await cleanupSupersededTemplateVersions({
+        supabase: adminClient,
+        templateId: id,
+        newVersionId: claimed.id,
+        storage,
+        protectCurrent: true,
+        repointGuestDrafts: false,
+      });
+      warnings.push(...cleanup.warnings);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      warnings.push(`Previous-version cleanup will retry on the next upload: ${message}`);
+      console.error("[template-upload] cleanup failed", { templateId: id, error: message });
     }
 
     await logAdminAction(admin.user.id, "template.package_upload", "template", id, {
       version: next,
-      versionId: newVersion.id,
+      versionId: claimed.id,
       files: validation.files.length,
+      cleanup: cleanup
+        ? {
+            deletedVersions: cleanup.deletedVersions.map((version) => version.version),
+            deletedObjects: cleanup.deletedObjects,
+            skipped: cleanup.skipped,
+          }
+        : null,
+      ...(warnings.length > 0 ? { warnings } : {}),
       validation: {
         errors: validation.errors.length,
         warnings: validation.warnings.length,
@@ -232,9 +393,21 @@ export async function POST(req: Request, { params }: RouteContext) {
     return Response.json({
       ok: true,
       version: next,
-      versionId: newVersion.id,
+      versionId: claimed.id,
       status: "draft",
       files: validation.files.length,
+      ...(cleanup ? { versionCount: cleanup.remainingVersions } : {}),
+      ...(cleanup
+        ? {
+            cleanup: {
+              deletedVersions: cleanup.deletedVersions,
+              deletedObjects: cleanup.deletedObjects,
+              skipped: cleanup.skipped,
+              warnings: cleanup.warnings,
+            },
+          }
+        : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
       validation: {
         ok: validation.ok,
         errors: validation.errors,
@@ -250,6 +423,59 @@ export async function POST(req: Request, { params }: RouteContext) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Removes an `uploading` claim and its objects after a failed upload. The row
+ * is removed first: if storage cleanup fails, the next upload's orphan sweep
+ * can retry without any live row pointing at missing files.
+ */
+async function rollbackVersionClaim(
+  adminClient: ReturnType<typeof createAdminClient>,
+  storage: ObjectStorage,
+  templateId: string,
+  versionId: string,
+  prefix: string
+): Promise<{ warnings: string[] }> {
+  const warnings: string[] = [];
+
+  const { data, error } = await adminClient
+    .from("template_versions")
+    .delete()
+    .eq("id", versionId)
+    .eq("template_id", templateId)
+    .eq("status", "uploading")
+    .select("id");
+  if (error) {
+    warnings.push(`Could not remove the failed upload claim: ${error.message}`);
+    return { warnings };
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    warnings.push("The failed upload claim had already changed; storage was left untouched.");
+    return { warnings };
+  }
+
+  // If another row somehow shares this prefix, its files must stay.
+  const { data: shared, error: sharedError } = await adminClient
+    .from("template_versions")
+    .select("id")
+    .eq("template_id", templateId)
+    .eq("storage_prefix", prefix)
+    .limit(1);
+  if (sharedError) {
+    warnings.push(`Could not verify prefix ownership: ${sharedError.message}`);
+    return { warnings };
+  }
+  if ((shared ?? []).length > 0) {
+    warnings.push("Storage was left in place because another version uses the same prefix.");
+    return { warnings };
+  }
+
+  const result = await deleteTemplateVersionObjects(storage, templateId, prefix);
+  if (result.error) {
+    warnings.push(`Failed-upload objects could not be removed yet: ${result.error.message}`);
+  }
+  return { warnings };
+}
 
 function nextVersion(last: string | undefined): string {
   if (!last) return "1.0.0";

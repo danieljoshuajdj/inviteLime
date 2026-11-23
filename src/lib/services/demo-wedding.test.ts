@@ -32,6 +32,8 @@ describe("weddingDataToRuntimeInput", () => {
         events: [{ name: "Mehendi", date: "2027-02-12" }],
         gallery: [{ role: "gallery", url: "https://cdn.example/1.jpg", name: "1.jpg" }],
         couplePhoto: "https://cdn.example/couple.jpg",
+        includePhotos: true,
+        includeGallery: true,
         music: { role: "music", url: "https://cdn.example/song.mp3", name: "song.mp3" },
         brideDesignation: "Product designer",
         groomDesignation: "Software engineer",
@@ -65,6 +67,49 @@ describe("weddingDataToRuntimeInput", () => {
     expect(input.gallery).toEqual([{ url: "https://cdn.example/1.jpg", name: "1.jpg" }]);
     expect(input.photos.couple).toBe("https://cdn.example/couple.jpg");
     expect(input.music?.url).toBe("https://cdn.example/song.mp3");
+  });
+
+  it("keeps switched-off portraits and gallery out of the runtime contract", () => {
+    const input = weddingDataToRuntimeInput(
+      { id: "wed-off", slug: "slug-off" },
+      defaultWeddingData({
+        bridePhoto: "https://cdn.example/bride.jpg",
+        groomPhoto: "https://cdn.example/groom.jpg",
+        couplePhoto: "https://cdn.example/couple.jpg",
+        gallery: [{ role: "gallery", url: "https://cdn.example/1.jpg" }],
+        includePhotos: false,
+        includeGallery: false,
+      })
+    );
+
+    expect(input.photos).toEqual({ bride: null, groom: null, couple: null, main: null });
+    expect(input.gallery).toEqual([]);
+  });
+
+  it("lets the two switches work independently", () => {
+    const photosOnly = weddingDataToRuntimeInput(
+      { id: "wed-p", slug: "slug-p" },
+      defaultWeddingData({
+        bridePhoto: "https://cdn.example/bride.jpg",
+        gallery: [{ role: "gallery", url: "https://cdn.example/1.jpg" }],
+        includePhotos: true,
+        includeGallery: false,
+      })
+    );
+    expect(photosOnly.photos.bride).toBe("https://cdn.example/bride.jpg");
+    expect(photosOnly.gallery).toEqual([]);
+
+    const galleryOnly = weddingDataToRuntimeInput(
+      { id: "wed-g", slug: "slug-g" },
+      defaultWeddingData({
+        bridePhoto: "https://cdn.example/bride.jpg",
+        gallery: [{ role: "gallery", url: "https://cdn.example/1.jpg" }],
+        includePhotos: false,
+        includeGallery: true,
+      })
+    );
+    expect(galleryOnly.photos.bride).toBeNull();
+    expect(galleryOnly.gallery).toEqual([{ url: "https://cdn.example/1.jpg", name: undefined }]);
   });
 
   it("falls back to stored wedding columns when builder data is empty", () => {
@@ -121,8 +166,12 @@ const detailPack: DemoDetailPack = {
   id: "pack-1",
   name: "Royal Tamil wedding",
   description: null,
+  formType: "wedding",
   brideName: "Karthika M.",
   groomName: "Jeya Chandran S.",
+  celebrantName: null,
+  birthdayNumber: null,
+  specialMessage: null,
   brideDesignation: "Daughter of Mr. Mariappan",
   groomDesignation: null,
   brideBio: "Bride bio",
@@ -202,6 +251,47 @@ describe("demoDetailsToWeddingData", () => {
     expect(data.coupleBio).toBe("");
     expect(data.story).toBe("");
   });
+
+  it("maps birthday packs to celebrant, date/venue or age/message", () => {
+    const celebration = demoDetailsToWeddingData({
+      ...detailPack,
+      formType: "birthday_celebration",
+      brideName: null,
+      groomName: null,
+      celebrantName: "Ananya",
+      weddingDate: "2027-03-20",
+      venue: "Bayview Terrace",
+      events: [],
+    });
+
+    expect(celebration.formType).toBe("birthday_celebration");
+    expect(celebration.celebrantName).toBe("Ananya");
+    expect(celebration.weddingDate).toBe("2027-03-20");
+    expect(celebration.venue).toBe("Bayview Terrace");
+    expect(celebration.brideName).toBe("");
+    expect(celebration.events).toEqual([]);
+
+    const wishes = demoDetailsToWeddingData({
+      ...detailPack,
+      formType: "birthday_wishes",
+      brideName: null,
+      groomName: null,
+      celebrantName: "Meera",
+      birthdayNumber: 30,
+      specialMessage: "Have a wonderful year.",
+      weddingDate: null,
+      weddingTime: null,
+      venue: null,
+      address: null,
+      events: [],
+    });
+
+    expect(wishes.formType).toBe("birthday_wishes");
+    expect(wishes.celebrantName).toBe("Meera");
+    expect(wishes.birthdayNumber).toBe(30);
+    expect(wishes.specialMessage).toBe("Have a wonderful year.");
+    expect(wishes.groomName).toBe("");
+  });
 });
 
 describe("demoDetailsToRuntimeExtras", () => {
@@ -240,6 +330,7 @@ describe("withDemoMusic", () => {
       sizeBytes: 1024,
       durationMs: 1000,
       isActive: true,
+      categories: [],
       createdAt: "2026-01-01T00:00:00.000Z",
     });
 

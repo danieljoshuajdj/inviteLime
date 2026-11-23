@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { mediaFolderForGuest } from "./media-access";
-import { absolutizeMediaUrl, mediaObjectKey, rewriteRuntimeMedia, signDraftMediaUrl } from "./media-urls";
+import {
+  absolutizeMediaUrl,
+  mediaObjectKey,
+  rewriteRuntimeMedia,
+  rewriteWeddingDataMedia,
+  signDraftMediaUrl,
+} from "./media-urls";
 import type { RuntimeWeddingInput } from "@/lib/runtime/payload";
 
 const APP_URL = "https://app.example.com";
@@ -162,5 +168,87 @@ describe("rewriteRuntimeMedia", () => {
     expect(result.gallery[0].url).toBe("https://cdn.example.com/a.jpg");
     expect(result.photos.bride).toBeNull();
     expect(result.photos.groom).toBe("https://cdn.example.com/b.jpg");
+  });
+
+  it("rewrites the birthday main photo as well as the couple portraits", () => {
+    const wedding = makeWedding({
+      photos: {
+        bride: null,
+        groom: null,
+        couple: null,
+        main: `/api/media/${GUEST_FOLDER}/couple/main.webp`,
+      },
+    });
+
+    const result = rewriteRuntimeMedia(wedding, (url) => `${APP_URL}${url}`);
+    expect(result.photos.main).toBe(
+      `${APP_URL}/api/media/${GUEST_FOLDER}/couple/main.webp`
+    );
+  });
+
+  it("normalises a historical absolute localhost media URL onto the serving origin", () => {
+    const historical = `http://localhost:3000/api/media/${WEDDING_ID}/gallery/a.webp`;
+    expect(absolutizeMediaUrl(historical, "https://tunnel.example.com")).toBe(
+      `https://tunnel.example.com/api/media/${WEDDING_ID}/gallery/a.webp`
+    );
+  });
+});
+
+describe("rewriteWeddingDataMedia", () => {
+  it("rewrites builder-shaped media without touching external links", () => {
+    const data = {
+      formType: "birthday_wishes" as const,
+      celebrantName: "Humaira",
+      birthdayNumber: 21,
+      specialMessage: "",
+      mainPhoto: `http://localhost:3000/api/media/${WEDDING_ID}/couple/main.webp`,
+      brideName: "",
+      groomName: "",
+      brideBio: "",
+      groomBio: "",
+      coupleBio: "",
+      story: "",
+      brideDesignation: "",
+      groomDesignation: "",
+      weddingDate: "",
+      weddingTime: null,
+      venue: "",
+      address: "",
+      mapsUrl: null,
+      latitude: null,
+      longitude: null,
+      events: [],
+      gallery: [
+        { role: "gallery" as const, url: `http://localhost:3000/api/media/${WEDDING_ID}/gallery/a.webp` },
+        { role: "gallery" as const, url: "https://cdn.example.com/b.jpg" },
+      ],
+      dress: null,
+      rsvpEnabled: false,
+      rsvpWhatsapp: "",
+      bridePhoto: null,
+      groomPhoto: null,
+      couplePhoto: null,
+      includePhotos: true,
+      includeGallery: true,
+      music: {
+        role: "music" as const,
+        url: `http://localhost:3000/api/media/${WEDDING_ID}/music/song.mp3`,
+      },
+    };
+
+    const result = rewriteWeddingDataMedia(data, (url) =>
+      absolutizeMediaUrl(url, "https://tunnel.example.com")
+    );
+
+    expect(result.mainPhoto).toBe(
+      `https://tunnel.example.com/api/media/${WEDDING_ID}/couple/main.webp`
+    );
+    expect(result.gallery[0].url).toBe(
+      `https://tunnel.example.com/api/media/${WEDDING_ID}/gallery/a.webp`
+    );
+    expect(result.gallery[1].url).toBe("https://cdn.example.com/b.jpg");
+    expect(result.music?.url).toBe(
+      `https://tunnel.example.com/api/media/${WEDDING_ID}/music/song.mp3`
+    );
   });
 });

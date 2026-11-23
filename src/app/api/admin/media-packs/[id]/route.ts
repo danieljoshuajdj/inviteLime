@@ -21,6 +21,9 @@ const patchSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().max(300).nullable().optional(),
+    formType: z
+      .enum(["wedding", "engagement", "birthday_celebration", "birthday_wishes"])
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
 
@@ -38,11 +41,13 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     await updateMediaPack(id, {
       name: parsed.data.name,
       description: parsed.data.description,
+      formType: parsed.data.formType,
     });
 
     await logAdminAction(admin.user.id, "media_pack.update", "media_pack", id, {
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
       ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+      ...(parsed.data.formType !== undefined ? { formType: parsed.data.formType } : {}),
     });
     return Response.json({ ok: true });
   } catch (e) {

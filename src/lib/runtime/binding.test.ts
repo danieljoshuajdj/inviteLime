@@ -67,6 +67,25 @@ describe("resolveBinding", () => {
     expect(resolveBinding(payload, "invitation.url")).toBe("https://invite-lime.example/i/aisha-and-rahul");
   });
 
+  it("resolves the global website link and its compatibility alias", () => {
+    const withSite = buildRuntimePayload({
+      wedding: WEDDING,
+      mode: "live",
+      invitationUrl: "https://invite-lime.example/i/aisha-and-rahul",
+      assetsBaseUrl: "https://cdn.example",
+      site: {
+        websiteUrl: "https://invite-lime.example/visit-website",
+        websiteConfigured: true,
+      },
+    });
+    expect(resolveBinding(withSite, "site.websiteUrl")).toBe(
+      "https://invite-lime.example/visit-website"
+    );
+    expect(resolveBinding(withSite, "website.url")).toBe(
+      "https://invite-lime.example/visit-website"
+    );
+  });
+
   it("returns null instead of exposing nulls or empties as text", () => {
     expect(resolveBinding(payload, "wedding.photos.bride")).toBeNull();
     expect(resolveBinding(payload, "wedding.brideBio")).toBe("");
@@ -205,6 +224,30 @@ describe("injected binder script", () => {
     expect(date.textContent).toBe("2026-02-14");
     expect(image.getAttribute("src")).toBe("/api/media/x/couple/couple.webp");
     expect(link.getAttribute("href")).toBe("https://maps.example/venue");
+  });
+
+  it("binds the global website link and its compatibility alias", () => {
+    const withSite = buildRuntimePayload({
+      wedding: WEDDING,
+      mode: "live",
+      invitationUrl: "https://invite-lime.example/i/x",
+      assetsBaseUrl: "https://cdn.example",
+      site: {
+        websiteUrl: "https://invite-lime.example/visit-website",
+        websiteConfigured: true,
+      },
+    });
+    const link = el({ "data-wedding-href": "site.websiteUrl" });
+    const alias = el({ "data-wedding-href": "website.url" });
+
+    runBinder([link, alias], withSite);
+
+    expect(link.getAttribute("href")).toBe(
+      "https://invite-lime.example/visit-website"
+    );
+    expect(alias.getAttribute("href")).toBe(
+      "https://invite-lime.example/visit-website"
+    );
   });
 
   it("leaves a missing photo without a src instead of a broken request", () => {

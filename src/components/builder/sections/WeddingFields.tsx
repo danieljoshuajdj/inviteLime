@@ -2,19 +2,21 @@
 
 import { Button } from "@/components/shared/Button";
 import { TextInput, Textarea } from "@/components/shared/Field";
-import { Icon, type IconName } from "@/components/shared/Icon";
+import { Icon } from "@/components/shared/Icon";
 import { EMPTY_EVENT, type BuilderEvent, type WeddingData } from "@/lib/builder/defaults";
+import { formDefinition, type FormType } from "@/lib/builder/forms";
 import { useClientNow } from "@/lib/use-client-now";
 import { toDateInputValue, toTimeInputValue } from "@/lib/utils";
 
 interface Props {
   data: WeddingData;
   onChange: (patch: Partial<WeddingData>) => void;
+  /** Engagement reuses this form; only the date label changes. */
+  formType?: FormType;
 }
 
-const eventIcons: IconName[] = ["spa", "celebration", "church", "local_florist", "flight", "handshake"];
-
-export function WeddingFields({ data, onChange }: Props) {
+export function WeddingFields({ data, onChange, formType = "wedding" }: Props) {
+  const dateLabel = formDefinition(formType).dateLabel;
   // New invitations always look forward, so the pickers are held to the
   // visitor's today/now. A draft saved before midnight can still carry a stale
   // date — that one is caught by the combined step's validation.
@@ -39,7 +41,7 @@ export function WeddingFields({ data, onChange }: Props) {
     <div className="flex flex-col gap-5">
       <div className="grid gap-5 sm:grid-cols-2">
         <TextInput
-          label="Wedding date"
+          label={dateLabel}
           type="date"
           value={data.weddingDate}
           min={today}
@@ -47,7 +49,7 @@ export function WeddingFields({ data, onChange }: Props) {
           required
         />
         <TextInput
-          label="Wedding time (optional)"
+          label={`${dateLabel} time (optional)`}
           type="time"
           value={data.weddingTime ?? ""}
           min={data.weddingDate === today ? nowTime : undefined}
@@ -99,18 +101,13 @@ export function WeddingFields({ data, onChange }: Props) {
             {data.events.map((ev, i) => (
               <div key={ev.id ?? i} className="rounded-2xl border border-outline-variant bg-surface p-4">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
-                      <Icon name={eventIcons[i % eventIcons.length]} size="md" />
-                    </span>
-                    <TextInput
-                      label="Event name *"
-                      value={ev.name}
-                      onChange={(e) => setEvent(i, { name: e.target.value })}
-                      placeholder={i === 0 ? "e.g. Mehendi & Haldi" : "e.g. Reception Dinner"}
-                      className="min-w-0 flex-1 sm:flex-none sm:!w-56"
-                    />
-                  </div>
+                  <TextInput
+                    label="Event name *"
+                    value={ev.name}
+                    onChange={(e) => setEvent(i, { name: e.target.value })}
+                    placeholder={i === 0 ? "e.g. Mehendi & Haldi" : "e.g. Reception Dinner"}
+                    className="min-w-0 flex-1 sm:flex-none sm:!w-56"
+                  />
                   <button
                     type="button"
                     onClick={() => removeEvent(i)}

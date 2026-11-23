@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGuestDraft } from "@/lib/services/guest";
+import { getOwnedBuilderDraft } from "@/lib/services/builder";
+import { requireSignedIn } from "@/lib/services/auth-guard";
 import { isPaymentBypassEnabled } from "@/lib/services/dev-bypass";
 import { BuilderHost } from "@/components/builder/BuilderHost";
 import { normalizeWeddingData } from "@/lib/builder/defaults";
@@ -18,6 +19,8 @@ interface BuilderTemplateRow {
   id: string;
   name: string;
   slug: string;
+  form_type: string;
+  allows_image_upload: boolean;
   product_id: string | null;
   product:
     | {
@@ -41,8 +44,13 @@ export default async function BuilderPage({ params }: PageProps) {
   const { token } = await params;
   if (!token || token.length < 10) notFound();
 
+  // The token alone is not a credential: the signed-in account must own the
+  // session the draft belongs to. A guest is sent through Google first and
+  // returned to this exact builder URL afterwards.
+  const { user } = await requireSignedIn(`/create/${token}`);
+
   const supabase = createAdminClient();
-  const draft = await getGuestDraft(supabase, token);
+  const draft = await getOwnedBuilderDraft(supabase, token, user.id);
   if (!draft) notFound();
 
   // Once a session has published, the wedding row is the canonical copy: its
@@ -64,7 +72,7 @@ export default async function BuilderPage({ params }: PageProps) {
   const { data: templateRaw } = await supabase
     .from("templates")
     .select(
-      "id, name, slug, product_id, product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active))"
+      "id, name, slug, form_type, allows_image_upload, product_id, product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active))"
     )
     .eq("id", templateId)
     .single();
@@ -91,11 +99,14 @@ export default async function BuilderPage({ params }: PageProps) {
   }
 
   const storedWeddingData = liveWedding?.wedding_data ?? draft.wedding_data;
-  const weddingData = normalizeWeddingData(
-    liveWedding
-      ? { ...(storedWeddingData as Record<string, unknown>), rsvpEnabled: liveWedding.rsvp_toggle }
-      : storedWeddingData
-  );
+  // The template's category is authoritative for the form. A draft resumed
+  // after an admin re-categorised the template must open the current form, not
+  // whatever value happened to be saved in its JSON blob.
+  const weddingData = normalizeWeddingData({
+    ...((storedWeddingData ?? {}) as Record<string, unknown>),
+    ...(liveWedding ? { rsvpEnabled: liveWedding.rsvp_toggle } : {}),
+    formType: template.form_type,
+  });
   const product = Array.isArray(template.product) ? template.product[0] ?? null : template.product;
 
   // The price shown here is the same server-resolved quote the checkout will
@@ -120,6 +131,7 @@ export default async function BuilderPage({ params }: PageProps) {
         pricePaise: quote.quote.amountMinor,
         currency: quote.quote.currency,
         versionId: templateVersionId,
+        allowsImageUpload: template.allows_image_upload !== false,
       }}
       draftEmail={draft.email ?? null}
       planner={plannerContext}

@@ -3,12 +3,17 @@ import "server-only";
 import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGuestDraft, guestTokenFromCookies } from "@/lib/services/guest";
+import { createServerClient } from "@/lib/supabase/server";
+import { builderTokenFromCookies, getOwnedBuilderDraft } from "@/lib/services/builder";
 import { createDraftWedding, invitationUrl } from "@/lib/services/weddings";
+import { resolvePublicAppOrigin } from "@/lib/services/app-origin";
 import { finalizePaidWedding } from "@/lib/services/finalize-purchase";
 import { isPaymentBypassEnabled } from "@/lib/services/dev-bypass";
-import { jsonError, readBody } from "@/lib/services/helpers";
+import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
+import { normalizeWeddingData } from "@/lib/builder/defaults";
+import { formTypeOrDefault } from "@/lib/builder/forms";
+import { validateDetails } from "@/lib/builder/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +34,9 @@ const bodySchema = z.object({
  * draft-media relocation, account linking and both emails are the production
  * code paths. Only the charge itself is skipped.
  *
- * The caller must present the guest session token, so this can only finalize a
- * draft that session already owns — it is not a way to publish someone else's
- * invitation.
+ * The caller must be signed in and present the builder token, so this can only
+ * finalize a draft their account owns — it is not a way to publish someone
+ * else's invitation.
  */
 export async function POST(req: Request) {
   if (!isPaymentBypassEnabled()) {
@@ -39,14 +44,19 @@ export async function POST(req: Request) {
   }
 
   try {
+    const publicAppOrigin = resolvePublicAppOrigin(req.headers);
     const body = await readBody(req).catch(() => ({}));
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) return jsonError(400, "Invalid payload");
 
-    const cookieToken = guestTokenFromCookies(req.headers.get("cookie"));
+    const cookieToken = builderTokenFromCookies(req.headers.get("cookie"));
     const authToken = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
     const token = parsed.data.token ?? cookieToken ?? authToken;
-    if (!token) return jsonError(401, "Guest session required");
+    if (!token) return jsonError(401, "Sign in to continue with your invitation.");
+
+    const authClient = await createServerClient();
+    const authSession = await getCurrentProfile(authClient);
+    if (!authSession) return jsonError(401, "Sign in to continue with your invitation.");
 
     const limit = await consumeRateLimit({
       bucket: "dev_publish",
@@ -59,15 +69,28 @@ export async function POST(req: Request) {
     }
 
     const supabase = createAdminClient();
-    const draft = await getGuestDraft(supabase, token);
-    if (!draft) return jsonError(404, "Draft not found for this session");
+    const draft = await getOwnedBuilderDraft(supabase, token, authSession.user.id);
+    if (!draft) return jsonError(403, "This draft does not belong to your account.");
 
     const data = (draft.wedding_data ?? {}) as Record<string, unknown>;
-    const brideName = typeof data.brideName === "string" ? data.brideName.trim() : "";
-    const groomName = typeof data.groomName === "string" ? data.groomName.trim() : "";
-    const weddingDate = typeof data.weddingDate === "string" ? data.weddingDate.trim() : "";
-    if (!brideName || !groomName || !weddingDate) {
-      return jsonError(400, "Draft is incomplete. Add both names and the wedding date first.");
+
+    const { data: templateRow } = await supabase
+      .from("templates")
+      .select("product_id, form_type, product:products(price_paise, currency)")
+      .eq("id", draft.template_id)
+      .single();
+    const product = templateRow as unknown as {
+      product_id: string | null;
+      form_type: string | null;
+      product: { price_paise: number; currency: string } | null;
+    } | null;
+    if (!product?.product_id) return jsonError(400, "This template is not configured for publishing");
+
+    const formType = formTypeOrDefault(product.form_type);
+    const weddingData = normalizeWeddingData({ ...data, formType });
+    const issue = validateDetails(weddingData, formType);
+    if (issue) {
+      return jsonError(400, `Draft is incomplete. ${issue.message}`);
     }
 
     // Reuse a draft wedding this session already created (e.g. the developer
@@ -87,16 +110,6 @@ export async function POST(req: Request) {
     let pricePaise = 0;
     let currency = "INR";
 
-    const { data: templateRow } = await supabase
-      .from("templates")
-      .select("product_id, product:products(price_paise, currency)")
-      .eq("id", draft.template_id)
-      .single();
-    const product = templateRow as unknown as {
-      product_id: string | null;
-      product: { price_paise: number; currency: string } | null;
-    } | null;
-    if (!product?.product_id) return jsonError(400, "This template is not configured for publishing");
     const prod = Array.isArray(product.product) ? product.product[0] : product.product;
     pricePaise = prod?.price_paise ?? 0;
     currency = prod?.currency ?? "INR";
@@ -107,13 +120,17 @@ export async function POST(req: Request) {
       const created = await createDraftWedding({
         templateId: draft.template_id,
         templateVersionId: draft.template_version_id,
-        brideName,
-        groomName,
-        weddingDate,
+        formType,
+        brideName: weddingData.brideName || undefined,
+        groomName: weddingData.groomName || undefined,
+        celebrantName: weddingData.celebrantName || undefined,
+        weddingDate:
+          formType === "birthday_wishes" ? undefined : weddingData.weddingDate || undefined,
         guestSessionId: draft.session_id,
         email: draft.email,
         weddingData: data,
         productId: product.product_id,
+        userId: authSession.user.id,
       });
       weddingId = created.id;
     }
@@ -123,12 +140,13 @@ export async function POST(req: Request) {
       pricePaise,
       currency,
       source: "dev",
+      appOrigin: publicAppOrigin,
     });
 
     return Response.json({
       published: true,
       bypassed: true,
-      url: invitationUrl(published.slug),
+      url: invitationUrl(published.slug, publicAppOrigin),
       weddingId,
       emailSentTo: published.email,
       // The exact couple-facing email that was rendered and handed to the

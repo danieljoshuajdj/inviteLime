@@ -21,6 +21,7 @@ export const dynamic = "force-dynamic";
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().max(300).nullable().optional(),
+  formType: z.enum(["wedding", "engagement", "birthday_celebration", "birthday_wishes"]),
 });
 
 export async function POST(req: Request) {
@@ -41,10 +42,12 @@ export async function POST(req: Request) {
     const pack = await createMediaPack({
       name: parsed.data.name,
       description: parsed.data.description ?? null,
+      formType: parsed.data.formType,
     });
 
     await logAdminAction(admin.user.id, "media_pack.create", "media_pack", pack.id, {
       name: pack.name,
+      formType: pack.formType,
     });
     return Response.json({ pack }, { status: 201 });
   } catch (e) {

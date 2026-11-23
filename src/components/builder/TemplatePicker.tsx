@@ -1,11 +1,12 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/shared/Button";
 import { Icon } from "@/components/shared/Icon";
 import { Badge } from "@/components/shared/Badge";
+import { AuthRequiredModal } from "@/components/auth/AuthRequiredModal";
+import { useStartCreation } from "@/components/auth/use-start-creation";
 import { InfiniteScrollFooter } from "@/components/shared/InfiniteScrollFooter";
 import { useInfiniteReveal } from "@/lib/use-infinite-reveal";
 
@@ -19,13 +20,12 @@ export interface PickerTemplate {
 }
 
 /**
- * Template gallery for `/create/browse`. Cards start a guest session directly;
- * there is no separate "select then continue" step to get through.
+ * Template gallery for `/create/browse`. Cards check for a signed-in customer
+ * and either open the builder directly or show the Google sign-in modal.
  */
 export function TemplatePicker({ templates }: { templates: PickerTemplate[] }) {
-  const router = useRouter();
+  const { start, pending, authOpen, next, closeAuth } = useStartCreation();
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -46,22 +46,10 @@ export function TemplatePicker({ templates }: { templates: PickerTemplate[] }) {
   } = useInfiniteReveal(filteredTemplates, normalizedQuery);
 
   async function startCreating(slug: string) {
-    if (pendingSlug) return;
+    if (pending || pendingSlug) return;
     setPendingSlug(slug);
-    setError(null);
-    try {
-      const res = await fetch("/api/guest/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
-      });
-      const json = (await res.json()) as { token?: string; error?: string };
-      if (!res.ok || !json.token) throw new Error(json.error ?? "Could not start a session.");
-      router.push(`/create/${json.token}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start a session. Try again.");
-      setPendingSlug(null);
-    }
+    await start(`/create/new?template=${encodeURIComponent(slug)}`);
+    setPendingSlug(null);
   }
 
   return (
@@ -164,15 +152,11 @@ export function TemplatePicker({ templates }: { templates: PickerTemplate[] }) {
         </>
       )}
 
-      {error && (
-        <p className="mt-4 flex items-center gap-2 rounded-lg bg-error/10 px-3 py-2 font-body-sm text-error" role="alert">
-          <Icon name="error" size="sm" /> {error}
-        </p>
-      )}
-
       <p className="mt-6 text-center font-body-xs text-navy-700">
         Pick a template to start personalizing. It is free until you publish.
       </p>
+
+      <AuthRequiredModal open={authOpen} onClose={closeAuth} next={next} />
     </div>
   );
 }

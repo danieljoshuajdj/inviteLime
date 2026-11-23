@@ -10,10 +10,15 @@ export const dynamic = "force-dynamic";
  * anyone may listen to and attach to their invitation. Hidden tracks are
  * excluded, and the audio bytes themselves are authorized separately in
  * /api/media, which re-checks that the track is still active.
+ *
+ * `?category=<slug>` narrows the list to tracks offered in that event
+ * category, so a birthday builder never shows wedding-only songs. An unknown
+ * slug yields an empty list rather than every track.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const tracks = await listMusicTracks(false);
+    const categorySlug = new URL(request.url).searchParams.get("category");
+    const tracks = await listMusicTracks(false, { categorySlug });
     return Response.json(
       { tracks },
       {

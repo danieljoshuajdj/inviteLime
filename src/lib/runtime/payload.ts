@@ -11,6 +11,7 @@
  */
 
 import { createBindingScript } from "./binding";
+import { ordinal, type FormType } from "@/lib/builder/forms";
 import { normalizeWhatsappNumber } from "@/lib/phone";
 import { templatePackageBaseUrl } from "@/lib/services/storage/urls";
 
@@ -49,6 +50,17 @@ export interface RuntimePlannerBrand {
   mapsUrl: string | null;
 }
 
+/**
+ * Platform-managed global links. Templates never receive the destination of
+ * the website redirect, only the permanent link that forwards to it.
+ */
+export interface RuntimeSite {
+  /** Absolute `/visit-website` link, or null if no origin was supplied. */
+  websiteUrl: string | null;
+  /** Whether an admin has configured a destination. */
+  websiteConfigured: boolean;
+}
+
 export interface RuntimePayload {
   runtime: "invite-lime";
   contract: string;
@@ -57,8 +69,16 @@ export interface RuntimePayload {
   wedding: {
     id: string;
     slug: string;
+    /** Event form, so a template can vary its own copy/sections. */
+    formType: FormType;
     brideName: string;
     groomName: string;
+    /** Birthday person's name; null for couple-based forms. */
+    celebrantName: string | null;
+    /** Birthday age and its display form (e.g. 21 / "21st"). */
+    birthdayNumber: number | null;
+    birthdayOrdinal: string | null;
+    specialMessage: string | null;
     brideBio: string;
     groomBio: string;
     coupleBio: string;
@@ -72,7 +92,13 @@ export interface RuntimePayload {
     longitude: number | null;
     events: RuntimeEvent[];
     gallery: RuntimeGalleryItem[];
-    photos: { bride: string | null; groom: string | null; couple: string | null };
+    photos: {
+      bride: string | null;
+      groom: string | null;
+      couple: string | null;
+      /** Birthday main image; null on couple-based forms. */
+      main: string | null;
+    };
     music: RuntimeGalleryItem | null;
     /**
      * Richer demo content. Null on live invitations until the builder collects
@@ -109,6 +135,8 @@ export interface RuntimePayload {
    * customer-owned invitations so studio branding can never leak.
    */
   planner: RuntimePlannerBrand | null;
+  /** Global platform links available to every template. */
+  site: RuntimeSite;
   assets: {
     baseUrl: string;
   };
@@ -117,8 +145,12 @@ export interface RuntimePayload {
 export interface RuntimeWeddingInput {
   id: string;
   slug: string;
+  formType?: FormType;
   brideName: string;
   groomName: string;
+  celebrantName?: string | null;
+  birthdayNumber?: number | null;
+  specialMessage?: string | null;
   date: string;
   time: string | null;
   venue: string;
@@ -132,7 +164,12 @@ export interface RuntimeWeddingInput {
   story: string;
   events: RuntimeEvent[];
   gallery: RuntimeGalleryItem[];
-  photos: { bride: string | null; groom: string | null; couple: string | null };
+  photos: {
+    bride: string | null;
+    groom: string | null;
+    couple: string | null;
+    main?: string | null;
+  };
   music: RuntimeGalleryItem | null;
   brideDesignation?: string | null;
   groomDesignation?: string | null;
@@ -146,6 +183,10 @@ export function buildRuntimePayload(input: {
   expiresAt?: string | null;
   assetsBaseUrl: string;
   planner?: RuntimePlannerBrand | null;
+  site?: {
+    websiteUrl?: string | null;
+    websiteConfigured?: boolean;
+  } | null;
   rsvp?: {
     enabled?: boolean;
     preview?: boolean;
@@ -159,12 +200,27 @@ export function buildRuntimePayload(input: {
     whatsappNumber?: string | null;
   };
 }): RuntimePayload {
+  const websiteUrl = safeHttpUrl(input.site?.websiteUrl);
   return {
     runtime: "invite-lime",
     contract: RUNTIME_CONTRACT_VERSION,
     mode: input.mode,
     wedding: {
       ...input.wedding,
+      formType: input.wedding.formType ?? "wedding",
+      celebrantName: input.wedding.celebrantName?.trim() || null,
+      birthdayNumber: input.wedding.birthdayNumber ?? null,
+      birthdayOrdinal:
+        typeof input.wedding.birthdayNumber === "number"
+          ? ordinal(input.wedding.birthdayNumber)
+          : null,
+      specialMessage: input.wedding.specialMessage?.trim() || null,
+      photos: {
+        bride: input.wedding.photos.bride ?? null,
+        groom: input.wedding.photos.groom ?? null,
+        couple: input.wedding.photos.couple ?? null,
+        main: input.wedding.photos.main ?? null,
+      },
       brideDesignation: input.wedding.brideDesignation ?? null,
       groomDesignation: input.wedding.groomDesignation ?? null,
       dress: input.wedding.dress ?? null,
@@ -193,6 +249,10 @@ export function buildRuntimePayload(input: {
           mapsUrl: input.planner.mapsUrl?.trim() || null,
         }
       : null,
+    site: {
+      websiteUrl,
+      websiteConfigured: Boolean(input.site?.websiteConfigured && websiteUrl),
+    },
     assets: {
       baseUrl: withTrailingSlash(input.assetsBaseUrl),
     },
@@ -263,7 +323,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function safePlannerHref(value: string | null): string | null {
+function safeHttpUrl(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -285,7 +345,7 @@ function plannerFallbackSnippet(planner: RuntimePlannerBrand): string {
   const phone = escapeHtml(planner.contactPhone);
   const tel = escapeHtml(planner.contactPhone.replace(/[^\d+]/g, ""));
   const address = planner.address ? escapeHtml(planner.address) : "";
-  const maps = safePlannerHref(planner.mapsUrl);
+  const maps = safeHttpUrl(planner.mapsUrl);
   const addressLine = address
     ? `<div style="margin-top:4px;opacity:.86">${address}</div>`
     : "";

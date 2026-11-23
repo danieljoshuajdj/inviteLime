@@ -9,7 +9,7 @@ import {
   sniffAudioMime,
   validateMusicUpload,
 } from "./music-library";
-import { isLibraryMediaUrl, libraryTrackName, LIBRARY_MEDIA_PREFIX } from "@/lib/library-media";
+import { isLibraryMediaUrl, libraryTrackName, LIBRARY_MEDIA_PREFIX, musicTrackInCategory } from "@/lib/library-media";
 
 /** Minimal valid MP3: an ID3 tag is enough to sniff, and to carry bytes. */
 function mp3(bytes = 2048): ArrayBuffer {
@@ -265,5 +265,32 @@ describe("libraryTrackName", () => {
 
   it("falls back to the title alone", () => {
     expect(libraryTrackName({ title: "Untitled", artist: null })).toBe("Untitled");
+  });
+});
+
+describe("musicTrackInCategory", () => {
+  const track = {
+    categories: [
+      { id: "c1", name: "Wedding", slug: "wedding" },
+      { id: "c3", name: "Birthday Celebration", slug: "birthday-celebration" },
+    ],
+  };
+
+  it("accepts any category the track is offered in", () => {
+    expect(musicTrackInCategory(track, "wedding")).toBe(true);
+    expect(musicTrackInCategory(track, "birthday-celebration")).toBe(true);
+  });
+
+  it("rejects categories the track does not belong to", () => {
+    expect(musicTrackInCategory(track, "engagement")).toBe(false);
+    expect(musicTrackInCategory(track, "birthday-wishes")).toBe(false);
+  });
+
+  it("rejects every category when no category is selected", () => {
+    // Callers pass null before a category is chosen; showing the whole library
+    // there would leak wedding songs into a birthday demo.
+    expect(musicTrackInCategory(track, null)).toBe(false);
+    expect(musicTrackInCategory(track, undefined)).toBe(false);
+    expect(musicTrackInCategory(track, "")).toBe(false);
   });
 });

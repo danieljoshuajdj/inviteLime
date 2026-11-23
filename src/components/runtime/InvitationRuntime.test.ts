@@ -24,9 +24,10 @@ describe("built-in invitation runtime gallery section", () => {
     expect(ids).toEqual(["home", "story", "events", "rsvp"]);
   });
 
-  it("shows the gallery tab once there is at least one photo", () => {
+  it("shows the gallery tab once there is at least one photo and the switch is on", () => {
     const data = defaultWeddingData({
       gallery: [{ role: "gallery", url: "https://cdn.example/one.jpg", name: "one.jpg" }],
+      includeGallery: true,
     });
 
     expect(invitationNav(data).map((item) => item.id)).toEqual([
@@ -35,6 +36,15 @@ describe("built-in invitation runtime gallery section", () => {
       "events",
       "gallery",
     ]);
+  });
+
+  it("hides a populated gallery while its switch is off", () => {
+    const data = defaultWeddingData({
+      gallery: [{ role: "gallery", url: "https://cdn.example/one.jpg", name: "one.jpg" }],
+      includeGallery: false,
+    });
+
+    expect(invitationNav(data).map((item) => item.id)).not.toContain("gallery");
   });
 
   it("treats a missing gallery list like an empty one", () => {
@@ -67,6 +77,8 @@ describe("built-in invitation runtime planner branding", () => {
     slug: "meera-weds-aarav",
     bride_name: "Meera",
     groom_name: "Aarav",
+    celebrant_name: null,
+    form_type: "wedding",
     wedding_date: "2027-02-14",
     venue: null,
     address: null,

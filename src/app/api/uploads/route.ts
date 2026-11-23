@@ -1,11 +1,18 @@
 import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createServerClient } from "@/lib/supabase/server";
-import { guestTokenFromCookies, getGuestDraft, type GuestDraft } from "@/lib/services/guest";
-import { getActiveGuestWedding } from "@/lib/services/guest-wedding";
+import { mediaFolderForGuest, parseMediaPath } from "@/lib/services/media-access";
+import {
+  deleteUnreferencedMediaKeys,
+  isMediaCleanupAllowed,
+  normalizeMediaCleanupKeys,
+} from "@/lib/services/media-cleanup";
+import {
+  authorizeMediaDestination,
+  mediaScopeErrorResponse,
+  readMediaUploadActor,
+} from "@/lib/services/media-upload-scope";
 import { saveWeddingMedia, type MediaRole } from "@/lib/services/storage";
-import { mediaFolderForGuest } from "@/lib/services/media-access";
 import { jsonError } from "@/lib/services/helpers";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
 
@@ -18,12 +25,23 @@ const formSchema = z.object({
 
 /**
  * Authenticated upload of wedding media.
- * Auth: guest token (builder) OR the logged-in owner (account editor).
+ * Auth: signed-in owner, with a builder token for draft folders.
+ *
+ * The optional `replaces` field names the object the new upload supersedes
+ * (e.g. the previous portrait). After the new object is safely stored, the old
+ * one is deleted only when no saved draft, live invitation or `wedding_media`
+ * row still points at it.
  */
 export async function POST(req: Request) {
   try {
-    const cookieToken = guestTokenFromCookies(req.headers.get("cookie"));
-    const authHeader = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    // Authenticate before reading the multipart body: an anonymous caller must
+    // get 401 even when the form is incomplete, rather than a misleading 400,
+    // and the server should not buffer an upload it will refuse.
+    const admin = createAdminClient();
+    const actor = await readMediaUploadActor(req, admin);
+    if (!actor.userId) {
+      return mediaScopeErrorResponse({ status: 401, message: "Authentication required" });
+    }
 
     const formData = await req.formData();
     const roleRaw = String(formData.get("role") ?? "");
@@ -45,69 +63,27 @@ export async function POST(req: Request) {
       return jsonError(429, "Too many uploads from this device. Please try again later.");
     }
 
-    // Determine guest token or authenticated user
-    const guestCandidate = cookieToken || (authHeader && !authHeader.includes(".") ? authHeader : null);
-    const admin = createAdminClient();
-    let guestDraft: GuestDraft | null = null;
-    let activeGuestWeddingId: string | null = null;
-    if (guestCandidate) {
-      guestDraft = await getGuestDraft(admin, guestCandidate);
-      if (guestDraft) {
-        activeGuestWeddingId = (await getActiveGuestWedding(admin, guestDraft.session_id))?.id ?? null;
-      }
-    }
+    const destination = await authorizeMediaDestination(
+      admin,
+      actor,
+      parsed.data.weddingId ?? null
+    );
+    if ("error" in destination) return mediaScopeErrorResponse(destination.error);
 
-    // Check user session
-    const serverSupabase = await createServerClient();
-    const { data: { user: sessionUser } } = await serverSupabase.auth.getUser();
-    let authenticatedUser = sessionUser;
-    if (!authenticatedUser && authHeader && authHeader.includes(".")) {
-      const { data: user } = await admin.auth.getUser(authHeader);
-      authenticatedUser = user.user;
-    }
-
-    if (!guestDraft && !authenticatedUser) {
-      return jsonError(401, "Authentication required");
-    }
-
-    const requestedWeddingId: string | null = parsed.data.weddingId || null;
-    // An open builder tab does not pass a wedding id; once the session has a
-    // published invitation, uploads belong in that wedding's folder so the new
-    // file is readable by guests. Before publishing they stay in the draft
-    // folder, where the preview's signed URLs can reach them.
-    const weddingId: string | null = requestedWeddingId ?? activeGuestWeddingId;
-
-    if (weddingId) {
-      const belongsToGuest = guestDraft !== null && weddingId === activeGuestWeddingId;
-      if (!belongsToGuest) {
-        if (!authenticatedUser) {
-          return jsonError(403, "Wedding does not belong to this session");
-        }
-        const { data: wedding } = await admin
-          .from("weddings")
-          .select("id")
-          .eq("id", weddingId)
-          .eq("user_id", authenticatedUser.id)
-          .maybeSingle();
-        if (!wedding) return jsonError(403, "Wedding not owned by you");
-      }
-    } else if (!guestDraft) {
-      return jsonError(403, "Unknown upload scope");
-    }
-
+    const weddingId = destination.weddingId;
     const buffer = await file.arrayBuffer();
     const salt = Number(formData.get("salt") ?? "1");
     const role = parsed.data.role as MediaRole;
-    // Draft uploads live under a folder derived from the guest session; once a
-    // wedding exists the folder is the wedding id, which is what /api/media
+    // Draft uploads live under a folder derived from the builder session; once
+    // a wedding exists the folder is the wedding id, which is what /api/media
     // authorizes published invitations against.
     const folder = weddingId
       ? weddingId
-      : mediaFolderForGuest(guestCandidate ?? "anon", role, salt);
+      : mediaFolderForGuest(actor.builderToken ?? "anon", role, salt);
 
     const result = await saveWeddingMedia({
-      userId: authenticatedUser?.id ?? null,
-      guestToken: guestCandidate ?? null,
+      userId: actor.userId,
+      guestToken: actor.builderToken,
       weddingId,
       weddingGuid: folder,
       role,
@@ -115,6 +91,46 @@ export async function POST(req: Request) {
       contentType: file.type,
       buffer,
     });
+
+    // A single-file upload supersedes the previous object. The client sends it
+    // explicitly for draft folders (where no `wedding_media` row exists); rows
+    // superseded by `saveWeddingMedia` are returned for account/editor uploads.
+    const replaceCandidates = [
+      String(formData.get("replaces") ?? "").trim(),
+      ...result.replacedPaths,
+    ];
+    const replaceKeys = normalizeMediaCleanupKeys(replaceCandidates).filter((key) => {
+      if (key === result.path) return false;
+      const parsedKey = parseMediaPath(key.split("/"));
+      return parsedKey?.role === role;
+    });
+
+    if (replaceKeys.length > 0) {
+      const allowed = replaceKeys.filter((key) =>
+        isMediaCleanupAllowed(key, {
+          weddingId,
+          guestToken: actor.builderToken,
+        })
+      );
+
+      if (allowed.length > 0) {
+        try {
+          const cleanup = await deleteUnreferencedMediaKeys(allowed, {
+            weddingId,
+            guestSessionId: actor.builderDraft?.session_id ?? null,
+            admin,
+          });
+          if (cleanup.failures.length > 0) {
+            console.warn("[uploads] replaced media cleanup incomplete", {
+              failures: cleanup.failures.slice(0, 5),
+            });
+          }
+        } catch (err) {
+          // The upload itself succeeded; a later save retries the cleanup.
+          console.warn("[uploads] replaced media cleanup failed", err);
+        }
+      }
+    }
 
     return Response.json({ url: result.publicUrl, path: result.path });
   } catch (err) {

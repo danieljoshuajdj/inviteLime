@@ -84,4 +84,26 @@ describe("buildGuestPreviewPayload", () => {
     expect(payload.wedding.events).toEqual([]);
     expect(payload.wedding.gallery).toEqual([]);
   });
+
+  it("passes the global website link and public share origin through", () => {
+    const payload = buildGuestPreviewPayload(
+      {
+        ...context,
+        publicAppUrl: "https://invite.example.com",
+        site: {
+          websiteUrl: "https://invite.example.com/visit-website",
+          websiteConfigured: true,
+        },
+      },
+      { brideName: "Meera" }
+    );
+
+    expect(payload.site).toEqual({
+      websiteUrl: "https://invite.example.com/visit-website",
+      websiteConfigured: true,
+    });
+    expect(payload.invitation.url).toBe(
+      `https://invite.example.com/create/${context.token}`
+    );
+  });
 });
