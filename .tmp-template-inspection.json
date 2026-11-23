@@ -1,0 +1,390 @@
+[
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.0/index.html",
+    "bytes": 84769,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.1/index.html",
+    "bytes": 88490,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.2",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.2/index.html",
+    "bytes": 90838,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.3",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.3/index.html",
+    "bytes": 87232,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.4",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.4/index.html",
+    "bytes": 88897,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.5",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.5/index.html",
+    "bytes": 89522,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.6",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.6/index.html",
+    "bytes": 98984,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.7",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.7/index.html",
+    "bytes": 100014,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Love Mate",
+    "slug": "love-mate",
+    "formType": "wedding",
+    "version": "1.0.8",
+    "key": "07cfebdb-c607-48ee-81f1-074bbb62eed3/v1.0.8/index.html",
+    "bytes": 110043,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Scarlet Floral",
+    "slug": "scarlet-floral",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "df4728c3-42ac-4826-b0b0-708476e445b7/v1.0.0/index.html",
+    "bytes": 163143,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://wa.me/"
+    ],
+    "websiteHrefs": [
+      "https://wa.me/"
+    ]
+  },
+  {
+    "name": "Scarlet Floral",
+    "slug": "scarlet-floral",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "df4728c3-42ac-4826-b0b0-708476e445b7/v1.0.1/index.html",
+    "bytes": 166576,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://wa.me/"
+    ],
+    "websiteHrefs": [
+      "https://wa.me/"
+    ]
+  },
+  {
+    "name": "Scarlet Floral",
+    "slug": "scarlet-floral",
+    "formType": "wedding",
+    "version": "1.0.2",
+    "key": "df4728c3-42ac-4826-b0b0-708476e445b7/v1.0.2/index.html",
+    "bytes": 173280,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://wa.me/"
+    ],
+    "websiteHrefs": [
+      "https://wa.me/"
+    ]
+  },
+  {
+    "name": "Scarlet Floral",
+    "slug": "scarlet-floral",
+    "formType": "wedding",
+    "version": "1.0.3",
+    "key": "df4728c3-42ac-4826-b0b0-708476e445b7/v1.0.3/index.html",
+    "bytes": 174076,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://wa.me/"
+    ],
+    "websiteHrefs": [
+      "https://wa.me/"
+    ]
+  },
+  {
+    "name": "Royal Santoor",
+    "slug": "royal-santoor",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "ff3c4820-ab39-45be-9a9e-203b341ec0bc/v1.0.0/index.html",
+    "bytes": 111877,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Royal Santoor",
+    "slug": "royal-santoor",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "ff3c4820-ab39-45be-9a9e-203b341ec0bc/v1.0.1/index.html",
+    "bytes": 112357,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Emerald Vision",
+    "slug": "emerald-vision",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "53c80d84-ee79-4021-acfe-7d40c9067f7f/v1.0.0/index.html",
+    "bytes": 167997,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Rosewood Blush",
+    "slug": "rosewood-blush",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "ec0cdff7-166b-4ff4-b750-eb729fd6429e/v1.0.0/index.html",
+    "bytes": 187232,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Rosewood Blush",
+    "slug": "rosewood-blush",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "ec0cdff7-166b-4ff4-b750-eb729fd6429e/v1.0.1/index.html",
+    "bytes": 183438,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Emerald Royal",
+    "slug": "emerald-royal",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "c9ff9723-58ad-40e9-bb0a-e1284ac464c9/v1.0.0/index.html",
+    "bytes": 172647,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Emerald Royal",
+    "slug": "emerald-royal",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "c9ff9723-58ad-40e9-bb0a-e1284ac464c9/v1.0.1/index.html",
+    "bytes": 172656,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Emerald Royal",
+    "slug": "emerald-royal",
+    "formType": "wedding",
+    "version": "1.0.2",
+    "key": "c9ff9723-58ad-40e9-bb0a-e1284ac464c9/v1.0.2/index.html",
+    "bytes": 172656,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Emerald Royal",
+    "slug": "emerald-royal",
+    "formType": "wedding",
+    "version": "1.0.3",
+    "key": "c9ff9723-58ad-40e9-bb0a-e1284ac464c9/v1.0.3/index.html",
+    "bytes": 172731,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Dusky Night",
+    "slug": "dusky-night",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "311aa4b4-a83d-48e3-9a13-0872d6e7aa7e/v1.0.0/index.html",
+    "bytes": 152456,
+    "visitText": false,
+    "dataHrefs": [
+      "wedding.mapsUrl"
+    ],
+    "hardcodedExternal": [
+      "https://invite-lime.com"
+    ],
+    "websiteHrefs": [
+      "https://invite-lime.com"
+    ]
+  },
+  {
+    "name": "Dusky Night",
+    "slug": "dusky-night",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "311aa4b4-a83d-48e3-9a13-0872d6e7aa7e/v1.0.1/index.html",
+    "bytes": 143719,
+    "visitText": false,
+    "dataHrefs": [
+      "wedding.mapsUrl"
+    ],
+    "hardcodedExternal": [
+      "https://invite-lime.com"
+    ],
+    "websiteHrefs": [
+      "https://invite-lime.com"
+    ]
+  },
+  {
+    "name": "Nighty Sky",
+    "slug": "nighty-sky",
+    "formType": "wedding",
+    "version": "1.0.0",
+    "key": "113513a6-0115-4cfc-9b44-b52648bbf434/v1.0.0/index.html",
+    "bytes": 212556,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://invite-lime.com"
+    ],
+    "websiteHrefs": [
+      "https://invite-lime.com"
+    ]
+  },
+  {
+    "name": "Nighty Sky",
+    "slug": "nighty-sky",
+    "formType": "wedding",
+    "version": "1.0.1",
+    "key": "113513a6-0115-4cfc-9b44-b52648bbf434/v1.0.1/index.html",
+    "bytes": 217484,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://invite-lime.com"
+    ],
+    "websiteHrefs": [
+      "https://invite-lime.com"
+    ]
+  },
+  {
+    "name": "Neon Party",
+    "slug": "neon-party",
+    "formType": "birthday_wishes",
+    "version": "1.0.4",
+    "key": "f3a27b6b-3df0-4725-9c46-62786177a87b/v1.0.4/index.html",
+    "bytes": 117424,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  },
+  {
+    "name": "Carnival",
+    "slug": "carnival",
+    "formType": "birthday_wishes",
+    "version": "1.0.9",
+    "key": "71f3d2b6-529e-45c1-88ba-294b02580b40/v1.0.9/index.html",
+    "bytes": 59041,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [
+      "https://invitelime.in"
+    ],
+    "websiteHrefs": [
+      "https://invitelime.in"
+    ]
+  },
+  {
+    "name": "Granule Glitz",
+    "slug": "granule-glitz",
+    "formType": "birthday_wishes",
+    "version": "1.0.9",
+    "key": "925f4b5f-90c3-4d2f-9537-7250aaaabd35/v1.0.9/index.html",
+    "bytes": 194077,
+    "visitText": false,
+    "dataHrefs": [],
+    "hardcodedExternal": [],
+    "websiteHrefs": []
+  }
+]

@@ -3,8 +3,9 @@
  *
  * POST /api/admin/templates/[id]/versions/[versionId]/publish
  *   Transitions a draft version to published and marks it as is_current.
- *   Previous versions remain intact (immutable) — existing invitations
- *   continue using whatever version they were published on.
+ *   Superseded versions are then removed when nothing still pins them.
+ *   Existing invitations keep whatever version they were published on, so a
+ *   referenced old version is retained instead of being deleted.
  *
  * POST /api/admin/templates/[id]/versions/[versionId]/unpublish
  *   Marks a published version as draft. Only affects new invitations.
@@ -15,6 +16,11 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/services/helpers";
 import { adminApiError, logAdminAction } from "@/lib/services/admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getObjectStorage } from "@/lib/services/storage";
+import {
+  cleanupSupersededTemplateVersions,
+  type VersionCleanupResult,
+} from "@/lib/services/template-version-cleanup";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +51,15 @@ export async function POST(req: Request, { params }: RouteContext) {
     }
 
     if (action === "publish") {
+      if (version.status === "uploading") {
+        return Response.json(
+          {
+            error: "This version is still uploading. Wait for the package to finish, then publish.",
+            code: "UPLOAD_IN_PROGRESS",
+          },
+          { status: 409 }
+        );
+      }
       if (version.status === "published") {
         return Response.json({ error: "Version is already published" }, { status: 409 });
       }
@@ -70,12 +85,63 @@ export async function POST(req: Request, { params }: RouteContext) {
         .eq("id", id)
         .eq("status", "draft"); // Only promote from draft → active
 
+      // Finish the replacement: old versions are removed unless an invitation
+      // still pins them. Guest builder drafts are moved to the new version so
+      // the old row can go without breaking an in-progress session.
+      let cleanup: VersionCleanupResult | null = null;
+      const warnings: string[] = [];
+      try {
+        const storage = await getObjectStorage();
+        cleanup = await cleanupSupersededTemplateVersions({
+          supabase: adminClient,
+          templateId: id,
+          newVersionId: versionId,
+          storage,
+          protectCurrent: false,
+          repointGuestDrafts: true,
+        });
+        warnings.push(...cleanup.warnings);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warnings.push(`Previous-version cleanup will retry on the next upload: ${message}`);
+        console.error("[template-publish] cleanup failed", {
+          templateId: id,
+          versionId,
+          error: message,
+        });
+      }
+
       await logAdminAction(admin.user.id, "template.version_publish", "template_version", versionId, {
         templateId: id,
         version: version.version,
+        cleanup: cleanup
+          ? {
+              deletedVersions: cleanup.deletedVersions.map((item) => item.version),
+              deletedObjects: cleanup.deletedObjects,
+              skipped: cleanup.skipped,
+            }
+          : null,
+        ...(warnings.length > 0 ? { warnings } : {}),
       });
 
-      return Response.json({ ok: true, version: version.version, status: "published", isCurrent: true });
+      return Response.json({
+        ok: true,
+        version: version.version,
+        status: "published",
+        isCurrent: true,
+        ...(cleanup ? { versionCount: cleanup.remainingVersions } : {}),
+        ...(cleanup
+          ? {
+              cleanup: {
+                deletedVersions: cleanup.deletedVersions,
+                deletedObjects: cleanup.deletedObjects,
+                skipped: cleanup.skipped,
+                warnings: cleanup.warnings,
+              },
+            }
+          : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
+      });
     } else {
       // Unpublish — mark draft but leave is_current potentially alone
       // (if this was the current version, the template has no current published version now)

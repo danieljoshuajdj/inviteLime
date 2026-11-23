@@ -6,11 +6,12 @@ import { defaultWeddingData, type WeddingData } from "@/lib/builder/defaults";
 
 import { MediaFields } from "./MediaFields";
 
-function render(data: WeddingData) {
+function render(data: WeddingData, showPhotos?: boolean) {
   return renderToStaticMarkup(
     createElement(MediaFields, {
       data,
       onChange: () => {},
+      showPhotos,
     })
   );
 }
@@ -24,7 +25,24 @@ describe("MediaFields switches", () => {
     expect(html).not.toContain("Bride&#x27;s photo");
     expect(html).not.toContain("Photo gallery");
     expect(html).not.toContain("Upload photos");
-    expect(html).toContain("Wedding soundtrack");
+    expect(html).toContain("Background song");
+  });
+
+  it("hides every photo control but keeps the song when photos are disabled", () => {
+    const html = render(
+      defaultWeddingData({ includePhotos: true, includeGallery: true }),
+      false
+    );
+
+    expect(html).not.toContain("Include Photos?");
+    expect(html).not.toContain("Include Photo Gallery?");
+    expect(html).not.toContain("Bride&#x27;s photo");
+    expect(html).not.toContain("Groom&#x27;s photo");
+    expect(html).not.toContain("Couple&#x27;s photo");
+    expect(html).not.toContain("Photo gallery");
+    expect(html).not.toContain("Upload photos");
+    expect(html).toContain("Background song");
+    expect(html).toContain("Pick a track below, or upload your own.");
   });
 
   it("reveals each upload section independently", () => {

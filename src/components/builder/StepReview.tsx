@@ -26,6 +26,8 @@ interface Props {
     /** ISO-4217 currency carried through from the server-resolved quote. */
     currency: string;
     versionId: string;
+    /** False when this template's form does not collect photos. */
+    allowsImageUpload?: boolean;
   };
   onBack: () => void;
   /**
@@ -337,7 +339,11 @@ export function StepReview({
           </div>
         )}
 
-        <PreviewBoard data={data} invitationTitle={invitationTitle} />
+        <PreviewBoard
+          data={data}
+          invitationTitle={invitationTitle}
+          showPhotos={template.allowsImageUpload !== false}
+        />
 
         <div className="mt-8 rounded-2xl border border-outline-variant bg-surface-container-low p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -480,7 +486,15 @@ function RazorpayScript() {
   return <Script id="razorpay-checkout" src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />;
 }
 
-function PreviewBoard({ data, invitationTitle }: { data: WeddingData; invitationTitle: string }) {
+function PreviewBoard({
+  data,
+  invitationTitle,
+  showPhotos,
+}: {
+  data: WeddingData;
+  invitationTitle: string;
+  showPhotos: boolean;
+}) {
   const formType = formTypeOf(data);
   const birthday = isBirthdayForm(formType);
   const definition = formDefinition(formType);
@@ -541,37 +555,46 @@ function PreviewBoard({ data, invitationTitle }: { data: WeddingData; invitation
                   />
                 )}
                 {!wishes && <Row label="Venue" value={data.venue || "—"} />}
-                <Row
-                  label="Gallery"
-                  value={
-                    data.includeGallery
-                      ? `${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`
-                      : "Not included"
-                  }
-                />
-                <Row label="Main image" value={data.mainPhoto ? "Selected" : "None yet"} />
+                {showPhotos && (
+                  <>
+                    <Row
+                      label="Gallery"
+                      value={
+                        data.includeGallery
+                          ? `${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`
+                          : "Not included"
+                      }
+                    />
+                    <Row label="Main image" value={data.mainPhoto ? "Selected" : "None yet"} />
+                  </>
+                )}
+                <Row label="Soundtrack" value={data.music ? "Selected" : "None yet"} />
               </>
             ) : (
               <>
                 <Row label="Groom" value={data.groomName || "—"} />
                 <Row label="Bride" value={data.brideName || "—"} />
                 <Row label="Ceremony cards" value={`${data.events.length}`} />
-                <Row
-                  label="Photos"
-                  value={
-                    data.includePhotos
-                      ? `${[data.bridePhoto, data.groomPhoto, data.couplePhoto].filter(Boolean).length} selected`
-                      : "Not included"
-                  }
-                />
-                <Row
-                  label="Gallery"
-                  value={
-                    data.includeGallery
-                      ? `${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`
-                      : "Not included"
-                  }
-                />
+                {showPhotos && (
+                  <>
+                    <Row
+                      label="Photos"
+                      value={
+                        data.includePhotos
+                          ? `${[data.bridePhoto, data.groomPhoto, data.couplePhoto].filter(Boolean).length} selected`
+                          : "Not included"
+                      }
+                    />
+                    <Row
+                      label="Gallery"
+                      value={
+                        data.includeGallery
+                          ? `${data.gallery.length} photo${data.gallery.length === 1 ? "" : "s"}`
+                          : "Not included"
+                      }
+                    />
+                  </>
+                )}
                 <Row label="Soundtrack" value={data.music ? "Selected" : "None yet"} />
               </>
             )}

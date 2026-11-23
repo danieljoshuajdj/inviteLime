@@ -32,6 +32,8 @@ export function WeddingEditor({ weddingId }: { weddingId: string }) {
   // same fields the builder uses. Normalizing prevents a null from the API
   // reaching a controlled input.
   const [form, setForm] = useState<WeddingData>(() => defaultWeddingData());
+  // Templates that opt out of photos still allow details and a background song.
+  const [allowsImageUpload, setAllowsImageUpload] = useState(true);
 
   useEffect(() => {
     fetch(`/api/weddings/${weddingId}`)
@@ -42,6 +44,7 @@ export function WeddingEditor({ weddingId }: { weddingId: string }) {
         }
         const json = await r.json();
         setForm(normalizeWeddingData(json));
+        setAllowsImageUpload(json.allowsImageUpload !== false);
       })
       .catch(() => setFound(false))
       .finally(() => setLoading(false));
@@ -163,17 +166,26 @@ export function WeddingEditor({ weddingId }: { weddingId: string }) {
 
       <div className="border-t border-outline-variant pt-6">
         <h2 className="font-heading-md font-semibold !text-on-surface">
-          {birthday ? "Photos" : "Photos & soundtrack"}
+          {allowsImageUpload ? (birthday ? "Photos" : "Photos & soundtrack") : "Background song"}
         </h2>
         <p className="mt-1 font-body-sm text-on-surface-variant">
-          {birthday
-            ? wishes
-              ? "An optional main image and up to three gallery photos shown on your live invitation."
-              : "A main image and gallery photos shown on your live invitation."
-            : "These are the images and music shown on your live invitation."}
+          {!allowsImageUpload
+            ? "The soundtrack played on your live invitation. This template does not use photos."
+            : birthday
+              ? wishes
+                ? "An optional main image and up to three gallery photos shown on your live invitation."
+                : "A main image and gallery photos shown on your live invitation."
+              : "These are the images and music shown on your live invitation."}
         </p>
         <div className="mt-4">
-          {birthday ? (
+          {!allowsImageUpload ? (
+            <MediaFields
+              weddingId={weddingId}
+              data={form}
+              onChange={applyMedia}
+              showPhotos={false}
+            />
+          ) : birthday ? (
             <EventMediaFields
               weddingId={weddingId}
               data={form}

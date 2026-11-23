@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Icon, type IconName } from "@/components/shared/Icon";
-import { TextInput, Select, Textarea, MultiSelect } from "@/components/shared/Field";
+import { TextInput, Select, Textarea, MultiSelect, Toggle } from "@/components/shared/Field";
 import { Modal } from "@/components/shared/Modal";
 import { cn, formatPrice, slugify } from "@/lib/utils";
 import { toast } from "@/components/account/toast";
@@ -42,12 +42,22 @@ interface ValidationResult {
   unusedAssets: string[];
 }
 
+interface VersionCleanupSummary {
+  deletedVersions?: Array<{ id?: string; version: string }>;
+  deletedObjects?: number;
+  skipped?: Array<{ version: string; reason: string }>;
+  warnings?: string[];
+}
+
 interface UploadResponse {
   ok?: boolean;
   version?: string;
   versionId?: string;
   status?: string;
   files?: number;
+  versionCount?: number;
+  cleanup?: VersionCleanupSummary;
+  warnings?: string[];
   validation?: ValidationResult;
   error?: string;
   message?: string;
@@ -82,6 +92,8 @@ interface TemplatesManagerProps {
     status: "active" | "disabled" | "draft";
     /** Event form derived from the template's single category. */
     formType?: string;
+    /** Whether the customer's create form asks for photos. */
+    allowsImageUpload: boolean;
     thumbnailUrl: string | null;
     product: { id: string; name: string; pricePaise: number; currency: string; active: boolean } | null;
     currentVersion: string | null;
@@ -168,6 +180,7 @@ interface FormData {
   price_paise: number | null;
   currency: string;
   category_id: string | null;
+  allows_image_upload: boolean;
   zip: File | null;
   thumbnail: File | null;
   media_pack_id: string | null;
@@ -187,6 +200,7 @@ function emptyWizardData(): FormData {
     price_paise: null,
     currency: "INR",
     category_id: null,
+    allows_image_upload: true,
     zip: null,
     thumbnail: null,
     media_pack_id: null,
@@ -216,6 +230,8 @@ export function TemplatesManager({
   musicTracks,
 }: TemplatesManagerProps) {
   const [rows, setRows] = useState(templates);
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -224,6 +240,7 @@ export function TemplatesManager({
   const [mediaDraft, setMediaDraft] = useState<string>("");
   const [detailDraft, setDetailDraft] = useState<string>("");
   const [musicDraft, setMusicDraft] = useState<string>("");
+  const [photoDraft, setPhotoDraft] = useState(true);
   const [demoSaving, setDemoSaving] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardLoading, setWizardLoading] = useState(false);
@@ -330,7 +347,8 @@ export function TemplatesManager({
             currency: wizardData.currency.toUpperCase(),
             tags: wizardData.tags,
             category_ids: wizardData.category_id ? [wizardData.category_id] : [],
-            media_pack_id: wizardData.media_pack_id,
+            allows_image_upload: wizardData.allows_image_upload,
+            media_pack_id: wizardData.allows_image_upload ? wizardData.media_pack_id : null,
             demo_detail_pack_id: wizardData.demo_detail_pack_id,
             music_track_id: wizardData.music_track_id,
           }),
@@ -395,6 +413,7 @@ export function TemplatesManager({
           description: wizardData.description.trim() || null,
           status: wizardData.status,
           formType: wizardFormType ?? undefined,
+          allowsImageUpload: wizardData.allows_image_upload,
           thumbnailUrl: null,
           product,
           currentVersion: null,
@@ -404,10 +423,11 @@ export function TemplatesManager({
           categories: categories
             .filter((category) => category.id === wizardData.category_id)
             .map((category) => category.name),
-          mediaPackId: wizardData.media_pack_id,
-          mediaPackName: wizardData.media_pack_id
-            ? mediaPacks.find((p) => p.id === wizardData.media_pack_id)?.name ?? null
-            : null,
+          mediaPackId: wizardData.allows_image_upload ? wizardData.media_pack_id : null,
+          mediaPackName:
+            wizardData.allows_image_upload && wizardData.media_pack_id
+              ? mediaPacks.find((p) => p.id === wizardData.media_pack_id)?.name ?? null
+              : null,
           demoDetailPackId: wizardData.demo_detail_pack_id,
           demoDetailPackName: wizardData.demo_detail_pack_id
             ? detailPacks.find((p) => p.id === wizardData.demo_detail_pack_id)?.name ?? null
@@ -465,6 +485,7 @@ export function TemplatesManager({
       slug: string;
       status: "active" | "disabled" | "draft";
       pricePaise: number | null;
+      allowsImageUpload: boolean;
     }
   ) {
     setSaving(true);
@@ -473,7 +494,11 @@ export function TemplatesManager({
         name: values.name,
         slug: values.slug,
         status: values.status,
+        allows_image_upload: values.allowsImageUpload,
       };
+      // Turning photos off also detaches the demo photo pack; the template no
+      // longer has anywhere to show those images.
+      if (!values.allowsImageUpload) payload.media_pack_id = null;
       if (values.pricePaise !== null) payload.price_paise = values.pricePaise;
 
       const template = await api(id, payload);
@@ -485,6 +510,15 @@ export function TemplatesManager({
                 name: template?.name ?? values.name,
                 slug: template?.slug ?? values.slug,
                 status: template?.status ?? values.status,
+                allowsImageUpload: template?.allows_image_upload ?? values.allowsImageUpload,
+                mediaPackId: template
+                  ? template.media_pack_id ?? null
+                  : values.allowsImageUpload
+                    ? r.mediaPackId
+                    : null,
+                mediaPackName: template?.media_pack_id
+                  ? mediaPacks.find((p) => p.id === template.media_pack_id)?.name ?? null
+                  : null,
                 product:
                   values.pricePaise !== null && r.product
                     ? { ...r.product, pricePaise: values.pricePaise }
@@ -493,7 +527,8 @@ export function TemplatesManager({
             : r
         )
       );
-      toast("Template saved", "Name, slug, price, and status updated");
+      if (!values.allowsImageUpload) setMediaDraft("");
+      toast("Template saved", "Name, slug, price, status, and photo setting updated");
     } catch (e) {
       toast("Update failed", (e as Error).message);
     } finally {
@@ -554,9 +589,30 @@ export function TemplatesManager({
       const res = await fetch(`/api/admin/templates/${templateId}/versions/${versionId}/publish`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Publish failed");
-      setRows((rs) => rs.map((r) => r.id === templateId ? { ...r, currentVersion: json.version ?? r.currentVersion, status: "active" } : r));
+      setRows((rs) =>
+        rs.map((r) =>
+          r.id === templateId
+            ? {
+                ...r,
+                currentVersion: json.version ?? r.currentVersion,
+                status: "active",
+                ...(typeof json.versionCount === "number"
+                  ? { versionCount: json.versionCount }
+                  : {}),
+              }
+            : r
+        )
+      );
       setValidationResult(null);
-      toast(`v${json.version} published`, "Template is now live for new invitations");
+      const removed = json.cleanup?.deletedVersions?.length ?? 0;
+      const cleanupNote =
+        removed > 0
+          ? ` Removed ${removed} superseded release${removed === 1 ? "" : "s"}.`
+          : "";
+      toast(
+        `v${json.version} published`,
+        `Template is now live for new invitations.${cleanupNote}`
+      );
     } catch (e) { toast("Publish failed", (e as Error).message); }
     finally { setSaving(false); }
   }
@@ -580,8 +636,28 @@ export function TemplatesManager({
       if (!res.ok) throw new Error(json.error ?? "Upload failed");
 
       setValidationResult({ templateId: id, result: json });
-      setRows((rs) => rs.map((r) => (r.id === id ? { ...r, versionCount: r.versionCount + 1 } : r)));
-      toast(`v${json.version} uploaded as draft`, "Review validation results, then publish");
+      setRows((rs) =>
+        rs.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                versionCount:
+                  typeof json.versionCount === "number"
+                    ? json.versionCount
+                    : r.versionCount + 1,
+              }
+            : r
+        )
+      );
+      const removed = json.cleanup?.deletedVersions?.length ?? 0;
+      const cleanupNote =
+        removed > 0
+          ? ` Removed ${removed} superseded release${removed === 1 ? "" : "s"}.`
+          : "";
+      toast(
+        `v${json.version} uploaded as draft`,
+        `Review validation results, then publish.${cleanupNote}`
+      );
     } catch (e) { toast("Upload failed", (e as Error).message); }
     finally { setUploading(null); }
   }
@@ -631,6 +707,23 @@ export function TemplatesManager({
   }
 
   // --- Render ---
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtersActive = normalizedQuery.length > 0 || categoryFilter !== "";
+  const filteredRows = rows.filter((t) => {
+    if (
+      categoryFilter &&
+      !t.categories.some(
+        (name) => name.toLowerCase() === categoryFilter.toLowerCase()
+      )
+    ) {
+      return false;
+    }
+    if (!normalizedQuery) return true;
+    return [t.name, t.slug, t.description ?? "", ...t.categories].some((value) =>
+      value.toLowerCase().includes(normalizedQuery)
+    );
+  });
+
   const availableProducts = products.filter((p) => p.active);
   const productOptions = [
     { value: "", label: "— Create new from price below —" },
@@ -651,6 +744,7 @@ export function TemplatesManager({
     wizardData.price_paise !== null ||
     wizardData.currency !== "INR" ||
     wizardData.category_id !== null ||
+    !wizardData.allows_image_upload ||
     wizardData.zip !== null ||
     wizardData.thumbnail !== null ||
     wizardData.media_pack_id !== null ||
@@ -665,11 +759,56 @@ export function TemplatesManager({
           <h1 className="mt-1 font-heading-2xl !text-on-surface">Templates</h1>
         </div>
         <div className="flex items-center gap-2">
-          <p className="font-body-xs text-on-surface-variant">{rows.length} templates</p>
+          <p className="font-body-xs text-on-surface-variant">
+            {filtersActive
+              ? `${filteredRows.length} of ${rows.length} templates`
+              : `${rows.length} template${rows.length === 1 ? "" : "s"}`}
+          </p>
           <Button onClick={() => setWizardOpen(true)} icon="add">
             New Template
           </Button>
         </div>
+      </div>
+
+      {/* Library filters. Category matches the template's assigned category
+          names; search spans the fields the list actually displays. */}
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <TextInput
+            label="Search templates"
+            type="search"
+            icon="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, slug, description or category…"
+          />
+        </div>
+        <div className="sm:w-64">
+          <Select
+            label="Category"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            options={[
+              { value: "", label: "All categories" },
+              ...categories.map((category) => ({
+                value: category.name,
+                label: category.name,
+              })),
+            ]}
+          />
+        </div>
+        {filtersActive && (
+          <Button
+            variant="outline"
+            icon="close"
+            onClick={() => {
+              setQuery("");
+              setCategoryFilter("");
+            }}
+          >
+            Reset
+          </Button>
+        )}
       </div>
 
       {/* Add Template form */}
@@ -848,6 +987,31 @@ export function TemplatesManager({
           </FormSection>
 
           <FormSection
+            id="customer-form"
+            title="Customer form"
+            description="Decide what the customer's create form asks for."
+            icon="image"
+          >
+            <Toggle
+              label="Allow image uploads"
+              description="On: customers can add a main photo, couple photos and a gallery. Off: the form collects details and a background song only."
+              checked={wizardData.allows_image_upload}
+              onChange={(checked) =>
+                setWizardData((p) => ({
+                  ...p,
+                  allows_image_upload: checked,
+                  // A no-photo template has no use for a demo photo pack.
+                  media_pack_id: checked ? p.media_pack_id : null,
+                }))
+              }
+            />
+            <p className="font-body-xs text-on-surface-variant">
+              Turning this off hides every photo upload and photo toggle on this template&apos;s
+              create form. Details and the soundtrack stay available.
+            </p>
+          </FormSection>
+
+          <FormSection
             id="package"
             title="Package"
             description="Upload the template ZIP and an optional thumbnail."
@@ -893,10 +1057,16 @@ export function TemplatesManager({
           <FormSection
             id="demo-content"
             title="Demo Content"
-            description="Pick the sample photos, details, and background song the demo renders. Live invitations always show the customer's own content."
+            description={
+              wizardData.allows_image_upload
+                ? "Pick the sample photos, details, and background song the demo renders. Live invitations always show the customer's own content."
+                : "Pick the sample details and background song the demo renders. Live invitations always show the customer's own content."
+            }
             icon="auto_awesome"
           >
               <div className="flex flex-col gap-4">
+                {wizardData.allows_image_upload && (
+                  <>
                 <p className="font-body-sm font-semibold text-on-surface">Sample photos</p>
 
                 <button
@@ -991,6 +1161,8 @@ export function TemplatesManager({
                       );
                     })}
                   </div>
+                )}
+                  </>
                 )}
 
                 {/* Background song: one track per template, played by the demo. */}
@@ -1244,8 +1416,43 @@ export function TemplatesManager({
         )}
       </Modal>
 
+      {filteredRows.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-outline-variant bg-surface-container-lowest p-10 text-center">
+          <Icon
+            name={filtersActive ? "search" : "inventory_2"}
+            size="xl"
+            className="mx-auto text-on-surface-variant"
+          />
+          <p className="mt-3 font-body-sm font-semibold text-on-surface">
+            {filtersActive ? "No templates match" : "No templates yet"}
+          </p>
+          <p className="mt-1 font-body-xs text-on-surface-variant">
+            {filtersActive
+              ? "Try a different search or choose another category."
+              : "Upload your first template package to start the library."}
+          </p>
+          {filtersActive ? (
+            <Button
+              variant="outline"
+              size="sm"
+              icon="close"
+              className="mt-4"
+              onClick={() => {
+                setQuery("");
+                setCategoryFilter("");
+              }}
+            >
+              Clear filters
+            </Button>
+          ) : (
+            <Button size="sm" icon="add" className="mt-4" onClick={() => setWizardOpen(true)}>
+              New Template
+            </Button>
+          )}
+        </div>
+      ) : (
       <div className="mt-6 flex flex-col gap-4">
-        {rows.map((t) => {
+        {filteredRows.map((t) => {
           const rowFormType = formTypeOrDefault(t.formType);
           const rowCategorySlug = categorySlugForFormType(rowFormType);
           const rowMusicTracks = musicTracks.filter((track) =>
@@ -1294,7 +1501,8 @@ export function TemplatesManager({
                   {t.currentVersion ? `v${t.currentVersion}` : "no published version"} · {t.versionCount} release{t.versionCount === 1 ? "" : "s"}
                   {t.product ? ` · ${formatPrice(t.product.pricePaise, t.product.currency)}` : " · no pricing"}
                   {t.categories.length ? ` · ${t.categories.join(", ")}` : ""}
-                  {t.mediaPackName ? ` · media: ${t.mediaPackName}` : ""}
+                  {t.allowsImageUpload ? "" : " · no photo uploads"}
+                  {t.allowsImageUpload && t.mediaPackName ? ` · media: ${t.mediaPackName}` : ""}
                   {t.demoDetailPackName ? ` · details: ${t.demoDetailPackName}` : ""}
                   {t.musicTrackName ? ` · song: ${t.musicTrackName}` : ""}
                 </p>
@@ -1330,6 +1538,7 @@ export function TemplatesManager({
                       setMediaDraft(t.mediaPackId ?? "");
                       setDetailDraft(t.demoDetailPackId ?? "");
                       setMusicDraft(t.musicTrackId ?? "");
+                      setPhotoDraft(t.allowsImageUpload);
                     }
                   }}
                 >
@@ -1376,7 +1585,13 @@ export function TemplatesManager({
                       return;
                     }
 
-                    void saveTemplateDetails(t.id, { name, slug, status, pricePaise });
+                    void saveTemplateDetails(t.id, {
+                      name,
+                      slug,
+                      status,
+                      pricePaise,
+                      allowsImageUpload: photoDraft,
+                    });
                   }}
                 >
                   <TextInput
@@ -1407,6 +1622,14 @@ export function TemplatesManager({
                       { value: "draft", label: "draft" },
                     ]}
                   />
+                  <div className="lg:col-span-2 rounded-xl border border-outline-variant bg-surface-container-lowest p-4">
+                    <Toggle
+                      label="Allow image uploads"
+                      description="On: the create form asks for photos and a gallery. Off: details and a background song only."
+                      checked={photoDraft}
+                      onChange={setPhotoDraft}
+                    />
+                  </div>
                   <div className="lg:col-span-2 flex items-center gap-2">
                     <Button type="submit" size="sm" loading={saving} icon="save">Save changes</Button>
                     <Button
@@ -1441,26 +1664,28 @@ export function TemplatesManager({
                     </p>
                   </div>
                   <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                    <Select
-                      label="Sample photos"
-                      value={mediaDraft}
-                      disabled={demoSaving}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setMediaDraft(value);
-                        void saveDemoContent(t.id, { mediaPackId: value });
-                      }}
-                      options={[
-                        { value: "", label: "None — package images" },
-                        ...mediaOptions.map((p) => ({
-                          value: p.id,
-                          label:
-                            p.formType === rowFormType
-                              ? p.name
-                              : `${p.name} (different category)`,
-                        })),
-                      ]}
-                    />
+                    {photoDraft && (
+                      <Select
+                        label="Sample photos"
+                        value={mediaDraft}
+                        disabled={demoSaving}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setMediaDraft(value);
+                          void saveDemoContent(t.id, { mediaPackId: value });
+                        }}
+                        options={[
+                          { value: "", label: "None — package images" },
+                          ...mediaOptions.map((p) => ({
+                            value: p.id,
+                            label:
+                              p.formType === rowFormType
+                                ? p.name
+                                : `${p.name} (different category)`,
+                          })),
+                        ]}
+                      />
+                    )}
                     <Select
                       label="Sample details"
                       value={detailDraft}
@@ -1504,11 +1729,12 @@ export function TemplatesManager({
                     />
                   </div>
                   <p className="mt-2 font-body-xs text-on-surface-variant">
-                    Showing {formDefinition(rowFormType).label} photos, songs and details only. The
+                    Showing {formDefinition(rowFormType).label}{" "}
+                    {photoDraft ? "photos, songs and details" : "songs and details"} only. The
                     demo updates as soon as you change these; the published package itself is
                     unchanged. Live invitations always show the customer&apos;s own content.
                   </p>
-                  {rowMediaPacks.length === 0 && (
+                  {photoDraft && rowMediaPacks.length === 0 && (
                     <p className="mt-1 font-body-xs text-on-surface-variant">
                       No {formDefinition(rowFormType).label} media packs exist yet. Create one in
                       the Media tab.
@@ -1540,6 +1766,7 @@ export function TemplatesManager({
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -29,6 +29,30 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   return (settings[key] as T | undefined) ?? fallback;
 }
 
+/**
+ * Uncached settings read.
+ *
+ * Normal server components use the request-scoped cache above so a page reads
+ * the settings table once. A redirect route is different: an admin may change
+ * the destination between two clicks, and the very next request must observe
+ * the write. This helper queries the same `site_settings` table directly
+ * instead of introducing a second configuration store.
+ */
+export async function getSettingFresh<T>(key: string, fallback: T): Promise<T> {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", key)
+      .maybeSingle();
+    if (error || !data) return fallback;
+    return (data.value as T | undefined) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function getPublicSettings() {
   const settings = await cachedSettings();
   const site = (settings["site"] as Record<string, unknown>) ?? {};
@@ -40,13 +64,9 @@ export async function getPublicSettings() {
   return { site, hero, marketing, pricing, faq };
 }
 
-/** Reads settings for server components; falls back to env-driven defaults when DB is unreachable. */
+/** Reads settings for server components; falls back to defaults when the DB is unreachable. */
 export async function getPublicSiteData() {
-  const [settings, siteName] = await Promise.all([
-    getPublicSettings(),
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  ]);
-  return settings;
+  return getPublicSettings();
 }
 
 export async function updateSetting(key: string, value: unknown) {

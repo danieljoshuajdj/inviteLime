@@ -9,6 +9,7 @@ import {
   fetchRazorpayPayment,
 } from "@/lib/services/payments";
 import { invitationUrl } from "@/lib/services/weddings";
+import { resolvePublicAppOrigin } from "@/lib/services/app-origin";
 import { finalizePaidWedding } from "@/lib/services/finalize-purchase";
 import { jsonError, readBody } from "@/lib/services/helpers";
 
@@ -27,6 +28,7 @@ export const dynamic = "force-dynamic";
  * never trusted with the payable amount.
  */
 export async function POST(req: Request) {
+  const publicAppOrigin = resolvePublicAppOrigin(req.headers);
   let body: unknown;
   try {
     body = await readBody(req);
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
     if (!existing.slug) return jsonError(409, "Published wedding has no live link");
     return Response.json({
       published: true,
-      url: invitationUrl(existing.slug),
+      url: invitationUrl(existing.slug, publicAppOrigin),
       wedding: existing,
     });
   }
@@ -137,11 +139,12 @@ export async function POST(req: Request) {
     pricePaise: expectedAmount,
     currency: orderRow.currency,
     source: "verify",
+    appOrigin: publicAppOrigin,
   });
 
   return Response.json({
     published: true,
-    url: invitationUrl(published.slug),
+    url: invitationUrl(published.slug, publicAppOrigin),
     wedding: { ...existing, ...published },
     price: { price_paise: expectedAmount, currency: orderRow.currency },
   });

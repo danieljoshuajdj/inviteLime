@@ -18,6 +18,11 @@ interface Props {
   weddingId?: string;
   data: WeddingData;
   onChange: (patch: Partial<WeddingData> | ((prev: WeddingData) => Partial<WeddingData>)) => void;
+  /**
+   * Whether this template accepts photos. When false only the background song
+   * is rendered — no photo toggles, slots or gallery.
+   */
+  showPhotos?: boolean;
 }
 
 type SlotRole = "bridePhoto" | "groomPhoto" | "couplePhoto" | "music";
@@ -32,7 +37,7 @@ interface PendingGalleryItem {
   preview: string;
 }
 
-export function MediaFields({ token, weddingId, data, onChange }: Props) {
+export function MediaFields({ token, weddingId, data, onChange, showPhotos = true }: Props) {
   const [uploadingRole, setUploadingRole] = useState<SlotRole | null>(null);
   const [error, setError] = useState<string | null>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
@@ -350,6 +355,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
 
   return (
     <div className="flex flex-col gap-8">
+      {showPhotos && (
       <div className="flex flex-col gap-4">
         <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
           <Toggle
@@ -403,8 +409,10 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
           </div>
         )}
       </div>
+      )}
 
       {/* Gallery */}
+      {showPhotos && (
       <div className="flex flex-col gap-4">
         <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
           <Toggle
@@ -484,6 +492,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
           </div>
         )}
       </div>
+      )}
 
       {/* Music */}
       <div className="rounded-2xl border border-outline-variant bg-surface-container-low p-4">
@@ -495,7 +504,7 @@ export function MediaFields({ token, weddingId, data, onChange }: Props) {
               <Icon name="music_note" size="lg" />
             </span>
             <div>
-              <p className="font-body-sm font-semibold !text-on-surface">Wedding soundtrack</p>
+              <p className="font-body-sm font-semibold !text-on-surface">Background song</p>
               <p className="font-body-xs text-on-surface-variant">
                 {data.music
                   ? isLibraryMediaUrl(data.music.url)

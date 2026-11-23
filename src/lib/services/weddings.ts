@@ -9,6 +9,7 @@ import {
 } from "@/lib/utils";
 import { isReservedSlug } from "@/lib/validators";
 import { brandSnapshot, getPlannerBrand, snapshotToJson } from "@/lib/services/planner-branding";
+import { configuredAppOrigin, LOCAL_APP_ORIGIN, normalizeOrigin } from "@/lib/services/app-origin";
 
 export type WeddingStatus = "draft" | "active" | "expired" | "cancelled";
 
@@ -329,10 +330,18 @@ export async function markExpiredWeddings(): Promise<number> {
   return (data as number | null) ?? 0;
 }
 
-/** Returns the canonical public URL for a wedding slug. */
-export function invitationUrl(slug: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}/w/${slug}`;
+/**
+ * Returns the public URL for a wedding slug.
+ *
+ * Callers with an incoming request should pass the resolved public origin
+ * (canonical in production, validated request origin during development) so a
+ * tunnel preview never produces a localhost link. Background callers can omit
+ * it and get the configured canonical origin.
+ */
+export function invitationUrl(slug: string, origin?: string | null): string {
+  const base =
+    normalizeOrigin(origin) ?? configuredAppOrigin() ?? LOCAL_APP_ORIGIN;
+  return `${base}/w/${slug}`;
 }
 
 export function nextEligibleYear(): number {

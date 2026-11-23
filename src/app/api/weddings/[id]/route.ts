@@ -94,12 +94,22 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
   const { data, error } = await supabase
     .from("weddings")
-    .select("id, form_type, bride_name, groom_name, celebrant_name, wedding_date, wedding_time, venue, address, maps_url, wedding_data, rsvp_toggle, status, slug")
+    .select("id, template_id, form_type, bride_name, groom_name, celebrant_name, wedding_date, wedding_time, venue, address, maps_url, wedding_data, rsvp_toggle, status, slug")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
   if (error) return jsonError(500, error.message);
   if (!data) return jsonError(404, "Invitation not found");
+
+  // The template decides whether the editor offers photo controls. Read it
+  // with the admin client so the answer does not depend on template RLS.
+  const { data: templateRow } = data.template_id
+    ? await createAdminClient()
+        .from("templates")
+        .select("allows_image_upload")
+        .eq("id", data.template_id)
+        .maybeSingle()
+    : { data: null };
 
   const wd = (data.wedding_data ?? {}) as Record<string, unknown>;
   return Response.json({
@@ -134,6 +144,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     ...(typeof wd.includePhotos === "boolean" ? { includePhotos: wd.includePhotos } : {}),
     ...(typeof wd.includeGallery === "boolean" ? { includeGallery: wd.includeGallery } : {}),
     music: wd.music ?? null,
+    allowsImageUpload: templateRow?.allows_image_upload !== false,
     status: data.status,
     slug: data.slug,
   });

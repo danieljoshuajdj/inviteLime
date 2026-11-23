@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { createServerClient } from "@/lib/supabase/server";
 import { invitationUrl } from "@/lib/services/weddings";
+import { getPublicAppOrigin } from "@/lib/services/app-origin-server";
 import {
   InvitationsList,
   type InvitationItem,
@@ -29,7 +30,10 @@ interface InvitationRow {
 }
 
 export default async function InvitationsPage() {
-  const supabase = await createServerClient();
+  const [supabase, publicAppOrigin] = await Promise.all([
+    createServerClient(),
+    getPublicAppOrigin(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -109,7 +113,7 @@ export default async function InvitationsPage() {
               (!Array.isArray(w.template) && w.template
                 ? w.template.name
                 : w.template?.[0]?.name) ?? "Custom invitation",
-            url: w.slug ? invitationUrl(w.slug) : null,
+            url: w.slug ? invitationUrl(w.slug, publicAppOrigin) : null,
           }))}
         />
       </div>

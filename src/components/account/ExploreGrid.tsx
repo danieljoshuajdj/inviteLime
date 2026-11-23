@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useCallback, useEffect, useRef } from "react";
 
 import { Icon } from "@/components/shared/Icon";
+import { PulseLoader } from "@/components/shared/PulseLoader";
 import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { InfiniteScrollFooter } from "@/components/shared/InfiniteScrollFooter";
 import { categorySlug, matchesSelectedCategories } from "@/components/account/explore-filter";
@@ -483,9 +484,10 @@ export function ExploreGrid({
                         >
                           {!demoReady && (
                             <span
+                              aria-hidden
                               className={cn(
-                                "h-3 w-3 animate-spin rounded-full border-2 border-t-transparent",
-                                withBranding ? "border-secondary" : "border-on-surface/60"
+                                "h-2.5 w-2.5 animate-pulse rounded-full motion-reduce:animate-none",
+                                withBranding ? "bg-secondary" : "bg-on-surface/60"
                               )}
                             />
                           )}
@@ -521,9 +523,8 @@ export function ExploreGrid({
                 </div>
                 <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.8rem] bg-ivory-950">
                   {!demoReady && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-surface-low text-on-surface-variant">
-                      <Icon name="refresh" size="lg" className="animate-spin text-secondary" />
-                      <p className="font-body-sm">Opening live demo…</p>
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface px-6 text-center">
+                      <PulseLoader label="Opening live demo…" />
                     </div>
                   )}
                   <iframe

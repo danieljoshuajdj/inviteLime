@@ -50,6 +50,17 @@ export interface RuntimePlannerBrand {
   mapsUrl: string | null;
 }
 
+/**
+ * Platform-managed global links. Templates never receive the destination of
+ * the website redirect, only the permanent link that forwards to it.
+ */
+export interface RuntimeSite {
+  /** Absolute `/visit-website` link, or null if no origin was supplied. */
+  websiteUrl: string | null;
+  /** Whether an admin has configured a destination. */
+  websiteConfigured: boolean;
+}
+
 export interface RuntimePayload {
   runtime: "invite-lime";
   contract: string;
@@ -124,6 +135,8 @@ export interface RuntimePayload {
    * customer-owned invitations so studio branding can never leak.
    */
   planner: RuntimePlannerBrand | null;
+  /** Global platform links available to every template. */
+  site: RuntimeSite;
   assets: {
     baseUrl: string;
   };
@@ -170,6 +183,10 @@ export function buildRuntimePayload(input: {
   expiresAt?: string | null;
   assetsBaseUrl: string;
   planner?: RuntimePlannerBrand | null;
+  site?: {
+    websiteUrl?: string | null;
+    websiteConfigured?: boolean;
+  } | null;
   rsvp?: {
     enabled?: boolean;
     preview?: boolean;
@@ -183,6 +200,7 @@ export function buildRuntimePayload(input: {
     whatsappNumber?: string | null;
   };
 }): RuntimePayload {
+  const websiteUrl = safeHttpUrl(input.site?.websiteUrl);
   return {
     runtime: "invite-lime",
     contract: RUNTIME_CONTRACT_VERSION,
@@ -231,6 +249,10 @@ export function buildRuntimePayload(input: {
           mapsUrl: input.planner.mapsUrl?.trim() || null,
         }
       : null,
+    site: {
+      websiteUrl,
+      websiteConfigured: Boolean(input.site?.websiteConfigured && websiteUrl),
+    },
     assets: {
       baseUrl: withTrailingSlash(input.assetsBaseUrl),
     },
@@ -301,7 +323,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function safePlannerHref(value: string | null): string | null {
+function safeHttpUrl(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -323,7 +345,7 @@ function plannerFallbackSnippet(planner: RuntimePlannerBrand): string {
   const phone = escapeHtml(planner.contactPhone);
   const tel = escapeHtml(planner.contactPhone.replace(/[^\d+]/g, ""));
   const address = planner.address ? escapeHtml(planner.address) : "";
-  const maps = safePlannerHref(planner.mapsUrl);
+  const maps = safeHttpUrl(planner.mapsUrl);
   const addressLine = address
     ? `<div style="margin-top:4px;opacity:.86">${address}</div>`
     : "";

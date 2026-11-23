@@ -20,6 +20,7 @@ interface BuilderTemplateRow {
   name: string;
   slug: string;
   form_type: string;
+  allows_image_upload: boolean;
   product_id: string | null;
   product:
     | {
@@ -71,7 +72,7 @@ export default async function BuilderPage({ params }: PageProps) {
   const { data: templateRaw } = await supabase
     .from("templates")
     .select(
-      "id, name, slug, form_type, product_id, product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active))"
+      "id, name, slug, form_type, allows_image_upload, product_id, product:products(id, name, price_paise, currency, prices:product_prices(currency, amount_minor, active))"
     )
     .eq("id", templateId)
     .single();
@@ -130,6 +131,7 @@ export default async function BuilderPage({ params }: PageProps) {
         pricePaise: quote.quote.amountMinor,
         currency: quote.quote.currency,
         versionId: templateVersionId,
+        allowsImageUpload: template.allows_image_upload !== false,
       }}
       draftEmail={draft.email ?? null}
       planner={plannerContext}

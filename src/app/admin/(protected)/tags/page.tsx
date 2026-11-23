@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { AdminBreadcrumbs } from "@/components/admin/AdminBreadcrumbs";
 import { TagsManager } from "@/components/admin/TagsManager";
 import { isAdminPreviewMode } from "@/lib/services/admin-preview";
 
@@ -22,5 +23,15 @@ export default async function AdminTagsPage() {
     description: t.description ?? null,
   }));
 
-  return <TagsManager tags={mapped.length > 0 ? mapped : isAdminPreviewMode() ? mockTags : []} />;
+  return (
+    <div>
+      <AdminBreadcrumbs
+        items={[
+          { label: "Configuration", href: "/admin/configuration" },
+          { label: "Tags" },
+        ]}
+      />
+      <TagsManager tags={mapped.length > 0 ? mapped : isAdminPreviewMode() ? mockTags : []} />
+    </div>
+  );
 }

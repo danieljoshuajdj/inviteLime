@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerClient } from "@/lib/supabase/server";
 import { builderTokenFromCookies, getOwnedBuilderDraft } from "@/lib/services/builder";
 import { createDraftWedding, invitationUrl } from "@/lib/services/weddings";
+import { resolvePublicAppOrigin } from "@/lib/services/app-origin";
 import { finalizePaidWedding } from "@/lib/services/finalize-purchase";
 import { isPaymentBypassEnabled } from "@/lib/services/dev-bypass";
 import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    const publicAppOrigin = resolvePublicAppOrigin(req.headers);
     const body = await readBody(req).catch(() => ({}));
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) return jsonError(400, "Invalid payload");
@@ -138,12 +140,13 @@ export async function POST(req: Request) {
       pricePaise,
       currency,
       source: "dev",
+      appOrigin: publicAppOrigin,
     });
 
     return Response.json({
       published: true,
       bypassed: true,
-      url: invitationUrl(published.slug),
+      url: invitationUrl(published.slug, publicAppOrigin),
       weddingId,
       emailSentTo: published.email,
       // The exact couple-facing email that was rendered and handed to the

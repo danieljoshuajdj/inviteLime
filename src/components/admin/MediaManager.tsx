@@ -90,6 +90,9 @@ function categoryForms(categories: CategoryOption[]): CategoryForm[] {
  */
 export function MediaManager({ initialPacks, categories }: Props) {
   const [packs, setPacks] = useState<MediaPack[]>(initialPacks);
+  // Collapsed by default: a library of full photo grids is very tall, so each
+  // pack opens only when the admin asks for it.
+  const [expandedPack, setExpandedPack] = useState<string | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -144,6 +147,7 @@ export function MediaManager({ initialPacks, categories }: Props) {
       if (!res.ok || !json.pack) throw new Error(json.error ?? "Create failed");
 
       setPacks((prev) => [json.pack!, ...prev]);
+      setExpandedPack(json.pack.id);
       toast("Media pack created", "Upload its photos next");
       setCreateOpen(false);
     } catch (err) {
@@ -198,6 +202,7 @@ export function MediaManager({ initialPacks, categories }: Props) {
       if (!res.ok) throw new Error(json.error ?? "Delete failed");
 
       setPacks((prev) => prev.filter((p) => p.id !== pack.id));
+      setExpandedPack((prev) => (prev === pack.id ? null : prev));
       toast("Media pack deleted");
       setDeletingPack(null);
     } catch (err) {
@@ -315,108 +320,137 @@ export function MediaManager({ initialPacks, categories }: Props) {
               .filter((i) => i.role === "gallery")
               .sort((a, b) => a.sortOrder - b.sortOrder);
             const singleRoles = roleSlots(pack.formType);
+            const isOpen = expandedPack === pack.id;
 
             return (
-              <div key={pack.id} className="rounded-2xl border border-outline-variant bg-surface p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 font-heading-md font-semibold !text-on-surface">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary/10 text-secondary">
-                        <Icon name="image" size="md" weight="w400" />
+              <div
+                key={pack.id}
+                className="overflow-hidden rounded-2xl border border-outline-variant bg-surface"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3 p-5">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPack(isOpen ? null : pack.id)}
+                    aria-expanded={isOpen}
+                    aria-controls={`media-pack-${pack.id}`}
+                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary/10 text-secondary">
+                      <Icon name="image" size="md" weight="w400" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="flex flex-wrap items-center gap-2 font-heading-md font-semibold !text-on-surface">
+                        {pack.name}
+                        <Badge tone="primary">{formDefinition(pack.formType).label}</Badge>
                       </span>
-                      {pack.name}
-                      <Badge tone="primary">{formDefinition(pack.formType).label}</Badge>
-                    </p>
-                    <p className="mt-1 font-body-xs text-on-surface-variant">
-                      {pack.items.length} photo{pack.items.length === 1 ? "" : "s"} ·{" "}
-                      {pack.templateCount === 0
-                        ? "not used by any template yet"
-                        : `used by ${pack.templateCount} template${pack.templateCount === 1 ? "" : "s"}`}
-                    </p>
-                    {pack.description && (
-                      <p className="mt-1 font-body-sm text-on-surface-variant">{pack.description}</p>
-                    )}
-                  </div>
+                      <span className="mt-1 block font-body-xs text-on-surface-variant">
+                        {pack.items.length} photo{pack.items.length === 1 ? "" : "s"} ·{" "}
+                        {pack.templateCount === 0
+                          ? "not used by any template yet"
+                          : `used by ${pack.templateCount} template${pack.templateCount === 1 ? "" : "s"}`}
+                      </span>
+                      {pack.description && (
+                        <span className="mt-1 block font-body-sm text-on-surface-variant">
+                          {pack.description}
+                        </span>
+                      )}
+                    </span>
+                  </button>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" icon="edit" onClick={() => openEdit(pack)}>Edit</Button>
                     <Button variant="danger" size="sm" icon="delete" onClick={() => setDeletingPack(pack)}>Delete</Button>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                  {singleRoles.map((role) => {
-                    const item = singlePhoto(role);
-                    const busy = uploadingKey === `${pack.id}:${role}`;
-                    const label = roleLabel(role, pack.formType);
-                    return (
-                      <div key={role} className="rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
-                        <p className="font-body-xs font-semibold uppercase tracking-[0.1em] text-on-surface-variant">
-                          {label}
-                        </p>
-                        <div className="relative mt-2 aspect-[3/4] overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
-                          <PhotoFrame url={item?.url ?? null} alt={`${pack.name} — ${label}`} />
-                          {item && (
-                            <RemoveButton
-                              label={`Remove ${label.toLowerCase()}`}
-                              onClick={() => setRemovingItem({ pack, item })}
-                            />
-                          )}
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon="upload"
-                            loading={busy}
-                            onClick={() => pickFiles(pack, role)}
-                          >
-                            {item ? "Replace" : "Upload"}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-body-xs font-semibold uppercase tracking-[0.1em] text-on-surface-variant">
-                      {MEDIA_PACK_ROLE_LABELS.gallery}{" "}
-                      <span className="font-normal normal-case tracking-normal">
-                        {gallery.length} photo{gallery.length === 1 ? "" : "s"}
-                      </span>
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon="add"
-                      loading={uploadingKey === `${pack.id}:gallery`}
-                      onClick={() => pickFiles(pack, "gallery")}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedPack(isOpen ? null : pack.id)}
+                      aria-expanded={isOpen}
+                      aria-controls={`media-pack-${pack.id}`}
+                      aria-label={isOpen ? `Collapse ${pack.name}` : `Expand ${pack.name}`}
+                      title={isOpen ? "Collapse photos" : "Show photos"}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant transition-colors hover:bg-surface-container"
                     >
-                      Add photos
-                    </Button>
+                      <Icon name={isOpen ? "expand_less" : "expand_more"} size="sm" />
+                    </button>
                   </div>
-                  {gallery.length === 0 ? (
-                    <p className="mt-2 font-body-xs text-on-surface-variant">
-                      No gallery photos yet. These appear in the template&apos;s gallery section in demo mode.
-                    </p>
-                  ) : (
-                    <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
-                      {gallery.map((item) => (
-                        <div
-                          key={item.id}
-                          className="relative aspect-[3/4] overflow-hidden rounded-lg border border-outline-variant bg-surface-container"
-                        >
-                          <PhotoFrame url={item.url} alt={`${pack.name} — gallery photo`} />
-                          <RemoveButton
-                            label="Remove gallery photo"
-                            onClick={() => setRemovingItem({ pack, item })}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
+
+                {isOpen && (
+                  <div id={`media-pack-${pack.id}`} className="border-t border-outline-variant p-5">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      {singleRoles.map((role) => {
+                        const item = singlePhoto(role);
+                        const busy = uploadingKey === `${pack.id}:${role}`;
+                        const label = roleLabel(role, pack.formType);
+                        return (
+                          <div key={role} className="rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+                            <p className="font-body-xs font-semibold uppercase tracking-[0.1em] text-on-surface-variant">
+                              {label}
+                            </p>
+                            <div className="relative mt-2 aspect-[3/4] overflow-hidden rounded-lg border border-outline-variant bg-surface-container">
+                              <PhotoFrame url={item?.url ?? null} alt={`${pack.name} — ${label}`} />
+                              {item && (
+                                <RemoveButton
+                                  label={`Remove ${label.toLowerCase()}`}
+                                  onClick={() => setRemovingItem({ pack, item })}
+                                />
+                              )}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                icon="upload"
+                                loading={busy}
+                                onClick={() => pickFiles(pack, role)}
+                              >
+                                {item ? "Replace" : "Upload"}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-lowest p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-body-xs font-semibold uppercase tracking-[0.1em] text-on-surface-variant">
+                          {MEDIA_PACK_ROLE_LABELS.gallery}{" "}
+                          <span className="font-normal normal-case tracking-normal">
+                            {gallery.length} photo{gallery.length === 1 ? "" : "s"}
+                          </span>
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon="add"
+                          loading={uploadingKey === `${pack.id}:gallery`}
+                          onClick={() => pickFiles(pack, "gallery")}
+                        >
+                          Add photos
+                        </Button>
+                      </div>
+                      {gallery.length === 0 ? (
+                        <p className="mt-2 font-body-xs text-on-surface-variant">
+                          No gallery photos yet. These appear in the template&apos;s gallery section in demo mode.
+                        </p>
+                      ) : (
+                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                          {gallery.map((item) => (
+                            <div
+                              key={item.id}
+                              className="relative aspect-[3/4] overflow-hidden rounded-lg border border-outline-variant bg-surface-container"
+                            >
+                              <PhotoFrame url={item.url} alt={`${pack.name} — gallery photo`} />
+                              <RemoveButton
+                                label="Remove gallery photo"
+                                onClick={() => setRemovingItem({ pack, item })}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

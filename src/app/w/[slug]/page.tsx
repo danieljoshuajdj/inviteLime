@@ -10,9 +10,15 @@ import { TemplateFrame } from "@/components/runtime/TemplateFrame";
 import { loadInvitationRuntime } from "@/lib/services/template-runtime";
 import { buildRuntimePayload } from "@/lib/runtime/payload";
 import { weddingDataToRuntimeInput } from "@/lib/services/demo-wedding";
-import { absolutizeMediaUrl, rewriteRuntimeMedia } from "@/lib/services/media-urls";
+import {
+  absolutizeMediaUrl,
+  rewriteRuntimeMedia,
+  rewriteWeddingDataMedia,
+} from "@/lib/services/media-urls";
 import { resolveInvitationPlannerBrand } from "@/lib/services/planner-branding";
 import { buildInvitationMetadata } from "@/lib/services/invitation-metadata";
+import { getPublicAppOrigin, getRuntimeAppOrigin } from "@/lib/services/app-origin-server";
+import { getWebsiteRedirectState } from "@/lib/services/website-redirect";
 import { coverTitle, formDefinition, formTypeOf, isBirthdayForm } from "@/lib/builder/forms";
 
 interface PageProps {
@@ -26,7 +32,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   try {
     const wedding = await getPublicWedding(supabase, slug);
     if (!wedding) return { title: "Invitation" };
-    const plannerBrand = await resolveInvitationPlannerBrand(wedding).catch(() => null);
+    const [plannerBrand, origin] = await Promise.all([
+      resolveInvitationPlannerBrand(wedding).catch(() => null),
+      getPublicAppOrigin(),
+    ]);
     return buildInvitationMetadata({
       slug: wedding.slug,
       brideName: wedding.bride_name,
@@ -34,6 +43,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       celebrantName: wedding.celebrant_name,
       formType: wedding.form_type,
       brandName: plannerBrand?.brandName ?? null,
+      origin,
     });
   } catch {
     return { title: "Invitation" };
@@ -104,12 +114,23 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
   // The purchased template loads its own immutable HTML/CSS/JS package in a
   // sandboxed frame with public invitation data bound to it. Without an
   // uploaded package we fall back to the built-in runtime.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // Media and template-facing links must use the origin the guest actually
+  // reached (localhost, tunnel, staging or production); permanent links use
+  // the canonical public origin instead.
+  const [publicAppOrigin, runtimeAppOrigin] = await Promise.all([
+    getPublicAppOrigin(),
+    getRuntimeAppOrigin(),
+  ]);
+  // The template receives the permanent platform link, never the destination.
+  // The redirect route reads the destination on every click, so changing it in
+  // the admin panel affects invitations that were already opened.
+  const site = await getWebsiteRedirectState(runtimeAppOrigin);
   const payload = buildRuntimePayload({
     mode: "live",
-    assetsBaseUrl: appUrl,
-    invitationUrl: invitationUrl(wedding.slug),
+    assetsBaseUrl: runtimeAppOrigin,
+    invitationUrl: invitationUrl(wedding.slug, publicAppOrigin),
     expiresAt: wedding.expiration_date,
+    site,
     planner: plannerBrand
       ? {
           brandName: plannerBrand.brandName,
@@ -134,7 +155,7 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
         },
         data
       ),
-      (url) => absolutizeMediaUrl(url, appUrl)
+      (url) => absolutizeMediaUrl(url, runtimeAppOrigin)
     ),
     rsvp: {
       // Birthday forms deliberately have no RSVP flow.
@@ -155,7 +176,7 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
         html={runtime.html}
         payload={payload}
         title={`${invitationTitle} — ${invitationLabel}`}
-        fallbackHref={invitationUrl(wedding.slug)}
+        fallbackHref={invitationUrl(wedding.slug, publicAppOrigin)}
       />
     );
   }
@@ -163,7 +184,11 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
   return (
     <InvitationRuntime
       wedding={wedding}
-      weddingData={data as never}
+      weddingData={
+        rewriteWeddingDataMedia(data, (url) =>
+          absolutizeMediaUrl(url, runtimeAppOrigin)
+        ) as never
+      }
       rsvpCount={rsvpCount}
       attendingCount={attendingCount}
       planner={

@@ -306,6 +306,7 @@ export interface Database {
           demo_detail_pack_id: string | null;
           music_track_id: string | null;
           form_type: EventFormType;
+          allows_image_upload: boolean;
           tags: string[];
           created_at: string;
           updated_at: string;
@@ -323,6 +324,7 @@ export interface Database {
           demo_detail_pack_id?: string | null;
           music_track_id?: string | null;
           form_type?: EventFormType;
+          allows_image_upload?: boolean;
           tags?: string[];
           created_at?: string;
           updated_at?: string;
@@ -340,6 +342,7 @@ export interface Database {
           demo_detail_pack_id?: string | null;
           music_track_id?: string | null;
           form_type?: EventFormType;
+          allows_image_upload?: boolean;
           tags?: string[];
           created_at?: string;
           updated_at?: string;

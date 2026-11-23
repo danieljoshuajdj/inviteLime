@@ -1,3 +1,4 @@
+import { AdminBreadcrumbs } from "@/components/admin/AdminBreadcrumbs";
 import { MusicManager } from "@/components/admin/MusicManager";
 import { isAdminPreviewMode } from "@/lib/services/admin-preview";
 import { listMusicTracks } from "@/lib/services/music-library";
@@ -71,9 +72,27 @@ export default async function AdminMusicPage() {
   const availableCategories = categories.length > 0 ? categories : preview ? previewCategories : [];
 
   return (
-    <MusicManager
-      initialTracks={tracks.length > 0 ? tracks : preview ? previewTracks(availableCategories) : []}
-      categories={availableCategories}
-    />
+    <div>
+      <AdminBreadcrumbs
+        items={[
+          { label: "Configuration", href: "/admin/configuration" },
+          { label: "Music" },
+        ]}
+      />
+      <div className="mb-6">
+        <p className="font-body-xs font-semibold uppercase tracking-[0.2em] text-secondary">
+          Library
+        </p>
+        <h1 className="mt-1 font-heading-2xl !text-on-surface">Music</h1>
+        <p className="mt-1 max-w-2xl font-body-sm text-on-surface-variant">
+          Background tracks guests can choose while personalising their
+          invitation. Each track belongs to one or more event categories.
+        </p>
+      </div>
+      <MusicManager
+        initialTracks={tracks.length > 0 ? tracks : preview ? previewTracks(availableCategories) : []}
+        categories={availableCategories}
+      />
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { AdminBreadcrumbs } from "@/components/admin/AdminBreadcrumbs";
 import { MediaManager } from "@/components/admin/MediaManager";
 import { isAdminPreviewMode } from "@/lib/services/admin-preview";
 import { listMediaPacks } from "@/lib/services/media-packs";
@@ -63,9 +64,17 @@ export default async function AdminMediaPage() {
 
   const preview = isAdminPreviewMode();
   return (
-    <MediaManager
-      initialPacks={packs.length > 0 ? packs : preview ? previewPacks : []}
-      categories={categories}
-    />
+    <div>
+      <AdminBreadcrumbs
+        items={[
+          { label: "Configuration", href: "/admin/configuration" },
+          { label: "Media" },
+        ]}
+      />
+      <MediaManager
+        initialPacks={packs.length > 0 ? packs : preview ? previewPacks : []}
+        categories={categories}
+      />
+    </div>
   );
 }

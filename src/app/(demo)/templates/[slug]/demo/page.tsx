@@ -23,6 +23,8 @@ import { getDemoDetailPack } from "@/lib/services/demo-details";
 import { getPackDemoMedia } from "@/lib/services/media-packs";
 import { getMusicTrack } from "@/lib/services/music-library";
 import { absolutizeMediaUrl, rewriteRuntimeMedia } from "@/lib/services/media-urls";
+import { getPublicAppOrigin, getRuntimeAppOrigin } from "@/lib/services/app-origin-server";
+import { getWebsiteRedirectState } from "@/lib/services/website-redirect";
 import {
   getPlannerBrand,
   isPlannerBrandComplete,
@@ -107,8 +109,16 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
     }
   }
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
-  const demoUrl = `${appUrl}/templates/${template.slug}/demo`;
+  // Demo media must follow the origin the visitor actually reached, while the
+  // demo's public link follows the canonical production domain when configured.
+  const [publicAppOrigin, runtimeAppOrigin] = await Promise.all([
+    getPublicAppOrigin(),
+    getRuntimeAppOrigin(),
+  ]);
+  const demoUrl = `${publicAppOrigin}/templates/${template.slug}/demo`;
+  // Demo and live invitations use the same permanent platform link. The demo
+  // therefore also follows a destination changed in the admin panel.
+  const site = await getWebsiteRedirectState(runtimeAppOrigin);
 
   // Three independent demo layers, each assigned at template upload:
   //   details → who/what the demo is about (names, venue, events, dress code)
@@ -164,9 +174,10 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
 
   const payload = buildRuntimePayload({
     mode: "demo",
-    assetsBaseUrl: appUrl,
+    assetsBaseUrl: runtimeAppOrigin,
     invitationUrl: demoUrl,
     expiresAt: null,
+    site,
     planner: plannerBrand,
     // Same as the live invitation: the template package injects a <base href>
     // of its own, so app-relative pack URLs must become absolute to load.
@@ -175,7 +186,7 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
         ...weddingDataToRuntimeInput({ id: "demo", slug: `${template.slug}-demo` }, demoData),
         ...extras,
       },
-      (url) => absolutizeMediaUrl(url, appUrl)
+      (url) => absolutizeMediaUrl(url, runtimeAppOrigin)
     ),
     rsvp: {
       enabled: !birthday,

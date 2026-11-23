@@ -27,6 +27,8 @@ export interface BuilderProps {
     /** ISO-4217 currency the price is denominated in (geo-detected). */
     currency: string;
     versionId: string;
+    /** When false the create form hides every photo control. */
+    allowsImageUpload: boolean;
   };
   /** Present only when this draft belongs to a planner account. */
   planner?: {
@@ -256,7 +258,13 @@ export function BuilderHost({
       {/* Step body */}
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6">
         {step === 0 && (
-          <StepDetails token={token} data={data} onChange={update} onNext={goNext} />
+          <StepDetails
+            token={token}
+            data={data}
+            onChange={update}
+            onNext={goNext}
+            showPhotos={template.allowsImageUpload !== false}
+          />
         )}
         {step === 1 && (
           <StepPreview

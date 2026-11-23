@@ -7,18 +7,43 @@ import { Icon, type IconName } from "@/components/shared/Icon";
 import { LogoLink } from "@/components/shared/Logo";
 import { cn } from "@/lib/utils";
 
-const nav: { href: string; label: string; icon: IconName }[] = [
+interface AdminNavItem {
+  href: string;
+  label: string;
+  /** Shorter label for the six-column mobile tab bar. */
+  mobileLabel?: string;
+  icon: IconName;
+  /** Extra routes that should light up this item (e.g. the config sections). */
+  matches?: string[];
+}
+
+const nav: AdminNavItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/admin/templates", label: "Templates", icon: "inventory_2" },
-  { href: "/admin/plans", label: "Planner plans", icon: "workspace_premium" },
-  { href: "/admin/invitations", label: "Invitations", icon: "receipt_long" },
-  { href: "/admin/music", label: "Music", icon: "music_note" },
-  { href: "/admin/media", label: "Media", icon: "image" },
-  { href: "/admin/details", label: "Details", icon: "text_fields" },
-  { href: "/admin/categories", label: "Categories", icon: "category" },
-  { href: "/admin/tags", label: "Tags", icon: "tune" },
+  { href: "/admin/plans", label: "Planner plans", mobileLabel: "Plans", icon: "workspace_premium" },
+  { href: "/admin/invitations", label: "Invitations", mobileLabel: "Invites", icon: "receipt_long" },
+  {
+    href: "/admin/configuration",
+    label: "Configuration",
+    mobileLabel: "Config",
+    icon: "settings",
+    matches: [
+      "/admin/configuration",
+      "/admin/media",
+      "/admin/music",
+      "/admin/details",
+      "/admin/categories",
+      "/admin/tags",
+    ],
+  },
   { href: "/admin/users", label: "Users", icon: "group" },
 ];
+
+function isNavItemActive(pathname: string, item: AdminNavItem): boolean {
+  return (item.matches ?? [item.href]).some(
+    (href) => pathname === href || pathname.startsWith(href + "/")
+  );
+}
 
 export function AdminShell({ children, preview = false }: { children: React.ReactNode; preview?: boolean }) {
   const pathname = usePathname();
@@ -43,9 +68,9 @@ export function AdminShell({ children, preview = false }: { children: React.Reac
           </div>
         )}
 
-        <nav className="flex flex-1 flex-col gap-1 px-4">
+        <nav aria-label="Admin sections" className="flex flex-1 flex-col gap-1 px-4">
           {nav.map((n) => {
-            const active = pathname === n.href || pathname.startsWith(n.href + "/");
+            const active = isNavItemActive(pathname, n);
             return (
               <Link
                 key={n.href}
@@ -97,16 +122,19 @@ export function AdminShell({ children, preview = false }: { children: React.Reac
       {/* Mobile tab bar. Columns track the tab count above; the list is the
           source of truth, so the grid must be widened whenever a tab is added. */}
       <nav
+        aria-label="Admin sections"
         className="fixed inset-x-0 bottom-0 z-50 grid border-t border-outline-variant bg-surface pt-1 md:hidden"
         style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}
       >
         {nav.map((n) => {
-          const active = pathname === n.href || pathname.startsWith(n.href + "/");
+          const active = isNavItemActive(pathname, n);
           return (
             <Link
               key={n.href}
               href={n.href}
+              aria-label={n.label}
               aria-current={active ? "page" : undefined}
+              title={n.label}
               className={cn(
                 "relative flex w-full flex-col items-center gap-0.5 px-1 py-2 text-center text-[10px] font-semibold leading-tight transition-colors",
                 active ? "text-primary" : "text-on-surface-variant hover:text-on-surface"
@@ -120,7 +148,7 @@ export function AdminShell({ children, preview = false }: { children: React.Reac
                 )}
               />
               <Icon name={n.icon} size="sm" filled={active} />
-              {n.label}
+              {n.mobileLabel ?? n.label}
             </Link>
           );
         })}

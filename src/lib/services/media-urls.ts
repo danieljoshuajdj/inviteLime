@@ -1,3 +1,4 @@
+import type { WeddingData } from "@/lib/builder/defaults";
 import type { RuntimeWeddingInput } from "@/lib/runtime/payload";
 import { guestFolderMatches, isWeddingFolder, isWeddingMediaRole, parseMediaPath } from "./media-access";
 
@@ -119,10 +120,45 @@ export function rewriteRuntimeMedia(
     ...wedding,
     gallery: wedding.gallery.map((item) => ({ ...item, url: one(item.url) ?? item.url })),
     photos: {
+      ...wedding.photos,
       bride: one(wedding.photos.bride),
       groom: one(wedding.photos.groom),
       couple: one(wedding.photos.couple),
+      // Birthday forms use `main`; dropping it here left that image relative,
+      // so it resolved against the template's object-storage <base href>.
+      main: one(wedding.photos.main ?? null),
     },
     music: wedding.music ? { ...wedding.music, url: one(wedding.music.url) ?? wedding.music.url } : null,
+  };
+}
+
+/**
+ * Applies the same media rewrite to builder-shaped data used by the built-in
+ * fallback runtime. It is only needed when the stored value is an absolute
+ * URL: a relative `/api/media/...` path already resolves against the app
+ * origin, but a historical `http://localhost:3000/api/media/...` does not.
+ */
+export function rewriteWeddingDataMedia(
+  data: WeddingData,
+  rewrite: (url: string) => string | null
+): WeddingData {
+  const one = (url: string | null | undefined): string | null | undefined => {
+    if (url === null || url === undefined) return url;
+    return rewrite(url) ?? url;
+  };
+
+  return {
+    ...data,
+    bridePhoto: one(data.bridePhoto),
+    groomPhoto: one(data.groomPhoto),
+    couplePhoto: one(data.couplePhoto),
+    mainPhoto: one(data.mainPhoto) ?? null,
+    gallery: data.gallery.map((item) => ({
+      ...item,
+      url: one(item.url) ?? item.url,
+    })),
+    music: data.music
+      ? { ...data.music, url: one(data.music.url) ?? data.music.url }
+      : data.music,
   };
 }

@@ -12,7 +12,10 @@ export interface GuestPreviewContext {
   draftId: string;
   templateSlug: string;
   token: string;
+  /** Origin for runtime media and signatures (the origin the browser used). */
   appUrl: string;
+  /** Canonical origin for the preview's share link; defaults to `appUrl`. */
+  publicAppUrl?: string;
   /** The template's event form; authoritative over the draft's stored value. */
   formType?: FormType;
   /** Present only when the draft's live plan would cover this publish. */
@@ -21,6 +24,11 @@ export interface GuestPreviewContext {
     contactPhone: string;
     address: string | null;
     mapsUrl: string | null;
+  } | null;
+  /** Global platform links; the destination itself never reaches the template. */
+  site?: {
+    websiteUrl?: string | null;
+    websiteConfigured?: boolean;
   } | null;
 }
 
@@ -51,9 +59,10 @@ export function buildGuestPreviewPayload(
   return buildRuntimePayload({
     mode: "live",
     assetsBaseUrl: context.appUrl,
-    invitationUrl: `${context.appUrl}/create/${context.token}`,
+    invitationUrl: `${context.publicAppUrl ?? context.appUrl}/create/${context.token}`,
     expiresAt: null,
     planner: context.planner ?? null,
+    site: context.site ?? null,
     wedding: rewriteRuntimeMedia(wedding, (url) =>
       signDraftMediaUrl(url, {
         appUrl: context.appUrl,

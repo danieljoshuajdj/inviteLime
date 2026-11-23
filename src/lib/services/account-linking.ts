@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/services/email";
 import { renderAccountAccessEmail } from "@/lib/services/email-templates";
+import { resolveConfiguredAppOrigin } from "@/lib/services/app-origin";
+import { invitationUrl } from "@/lib/services/weddings";
 
 export interface LinkInvitationResult {
   linked: boolean;
@@ -39,7 +41,10 @@ function displayName(wedding: WeddingForLinking): string {
  *
  * Never throws: a linking/email failure must not invalidate a paid invitation.
  */
-export async function linkInvitationToCustomer(weddingId: string): Promise<LinkInvitationResult> {
+export async function linkInvitationToCustomer(
+  weddingId: string,
+  options: { origin?: string } = {}
+): Promise<LinkInvitationResult> {
   const supabase = createAdminClient();
 
   try {
@@ -55,7 +60,7 @@ export async function linkInvitationToCustomer(weddingId: string): Promise<LinkI
     if (!wedding.email) return { linked: false, userId: null, emailSent: false, reason: "no-email" };
     if (wedding.user_id) return { linked: true, userId: wedding.user_id, emailSent: false, reason: "already-linked" };
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+    const appUrl = options.origin ?? resolveConfiguredAppOrigin();
     const redirectTo = `${appUrl}/auth/callback?next=/app/explore`;
 
     let userId: string | null = null;
@@ -105,7 +110,7 @@ export async function linkInvitationToCustomer(weddingId: string): Promise<LinkI
     if (actionLink) {
       const email = renderAccountAccessEmail({
         coupleNames: displayName(wedding),
-        invitationUrl: wedding.slug ? `${appUrl}/w/${wedding.slug}` : appUrl,
+        invitationUrl: wedding.slug ? invitationUrl(wedding.slug, appUrl) : appUrl,
         accessUrl: actionLink,
         appUrl,
       });

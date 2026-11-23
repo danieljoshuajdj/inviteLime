@@ -37,6 +37,8 @@ const patchSchema = z
     media_pack_id: z.string().uuid().nullable().optional(),
     demo_detail_pack_id: z.string().uuid().nullable().optional(),
     music_track_id: z.string().uuid().nullable().optional(),
+    // Whether the customer's create form asks for photos.
+    allows_image_upload: z.boolean().optional(),
     // Replacing the single event category also re-derives the template's form.
     category_ids: z.array(z.string().uuid()).length(1, "Select exactly one event category").optional(),
   })
@@ -122,6 +124,9 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         : {}),
       ...(parsed.data.music_track_id !== undefined
         ? { music_track_id: parsed.data.music_track_id }
+        : {}),
+      ...(parsed.data.allows_image_upload !== undefined
+        ? { allows_image_upload: parsed.data.allows_image_upload }
         : {}),
     };
 

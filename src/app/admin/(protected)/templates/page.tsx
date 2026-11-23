@@ -21,6 +21,7 @@ const mockTemplates = [
     description: "Ornate maroon and gold palace theme with jhalar borders.",
     status: "active" as const,
     formType: "wedding",
+    allowsImageUpload: true,
     thumbnailUrl: null,
     product: { id: "p1", name: "Single Invitation", pricePaise: 149900, currency: "INR", active: true },
     currentVersion: "1.4.0",
@@ -42,6 +43,7 @@ const mockTemplates = [
     description: "Airy pastel layout for destination weddings by the sea.",
     status: "active" as const,
     formType: "engagement",
+    allowsImageUpload: true,
     thumbnailUrl: null,
     product: { id: "p1", name: "Single Invitation", pricePaise: 149900, currency: "INR", active: true },
     currentVersion: "2.1.0",
@@ -63,6 +65,7 @@ const mockTemplates = [
     description: "Type-led single page for modern, low-key ceremonies.",
     status: "draft" as const,
     formType: "wedding",
+    allowsImageUpload: true,
     thumbnailUrl: null,
     product: null,
     currentVersion: null,
@@ -222,7 +225,7 @@ export default async function AdminTemplatesPage() {
 
   const [templatesRes, categoriesRes, productsRes, tagsRes, weddingsRes, mediaPacks, detailPacks, musicTracks] = await Promise.all([
     admin.from("templates").select(
-      `id, name, slug, description, status, form_type, thumbnail_path,
+      `id, name, slug, description, status, form_type, thumbnail_path, allows_image_upload,
        product_id, product:product_id(id, name, price_paise, currency, active),
        media_pack_id, media_pack:media_pack_id(id, name),
        demo_detail_pack_id, demo_detail_pack:demo_detail_pack_id(id, name),
@@ -264,6 +267,7 @@ export default async function AdminTemplatesPage() {
   const mapped = ((templatesRes.data as Array<{
     id: string; name: string; slug: string; description: string | null;
     status: "active" | "disabled" | "draft"; form_type: string; thumbnail_path: string | null;
+    allows_image_upload: boolean;
     product: { id: string; name: string; price_paise: number; currency: string; active: boolean } | null;
     media_pack_id: string | null;
     media_pack: { id: string; name: string } | null;
@@ -282,6 +286,7 @@ export default async function AdminTemplatesPage() {
     description: t.description ?? null,
     status: t.status,
     formType: t.form_type,
+    allowsImageUpload: t.allows_image_upload !== false,
     thumbnailUrl: t.thumbnail_path ? storagePublicUrl("templates", t.thumbnail_path) : null,
     product: t.product
       ? {

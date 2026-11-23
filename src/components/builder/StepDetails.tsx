@@ -21,6 +21,8 @@ interface Props {
   data: WeddingData;
   onChange: (patch: Partial<WeddingData> | ((prev: WeddingData) => Partial<WeddingData>)) => void;
   onNext: () => void;
+  /** False for templates that collect details and a song but no photos. */
+  showPhotos?: boolean;
 }
 
 interface SectionProps {
@@ -64,7 +66,7 @@ function DetailsSection({ id, index, title, description, icon, children }: Secti
  * the couple names, date and venue are required — everything else is optional
  * and can be changed from the account after publishing.
  */
-export function StepDetails({ token, data, onChange, onNext }: Props) {
+export function StepDetails({ token, data, onChange, onNext, showPhotos = true }: Props) {
   const [error, setError] = useState<string | null>(null);
   const now = useClientNow();
   const formType = formTypeOf(data);
@@ -119,22 +121,38 @@ export function StepDetails({ token, data, onChange, onNext }: Props) {
                 children: <CelebrationFields data={data} onChange={onChange} />,
               },
             ]),
-        {
-          id: "photos",
-          title: "Photos",
-          description: wishes
-            ? "Optional — one main image and up to three gallery photos."
-            : "Optional — a main image and a gallery of your favourite moments (15MB max per image).",
-          icon: "image",
-          children: (
-            <EventMediaFields
-              token={token}
-              data={data}
-              onChange={onChange}
-              maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
-            />
-          ),
-        },
+        showPhotos
+          ? {
+              id: "photos",
+              title: "Photos",
+              description: wishes
+                ? "Optional — one main image and up to three gallery photos."
+                : "Optional — a main image and a gallery of your favourite moments (15MB max per image).",
+              icon: "image",
+              children: (
+                <EventMediaFields
+                  token={token}
+                  data={data}
+                  onChange={onChange}
+                  maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
+                />
+              ),
+            }
+          : {
+              id: "background-song",
+              title: "Background song",
+              description:
+                "Optional — choose a track from our library or upload your own (10MB max).",
+              icon: "music_note",
+              children: (
+                <MediaFields
+                  token={token}
+                  data={data}
+                  onChange={onChange}
+                  showPhotos={false}
+                />
+              ),
+            },
       ]
     : [
         {
@@ -171,12 +189,20 @@ export function StepDetails({ token, data, onChange, onNext }: Props) {
           ),
         },
         {
-          id: "photos-and-music",
-          title: "Photos & music",
-          description:
-            "Add up to 15MB per image and a soundtrack (10MB max). Choose a track from our library, or upload your own.",
-          icon: "image",
-          children: <MediaFields token={token} data={data} onChange={onChange} />,
+          id: showPhotos ? "photos-and-music" : "background-song",
+          title: showPhotos ? "Photos & music" : "Background song",
+          description: showPhotos
+            ? "Add up to 15MB per image and a soundtrack (10MB max). Choose a track from our library, or upload your own."
+            : "Optional — choose a track from our library or upload your own (10MB max).",
+          icon: showPhotos ? "image" : "music_note",
+          children: (
+            <MediaFields
+              token={token}
+              data={data}
+              onChange={onChange}
+              showPhotos={showPhotos}
+            />
+          ),
         },
       ];
 
@@ -191,10 +217,16 @@ export function StepDetails({ token, data, onChange, onNext }: Props) {
         </h1>
         <p className="mt-2 font-body text-on-surface-variant">
           {wishes
-            ? "Tell us who the birthday wish is for, the age being celebrated and your message. The images are optional."
+            ? showPhotos
+              ? "Tell us who the birthday wish is for, the age being celebrated and your message. The images are optional."
+              : "Tell us who the birthday wish is for, the age being celebrated and your message. A background song is optional."
             : birthday
-              ? "Tell us who you are celebrating, when and where, and add a few photos. Only the name, date and venue are required."
-              : "Tell us about the couple, the celebration, your guests and the mood — all in one place. Only the names, date and venue are required."}
+              ? showPhotos
+                ? "Tell us who you are celebrating, when and where, and add a few photos. Only the name, date and venue are required."
+                : "Tell us who you are celebrating, when and where. Only the name, date and venue are required — a background song is optional."
+              : showPhotos
+                ? "Tell us about the couple, the celebration, your guests and the mood — all in one place. Only the names, date and venue are required."
+                : "Tell us about the couple, the celebration and your guests. Only the names, date and venue are required — a background song is optional."}
         </p>
 
         <div className="mt-8 flex flex-col gap-6">

@@ -10,6 +10,8 @@ export interface InvitationMetadataInput {
   celebrantName?: string | null;
   formType?: string | null;
   brandName: string | null;
+  /** Canonical public origin, resolved from the request when appropriate. */
+  origin?: string | null;
 }
 
 /**
@@ -43,7 +45,7 @@ export function buildInvitationMetadata(input: InvitationMetadataInput): Metadat
   const description = brandName
     ? `Join ${person} ${occasion}. Presented by ${brandName}.`
     : `Join ${person} ${occasion}.`;
-  const url = invitationUrl(input.slug);
+  const url = invitationUrl(input.slug, input.origin);
 
   return {
     title,

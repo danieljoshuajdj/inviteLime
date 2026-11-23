@@ -1,3 +1,4 @@
+import { AdminBreadcrumbs } from "@/components/admin/AdminBreadcrumbs";
 import { DetailsManager } from "@/components/admin/DetailsManager";
 import { isAdminPreviewMode } from "@/lib/services/admin-preview";
 import { listDemoDetailPacks } from "@/lib/services/demo-details";
@@ -177,9 +178,17 @@ export default async function AdminDetailsPage() {
     categories.length > 0 ? categories : preview ? previewCategories : [];
 
   return (
-    <DetailsManager
-      initialPacks={packs.length > 0 ? packs : preview ? previewPacks : []}
-      categories={availableCategories}
-    />
+    <div>
+      <AdminBreadcrumbs
+        items={[
+          { label: "Configuration", href: "/admin/configuration" },
+          { label: "Details" },
+        ]}
+      />
+      <DetailsManager
+        initialPacks={packs.length > 0 ? packs : preview ? previewPacks : []}
+        categories={availableCategories}
+      />
+    </div>
   );
 }

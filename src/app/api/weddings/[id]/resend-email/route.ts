@@ -2,6 +2,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { jsonError, requireUser } from "@/lib/services/helpers";
 import { sendEmail, renderInvitationResendEmail } from "@/lib/services/email";
 import { invitationUrl } from "@/lib/services/weddings";
+import { resolvePublicAppOrigin } from "@/lib/services/app-origin";
 import { consumeRateLimit } from "@/lib/services/ops";
 import { formatDate } from "@/lib/utils";
 
@@ -16,7 +17,7 @@ interface RouteContext {
  * Ownership is verified server-side against the authenticated session and the
  * request is rate-limited (3 resends per hour per customer).
  */
-export async function POST(_req: Request, { params }: RouteContext) {
+export async function POST(req: Request, { params }: RouteContext) {
   const { id } = await params;
   const supabase = await createServerClient();
 
@@ -48,13 +49,13 @@ export async function POST(_req: Request, { params }: RouteContext) {
     const to = wedding.email ?? session.user.email;
     if (!to) return jsonError(400, "No email address is on file for this invitation");
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+    const appUrl = resolvePublicAppOrigin(req.headers);
     const result = await sendEmail({
       to,
       ...renderInvitationResendEmail({
         coupleNames: `${wedding.groom_name ?? "—"} & ${wedding.bride_name ?? "—"}`,
         weddingDate: wedding.wedding_date ? formatDate(wedding.wedding_date) : "To be announced",
-        invitationUrl: invitationUrl(wedding.slug),
+        invitationUrl: invitationUrl(wedding.slug, appUrl),
         expirationDate: wedding.expiration_date ? formatDate(wedding.expiration_date) : "—",
         appUrl: `${appUrl}/app/explore`,
       }),

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { Icon } from "@/components/shared/Icon";
+import { PulseLoader } from "@/components/shared/PulseLoader";
 import {
   buildRsvpWhatsappUrl,
   parseRsvpBridgeMessage,
@@ -132,9 +132,8 @@ export function TemplateFrame({ html, payload, title, fallbackHref, fallbackLabe
   return (
     <div className={className ?? "relative min-h-dvh w-full bg-ivory-950"}>
       {!ready && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-ivory-950 text-ivory-200">
-          <Icon name="refresh" size="lg" className="animate-spin" />
-          <p className="font-body-sm">Opening invitation…</p>
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface px-6 text-center">
+          <PulseLoader label="Opening invitation…" />
         </div>
       )}
       <iframe

@@ -11,9 +11,11 @@ import {
   normalizeMapsUrl,
 } from "@/lib/services/planner-branding";
 import { buildGuestPreviewPayload } from "@/lib/services/guest-preview";
+import { getWebsiteRedirectState } from "@/lib/services/website-redirect";
 import { reconcileMediaForLiveWedding } from "@/lib/services/wedding-media-reconcile";
 import { resolveRuntimeTemplate, buildRuntimeDocument } from "@/lib/services/template-runtime";
 import { getCurrentProfile, readBody, jsonError } from "@/lib/services/helpers";
+import { resolvePublicAppOrigin, resolveRuntimeAppOrigin } from "@/lib/services/app-origin";
 import { consumeRateLimit } from "@/lib/services/ops";
 import { weddingDraftSchema } from "@/lib/validators";
 
@@ -80,7 +82,14 @@ export async function POST(req: Request) {
     const source = await resolveRuntimeTemplate(supabase, parsed.data.templateVersionId);
     if (!source) return jsonError(404, "This template package is not published yet.");
 
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+    // The preview frame has an opaque origin, so draft media needs an absolute
+    // URL on the origin the builder was actually opened from (localhost or a
+    // tunnel). The share link itself follows the canonical public origin.
+    const appUrl = resolveRuntimeAppOrigin(req.headers);
+    const publicAppUrl = resolvePublicAppOrigin(req.headers);
+    // Previews show the same permanent website link as the published
+    // invitation, including the destination currently saved in the admin panel.
+    const site = await getWebsiteRedirectState(appUrl);
 
     // A planner preview must look like the publish it is heading toward. Plan
     // coverage is resolved with the same rules as /api/orders; a lapsed plan or
@@ -122,8 +131,10 @@ export async function POST(req: Request) {
         templateSlug: source.templateSlug,
         token: parsed.data.token,
         appUrl,
+        publicAppUrl,
         formType: source.formType,
         planner,
+        site,
       },
       previewData
     );

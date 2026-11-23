@@ -22,6 +22,9 @@ const createSchema = z.object({
   price_paise: z.number().int().nonnegative().nullable().optional(),
   currency: z.string().length(3).nullable().optional(),
   tags: z.array(z.string()).optional(),
+  // Whether the customer's create form asks for photos. Details and the
+  // background song stay available either way.
+  allows_image_upload: z.boolean().default(true),
   // Exactly one event category; its `form_type` is the template's form.
   category_ids: z.array(z.string().uuid()).length(1, "Select exactly one event category"),
   // Demo media pack (see the Media tab). NULL → the demo uses whatever images
@@ -40,7 +43,9 @@ export async function GET(_req: Request) {
 
     const { data: templates, error } = await adminClient
       .from("templates")
-      .select("id, name, slug, description, status, form_type, thumbnail_path, product_id, created_at")
+      .select(
+        "id, name, slug, description, status, form_type, thumbnail_path, product_id, allows_image_upload, created_at"
+      )
       .order("created_at", { ascending: false });
 
     if (error) return Response.json({ error: error.message }, { status: 500 });

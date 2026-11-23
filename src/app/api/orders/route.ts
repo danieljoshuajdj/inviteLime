@@ -10,6 +10,7 @@ import {
 import { createRazorpayOrder } from "@/lib/services/payments";
 import { createDraftWedding, invitationUrl } from "@/lib/services/weddings";
 import { getCurrentProfile, jsonError, readBody } from "@/lib/services/helpers";
+import { resolvePublicAppOrigin } from "@/lib/services/app-origin";
 import { clientKey, consumeRateLimit } from "@/lib/services/ops";
 import { currencyFromRequest } from "@/lib/services/geo";
 import { quoteFor, type TemplatePricingInput } from "@/lib/services/pricing";
@@ -51,6 +52,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: Request) {
   try {
+    const publicAppOrigin = resolvePublicAppOrigin(req.headers);
     const body = await readBody(req);
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) {
@@ -247,12 +249,13 @@ export async function POST(req: Request) {
           pricePaise: 0,
           currency: quote.currency,
           source: "planner_plan",
+          appOrigin: publicAppOrigin,
         });
         return Response.json({
           coveredByPlan: true,
           wedding,
           orderId: planOrder.id,
-          url: invitationUrl(finalized.published.slug),
+          url: invitationUrl(finalized.published.slug, publicAppOrigin),
           amountPaise: 0,
           currency: quote.currency,
         });
@@ -271,7 +274,7 @@ export async function POST(req: Request) {
             coveredByPlan: true,
             wedding: { id: wedding.id, slug: afterFailure.slug ?? wedding.slug },
             orderId: planOrder.id,
-            url: invitationUrl(afterFailure.slug ?? wedding.slug),
+            url: invitationUrl(afterFailure.slug ?? wedding.slug, publicAppOrigin),
             amountPaise: 0,
             currency: quote.currency,
           });

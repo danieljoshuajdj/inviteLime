@@ -317,7 +317,7 @@ export function MusicManager({ initialTracks, categories }: Props) {
             {tracks.map((track) => (
               <li
                 key={track.id}
-                className="flex flex-col gap-3 rounded-2xl border border-outline-variant bg-surface-container-low p-4 sm:flex-row sm:items-center"
+                className="flex flex-col gap-3 rounded-2xl border border-outline-variant bg-surface-container-low p-4 sm:flex-row sm:flex-wrap sm:items-center"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -357,7 +357,7 @@ export function MusicManager({ initialTracks, categories }: Props) {
                   aria-label={`Preview ${track.title}`}
                 />
 
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-3">
                   <Toggle
                     label={track.isActive ? "Visible" : "Hidden"}
                     checked={track.isActive}

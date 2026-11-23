@@ -30,6 +30,9 @@ export function AuthForm() {
       <GoogleSignInButton
         next={next}
         onError={(message) => setError(message || null)}
+        // Keep the label on one line inside the narrow auth card; the default
+        // 18px size wrapped to two lines at 300px.
+        className="whitespace-nowrap border-navy-200 bg-white !px-4 !text-[15px] text-navy-900 hover:bg-ivory-100 sm:!px-6"
       />
 
       <p className="text-center font-body-xs leading-relaxed text-navy-600">

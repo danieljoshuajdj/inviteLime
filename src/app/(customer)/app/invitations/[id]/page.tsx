@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { createServerClient } from "@/lib/supabase/server";
 import { invitationUrl } from "@/lib/services/weddings";
+import { getPublicAppOrigin } from "@/lib/services/app-origin-server";
 import { ManageInvitation, type RsvpRow } from "@/components/account/ManageInvitation";
 import { formatDate } from "@/lib/utils";
 import {
@@ -42,7 +43,10 @@ export function generateMetadata(): Metadata {
 
 export default async function ManageInvitationPage({ params }: PageProps) {
   const { id } = await params;
-  const supabase = await createServerClient();
+  const [supabase, publicAppOrigin] = await Promise.all([
+    createServerClient(),
+    getPublicAppOrigin(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -124,7 +128,7 @@ export default async function ManageInvitationPage({ params }: PageProps) {
             views: viewsRes.count ?? 0,
             attendingCount: attending,
             rsvpCount: rsvps.length,
-            url: wedding.slug ? invitationUrl(wedding.slug) : null,
+            url: wedding.slug ? invitationUrl(wedding.slug, publicAppOrigin) : null,
             rsvpToggle: wedding.rsvp_toggle,
           }}
           rsvps={rsvpRows}

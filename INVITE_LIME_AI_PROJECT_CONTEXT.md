@@ -572,7 +572,20 @@ Example:
 <a data-wedding-href="wedding.mapsUrl">
   View Location
 </a>
+
+<a data-wedding-href="site.websiteUrl" target="_blank" rel="noopener noreferrer">
+  Visit Our Website
+</a>
 ```
+
+`site.websiteUrl` is the permanent platform link (`/visit-website`). It is
+always an absolute URL on the origin the guest used, so it works on
+localhost, development tunnels and the production domain. Never hardcode a
+website destination in a template: the admin changes the destination once
+under Configuration → Template Data, and every template that binds this path
+follows it immediately. The compatibility alias `website.url` resolves to the
+same value. `site.websiteConfigured` reports whether an admin has saved a
+destination, so a template can hide the button when it is unset.
 
 Dynamic collections use runtime rendering.
 
@@ -3934,3 +3947,68 @@ guest-supplied email and the signed-in account fallback.
 - Focused ESLint reports only the three pre-existing `<img>` warnings
   in `MediaFields.tsx`.
 
+
+# 109. GLOBAL "VISIT OUR WEBSITE" REDIRECT
+
+The website destination is one global `site_settings` row, key
+`website_redirect_url`. There is no second configuration store: reads and
+writes go through the existing `getSetting` / `updateSetting` helpers.
+
+## Admin control
+
+Configuration → Template Data renders `WebsiteRedirectCard`, backed by
+`GET`/`PUT /api/admin/settings/website`. Both handlers use the normal admin
+conventions (`createServerClient`, `requireAdmin`, `logAdminAction`,
+`jsonError`, zod). The URL is normalised to an absolute HTTP(S) address;
+blank input clears the destination. `javascript:`, `data:`, `ftp:`, `mailto:`,
+credentials, protocol-relative values and hostnames without a dot are
+rejected. `localhost`, IP addresses and host:port values remain valid for
+local testing.
+
+## Permanent link
+
+Templates bind `site.websiteUrl` (or the compatibility alias `website.url`).
+The value is always the absolute `/visit-website` URL on the origin the guest
+actually reached, never the destination itself. The route reads the setting
+fresh on every request and returns a `302` with `Cache-Control: no-store`, so
+an admin change applies on the next click with no template edit, upload or
+republish. When no destination is configured the route returns a small
+`404` "link unavailable" page with a restrictive CSP instead of guessing a
+website. `site.websiteConfigured` lets a template hide the button in that
+state.
+
+The payload is wired into public invitations, template demos, builder
+previews and guest previews. The previous environment-aware origin rules are
+reused, so localhost, VS Code tunnels and the future production domain all
+produce a working absolute link.
+
+## Audit of stored template versions
+
+All 29 stored versions across 11 templates were read from object storage and
+scanned. No version contains a "Visit Our Website" button. Three template
+families contain hardcoded platform-brand links that will **not** follow the
+global destination:
+
+| Template | Versions | Hardcoded link | Current text |
+| --- | --- | --- | --- |
+| `nighty-sky` | 1.0.0, 1.0.1 | `https://invite-lime.com` | Visit Invite Lime |
+| `dusky-night` | 1.0.0, 1.0.1 | `https://invite-lime.com` | Visit Invite Lime |
+| `carnival` | 1.0.9 | `https://invitelime.in` | Made with Invite Lime |
+
+`love-mate` (all versions) contains a hardcoded Google Maps short link. That
+is a venue/map link, not the website redirect, and is unaffected.
+
+Because template versions are immutable, these links keep working as they
+are today. To move them under the global redirect, edit the template source,
+replace the hardcoded `href` with
+`data-wedding-href="site.websiteUrl"`, and upload a new version. Templates
+without any website link need the same opt-in markup added to their design;
+no reupload is ever needed to change the destination after that. The stored
+ZIPs were deliberately not modified.
+
+## Verification
+
+- Unit tests cover URL normalisation, the settings service, admin auth and
+  validation, redirect freshness/unconfigured safety, payload output, both
+  binding aliases and guest-preview pass-through.
+- `npm run typecheck`, `npm test` and `npm run build` are the release gates.
