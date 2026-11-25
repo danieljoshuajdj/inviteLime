@@ -18,6 +18,8 @@ interface TemplateVersionRow {
   storage_prefix: string;
   manifest: Record<string, unknown>;
   template_id: string;
+  status: string;
+  is_current: boolean;
   templates:
     | { id: string; name: string; slug: string; form_type: string | null }
     | { id: string; name: string; slug: string; form_type: string | null }[]
@@ -25,6 +27,8 @@ interface TemplateVersionRow {
 }
 
 export interface RuntimeTemplateSource {
+  /** Version row id. Alias of `versionId`, convenient for identity checks. */
+  id: string;
   templateId: string;
   templateName: string;
   templateSlug: string;
@@ -35,6 +39,8 @@ export interface RuntimeTemplateSource {
   storagePrefix: string;
   entry: string;
   manifest: Record<string, unknown>;
+  status: string;
+  isCurrent: boolean;
 }
 
 export interface RuntimeDocument {
@@ -42,28 +48,7 @@ export interface RuntimeDocument {
   html: string;
 }
 
-/**
- * Resolves the immutable template version that an invitation was purchased on
- * (or the current published version for demo mode). Returns null when the
- * template package has not been uploaded yet, so callers can fall back to the
- * built-in runtime instead of failing.
- */
-export async function resolveRuntimeTemplate(
-  supabase: Supabase,
-  templateVersionId: string
-): Promise<RuntimeTemplateSource | null> {
-  const { data, error } = await supabase
-    .from("template_versions")
-    .select(
-      "id, version, storage_prefix, manifest, template_id, templates:template_id(id, name, slug, form_type)"
-    )
-    .eq("id", templateVersionId)
-    .eq("status", "published")
-    .maybeSingle();
-
-  if (error || !data) return null;
-
-  const row = data as TemplateVersionRow;
+function rowToRuntimeSource(row: TemplateVersionRow): RuntimeTemplateSource | null {
   const manifest = (row.manifest ?? {}) as Record<string, unknown>;
   const template = row.templates as
     | { id: string; name: string; slug: string; form_type: string | null }
@@ -73,6 +58,7 @@ export async function resolveRuntimeTemplate(
   if (!t) return null;
 
   return {
+    id: row.id,
     templateId: row.template_id,
     templateName: t.name,
     templateSlug: t.slug,
@@ -82,7 +68,32 @@ export async function resolveRuntimeTemplate(
     storagePrefix: row.storage_prefix,
     entry: typeof manifest.entry === "string" ? manifest.entry : "index.html",
     manifest,
+    status: row.status,
+    isCurrent: row.is_current,
   };
+}
+
+/**
+ * Resolves the template version pinned by an invitation. A replaced release
+ * stays renderable (`previous`) during its 72-hour rollback window, so an
+ * invitation never breaks if a repoint is racing a publish or cleanup.
+ * Retired/draft/uploading releases are never served here.
+ */
+export async function resolveRuntimeTemplate(
+  supabase: Supabase,
+  templateVersionId: string
+): Promise<RuntimeTemplateSource | null> {
+  const { data, error } = await supabase
+    .from("template_versions")
+    .select(
+      "id, version, storage_prefix, manifest, template_id, status, is_current, templates:template_id(id, name, slug, form_type)"
+    )
+    .eq("id", templateVersionId)
+    .in("status", ["published", "previous"])
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return rowToRuntimeSource(data as TemplateVersionRow);
 }
 
 /** Current published version for a template — used by demo mode. */
@@ -156,16 +167,70 @@ export async function buildRuntimeDocument(
   };
 }
 
-/** Convenience wrapper for the public invitation page. */
+/**
+ * Decides which releases a live invitation should try.
+ *
+ * The template's current published release always wins. A pinned `previous`
+ * release is only the fallback while a publish is in flight, for invitations
+ * created before the first publish under automatic updates, or when the current
+ * package is temporarily unreadable. `templateId` is authoritative when the
+ * caller has it (the public invitation page does), so a stale or corrupted pin
+ * can never pull in another template.
+ */
+export async function resolveInvitationTemplateSources(
+  supabase: Supabase,
+  templateVersionId: string | null,
+  templateId: string | null | undefined
+): Promise<{
+  preferred: RuntimeTemplateSource;
+  fallback: RuntimeTemplateSource | null;
+} | null> {
+  const pinned = templateVersionId
+    ? await resolveRuntimeTemplate(supabase, templateVersionId)
+    : null;
+  const ownerId = templateId ?? pinned?.templateId ?? null;
+  if (!ownerId) return null;
+
+  const pinnedMatchesOwner = pinned?.templateId === ownerId;
+  const fallback = pinnedMatchesOwner ? pinned : null;
+
+  if (fallback?.isCurrent && fallback.status === "published") {
+    return { preferred: fallback, fallback: null };
+  }
+
+  const current = await resolveCurrentTemplateVersion(supabase, ownerId);
+  if (current) {
+    return { preferred: current, fallback };
+  }
+  return fallback ? { preferred: fallback, fallback: null } : null;
+}
+
+/**
+ * Convenience wrapper for the public invitation page.
+ *
+ * Prefers the template's live release even when the stored invitation still
+ * names a retained previous release, then falls back to that retained package
+ * if the live release cannot be read. This keeps every invitation on the
+ * latest successful release without breaking a working one during a failed
+ * update or cleanup.
+ */
 export async function loadInvitationRuntime(
   templateVersionId: string | null,
-  payload: RuntimePayload
+  payload: RuntimePayload,
+  options: { templateId?: string | null } = {}
 ): Promise<RuntimeDocument | null> {
-  if (!templateVersionId) return null;
   const supabase = createAdminClient();
-  const source = await resolveRuntimeTemplate(supabase, templateVersionId);
-  if (!source) return null;
-  return buildRuntimeDocument(source, payload);
+  const sources = await resolveInvitationTemplateSources(
+    supabase,
+    templateVersionId,
+    options.templateId
+  );
+  if (!sources) return null;
+
+  const preferred = await buildRuntimeDocument(sources.preferred, payload);
+  if (preferred) return preferred;
+  if (!sources.fallback) return null;
+  return buildRuntimeDocument(sources.fallback, payload);
 }
 
 /** Convenience wrapper for template demo mode. */
@@ -175,6 +240,37 @@ export async function loadDemoRuntime(
 ): Promise<RuntimeDocument | null> {
   const supabase = createAdminClient();
   const source = await resolveCurrentTemplateVersion(supabase, templateId);
+  if (!source) return null;
+  return buildRuntimeDocument(source, payload);
+}
+
+/**
+ * Admin-only version preview. Drafts are allowed so an admin can inspect a
+ * package before publishing it. The caller must enforce the admin gate; this
+ * function never exposes a version through a public route by itself.
+ */
+export async function loadTemplateVersionRuntime(
+  templateId: string,
+  versionId: string,
+  payload: RuntimePayload,
+  options: { allowDraft?: boolean } = {}
+): Promise<RuntimeDocument | null> {
+  const supabase = createAdminClient();
+  const statuses = options.allowDraft
+    ? ["published", "previous", "draft"]
+    : ["published", "previous"];
+  const { data, error } = await supabase
+    .from("template_versions")
+    .select(
+      "id, version, storage_prefix, manifest, template_id, status, is_current, templates:template_id(id, name, slug, form_type)"
+    )
+    .eq("id", versionId)
+    .eq("template_id", templateId)
+    .in("status", statuses)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const source = rowToRuntimeSource(data as TemplateVersionRow);
   if (!source) return null;
   return buildRuntimeDocument(source, payload);
 }

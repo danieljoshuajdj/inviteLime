@@ -5,6 +5,7 @@ const WEDDING_ID = "11111111-1111-4111-8111-111111111111";
 
 interface WeddingRow {
   id: string;
+  form_type?: string;
   user_id: string;
   bride_name: string;
   groom_name: string;
@@ -109,6 +110,7 @@ function routeContext() {
 function seedWedding() {
   state.wedding = {
     id: WEDDING_ID,
+    form_type: "wedding",
     user_id: USER_ID,
     bride_name: "Bride",
     groom_name: "Groom",
@@ -266,6 +268,29 @@ describe("/api/weddings/[id] media", () => {
         includeStaleWeddingMedia: true,
       })
     );
+  });
+
+  it("persists the soundtrack for birthday wishes invitations", async () => {
+    state.wedding!.form_type = "birthday_wishes";
+    state.wedding!.wedding_data = {
+      formType: "birthday_wishes",
+      celebrantName: "Alexandra",
+      birthdayNumber: 27,
+      specialMessage: "Happy birthday!",
+      gallery: [],
+    };
+
+    const res = await patch({
+      celebrantName: "Alexandra",
+      birthdayNumber: 27,
+      specialMessage: "Happy birthday!",
+      gallery: [],
+      music: media.music,
+    });
+
+    expect(res.status).toBe(200);
+    const stored = (state.update?.wedding_data ?? {}) as Record<string, unknown>;
+    expect(stored.music).toEqual(media.music);
   });
 });
 

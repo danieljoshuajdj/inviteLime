@@ -203,6 +203,74 @@ describe("payment reconciliation", () => {
   });
 });
 
+describe("template version retention migration", () => {
+  const file = migrations.find((m) => m.name === "00025_template_version_retention.sql");
+  const sql = file?.sql ?? "";
+
+  it("exists and extends the lifecycle states", () => {
+    expect(sql).toBeTruthy();
+    expect(sql).toMatch(
+      /check \(status in \('published', 'draft', 'uploading', 'previous', 'retired'\)\)/
+    );
+  });
+
+  it("makes every switch function SECURITY DEFINER with a pinned search_path", () => {
+    for (const fn of [
+      "publish_template_version",
+      "rollback_template_version",
+      "retire_template_version",
+    ]) {
+      const start = sql.indexOf(`create or replace function public.${fn}`);
+      expect(start).toBeGreaterThan(-1);
+      const body = sql.slice(start, sql.indexOf("$$;", start));
+      expect(body).toMatch(/security definer/i);
+      expect(body).toMatch(/set search_path = public/i);
+    }
+  });
+
+  it("only lets the service role execute the switch functions", () => {
+    expect(sql).toMatch(
+      /revoke all on function public\.publish_template_version\(uuid, uuid, integer\) from public, anon, authenticated;/
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.publish_template_version\(uuid, uuid, integer\) to service_role;/
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.rollback_template_version\(uuid, uuid\) to service_role;/
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.retire_template_version\(uuid, uuid, text\) to service_role;/
+    );
+    expect(sql).not.toMatch(
+      /grant execute on function public\.(publish|rollback|retire)_template_version[\s\S]*?to (anon|authenticated)/
+    );
+  });
+
+  it("repoints invitations and builder drafts in the same transaction", () => {
+    for (const fn of ["publish_template_version", "rollback_template_version"]) {
+      const start = sql.indexOf(`create or replace function public.${fn}`);
+      const body = sql.slice(start, sql.indexOf("$$;", start));
+      expect(body).toMatch(/update public\.weddings[\s\S]*?set template_version_id = v_target\.id/);
+      expect(body).toMatch(/update public\.guest_drafts[\s\S]*?set template_version_id = v_target\.id/);
+    }
+  });
+
+  it("keeps the replaced release restorable for the configured window", () => {
+    expect(sql).toMatch(
+      /status = 'previous'[\s\S]*?delete_after = coalesce\(delete_after, v_now \+ make_interval\(hours => v_retention_hours\)\)/
+    );
+    expect(sql).toMatch(
+      /create index if not exists template_versions_retention_idx[\s\S]*?on public\.template_versions \(delete_after\)[\s\S]*?where status = 'previous' and delete_after is not null;/
+    );
+  });
+
+  it("refuses to roll back a version whose retention window has ended", () => {
+    expect(sql).toMatch(
+      /delete_after is not null and v_target\.delete_after <= v_now[\s\S]*?VERSION_RETENTION_EXPIRED/
+    );
+  });
+});
+
 describe("music library migration", () => {
   const sql = migrations.find((m) => m.name === "00009_music_library.sql")!.sql;
 

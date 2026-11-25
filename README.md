@@ -197,14 +197,20 @@ React runtime so a published invitation is never blank.
   4. removes the stored folders of expired guest sessions — before
      `cleanup_expired_guest_data()` deletes the rows, since the session token is
      the only handle on those objects — then drops the draft/session rows and
-     stale rate-limit counters.
+     stale rate-limit counters;
+  5. retires replaced template releases after their 72-hour rollback window and
+     permanently purges their files + rows. It also retries retired rows left by
+     a failed storage delete. The active release is never purged.
 * Order and payment history is **never deleted**: those rows stay with
   `wedding_id` set to NULL so revenue reporting survives a purge. Purges are
   batched (`PURGE_BATCH_SIZE`, default 10 per run, retried next run if storage
   fails) and the windows are env-tunable (`RETENTION_PURGE_GRACE_DAYS`, default
   0 = purge on the first run after the expiry day).
-* Point any scheduler (Vercel Cron, Supabase pg_cron + pg_net, GitHub Actions,
-  uptime service) at the endpoint daily:
+  Template rollback retention is `TEMPLATE_VERSION_RETENTION_HOURS` (default 72).
+* `vercel.json` schedules the maintenance endpoint daily at 03:00 UTC when the
+  app is deployed on Vercel (Vercel sends `CRON_SECRET` automatically). Any other
+  host can point a scheduler (Supabase pg_cron + pg_net, GitHub Actions, uptime
+  service) at the same endpoint:
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" https://app.example.com/api/cron/maintenance

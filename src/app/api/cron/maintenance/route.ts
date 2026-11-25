@@ -4,6 +4,10 @@ import { runMaintenance } from "@/lib/services/ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Storage cleanup is sequential and the first run can have a backlog of
+// replaced releases. Ask for the longest duration the hosting plan allows; the
+// job is idempotent and resumes where it stopped on the next run.
+export const maxDuration = 300;
 
 /**
  * Scheduled maintenance endpoint. Each run expires invitations whose validity

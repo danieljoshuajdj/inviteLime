@@ -236,7 +236,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     ...(parsed.data.includeGallery !== undefined
       ? { includeGallery: parsed.data.includeGallery }
       : {}),
-    ...(!birthday && parsed.data.music !== undefined ? { music: parsed.data.music } : {}),
+    ...(parsed.data.music !== undefined ? { music: parsed.data.music } : {}),
     ...(!wishes && parsed.data.weddingDate !== undefined
       ? { weddingDate: parsed.data.weddingDate }
       : {}),

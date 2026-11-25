@@ -7,6 +7,7 @@ import { TemplateShowcase } from "@/components/public/TemplateShowcase";
 import { Workflow } from "@/components/public/Workflow";
 import { FaqSection } from "@/components/public/FaqSection";
 import { getPublicSiteData } from "@/lib/services/site-settings";
+import { getHeroCarouselImages } from "@/lib/services/hero-content";
 import { listHeroImages } from "@/lib/services/hero-images";
 import { createServerClient } from "@/lib/supabase/server";
 import { listActiveTemplates, type PublicTemplate } from "@/lib/services/templates";
@@ -29,13 +30,16 @@ export default async function HomePage() {
     settingsError = true;
   }
 
-  const hero = (site?.hero ?? {}) as { title?: string; subtitle?: string };
+  const hero = (site?.hero ?? {}) as { title?: string; subtitle?: string; eyebrow?: string };
   const faq = (site?.faq ?? []) as Array<{ q: string; a: string }>;
 
   const showStats = (site?.marketing as { show_stats?: boolean } | undefined)?.show_stats;
 
-  // Get carousel images from src/assets folder
-  const heroImages = listHeroImages().slice(0, 5);
+  // Admin-curated carousel images win. Until one is uploaded, the bundled
+  // artwork in src/assets keeps the hero complete.
+  const configuredHeroImages = await getHeroCarouselImages().catch(() => []);
+  const heroImages =
+    configuredHeroImages.length > 0 ? configuredHeroImages : listHeroImages().slice(0, 5);
 
   // Featured templates for the showcase directly below the hero.
   let templates: PublicTemplate[] = [];
@@ -52,7 +56,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <Hero title={hero.title} subtitle={hero.subtitle} images={heroImages} />
+      <Hero title={hero.title} subtitle={hero.subtitle} eyebrow={hero.eyebrow} images={heroImages} />
 
       <TemplateShowcase
         templates={templates.map((t) => {

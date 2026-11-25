@@ -9,7 +9,11 @@ import { StartCreationLink } from "@/components/auth/StartCreationLink";
 import { TemplateFrame } from "@/components/runtime/TemplateFrame";
 import { createServerClient } from "@/lib/supabase/server";
 import { getTemplateBySlug } from "@/lib/services/templates";
-import { loadDemoRuntime } from "@/lib/services/template-runtime";
+import { isAdmin } from "@/lib/services/helpers";
+import {
+  loadDemoRuntime,
+  loadTemplateVersionRuntime,
+} from "@/lib/services/template-runtime";
 import { buildRuntimePayload } from "@/lib/runtime/payload";
 import {
   DEMO_WEDDING_DATA,
@@ -39,7 +43,11 @@ import { musicTrackInCategory } from "@/lib/library-media";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ embed?: string | string[]; branding?: string | string[] }>;
+  searchParams: Promise<{
+    embed?: string | string[];
+    branding?: string | string[];
+    version?: string | string[];
+  }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -67,14 +75,22 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function TemplateDemoPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const { embed, branding } = await searchParams;
+  const { embed, branding, version } = await searchParams;
   // The planner's Explore page opens this route inside a preview dialog. Hide
   // the standalone "Demo / Exit demo" chrome there; the dialog owns those
   // controls and the exit link would otherwise navigate inside the iframe.
   const embedded = embed === "1";
   const supabase = await createServerClient();
   const template = await getTemplateBySlug(supabase, slug).catch(() => null);
-  if (!template || template.status !== "active") notFound();
+
+  // `?version=` is the admin version-preview path. It can also show drafts and
+  // releases of a disabled template, so it is gated before anything renders.
+  const requestedVersion = typeof version === "string" && version.length > 0 ? version : null;
+  const templateIsPublic = template?.status === "active";
+  const needsAdmin = requestedVersion !== null || !templateIsPublic;
+  const adminViewer = needsAdmin ? await isAdmin(supabase).catch(() => false) : false;
+  if (!template || (!templateIsPublic && !adminViewer)) notFound();
+  if (requestedVersion && !adminViewer) notFound();
 
   // `branding=1` is only ever meaningful for the signed-in planner previewing
   // their own template library. Fetching with the request-scoped client means
@@ -201,7 +217,16 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
     },
   });
 
-  const runtime = await loadDemoRuntime(template.id, payload).catch(() => null);
+  const runtime = requestedVersion
+    ? await loadTemplateVersionRuntime(template.id, requestedVersion, payload, {
+        allowDraft: true,
+      }).catch(() => null)
+    : await loadDemoRuntime(template.id, payload).catch(() => null);
+
+  // A missing package normally shows the "being prepared" state. For an
+  // explicit version preview that state would be misleading (the version may
+  // have been purged), so treat it as a missing preview.
+  if (requestedVersion && !runtime) notFound();
 
   return (
     // h-dvh + overflow-hidden: the template owns the entire viewport and the
@@ -245,7 +270,7 @@ export default async function TemplateDemoPage({ params, searchParams }: PagePro
             icon="info"
             className="pointer-events-none bg-white text-black shadow-lg ring-1 ring-black/20 backdrop-blur-sm"
           >
-            Demo
+            {requestedVersion ? `Version preview · v${runtime?.source.version ?? ""}` : "Demo"}
           </Badge>
           <Link href={`/templates/${template.slug}`} className="pointer-events-auto">
             <Button

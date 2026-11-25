@@ -166,15 +166,15 @@ export function WeddingEditor({ weddingId }: { weddingId: string }) {
 
       <div className="border-t border-outline-variant pt-6">
         <h2 className="font-heading-md font-semibold !text-on-surface">
-          {allowsImageUpload ? (birthday ? "Photos" : "Photos & soundtrack") : "Background song"}
+          {allowsImageUpload ? "Photos & soundtrack" : "Background song"}
         </h2>
         <p className="mt-1 font-body-sm text-on-surface-variant">
           {!allowsImageUpload
             ? "The soundtrack played on your live invitation. This template does not use photos."
             : birthday
               ? wishes
-                ? "An optional main image and up to three gallery photos shown on your live invitation."
-                : "A main image and gallery photos shown on your live invitation."
+                ? "An optional main image, up to three gallery photos and a background song shown on your live invitation."
+                : "A main image, gallery photos and a background song shown on your live invitation."
               : "These are the images and music shown on your live invitation."}
         </p>
         <div className="mt-4">
@@ -186,12 +186,22 @@ export function WeddingEditor({ weddingId }: { weddingId: string }) {
               showPhotos={false}
             />
           ) : birthday ? (
-            <EventMediaFields
-              weddingId={weddingId}
-              data={form}
-              onChange={applyMedia}
-              maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
-            />
+            <>
+              <EventMediaFields
+                weddingId={weddingId}
+                data={form}
+                onChange={applyMedia}
+                maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
+              />
+              <div className="mt-8">
+                <MediaFields
+                  weddingId={weddingId}
+                  data={form}
+                  onChange={applyMedia}
+                  showPhotos={false}
+                />
+              </div>
+            </>
           ) : (
             <MediaFields weddingId={weddingId} data={form} onChange={applyMedia} />
           )}

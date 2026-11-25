@@ -124,18 +124,28 @@ export function StepDetails({ token, data, onChange, onNext, showPhotos = true }
         showPhotos
           ? {
               id: "photos",
-              title: "Photos",
+              title: "Photos & music",
               description: wishes
-                ? "Optional — one main image and up to three gallery photos."
-                : "Optional — a main image and a gallery of your favourite moments (15MB max per image).",
+                ? "Optional — one main image, up to three gallery photos and a background song."
+                : "Optional — a main image, a gallery of your favourite moments (15MB max per image) and a background song.",
               icon: "image",
               children: (
-                <EventMediaFields
-                  token={token}
-                  data={data}
-                  onChange={onChange}
-                  maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
-                />
+                <>
+                  <EventMediaFields
+                    token={token}
+                    data={data}
+                    onChange={onChange}
+                    maxGallery={wishes ? 3 : MAX_GALLERY_PHOTOS}
+                  />
+                  <div className="mt-8">
+                    <MediaFields
+                      token={token}
+                      data={data}
+                      onChange={onChange}
+                      showPhotos={false}
+                    />
+                  </div>
+                </>
               ),
             }
           : {

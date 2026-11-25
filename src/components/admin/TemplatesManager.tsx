@@ -7,6 +7,7 @@ import { Button } from "@/components/shared/Button";
 import { Icon, type IconName } from "@/components/shared/Icon";
 import { TextInput, Select, Textarea, MultiSelect, Toggle } from "@/components/shared/Field";
 import { Modal } from "@/components/shared/Modal";
+import { TemplateVersionHistory } from "@/components/admin/TemplateVersionHistory";
 import { cn, formatPrice, slugify } from "@/lib/utils";
 import { toast } from "@/components/account/toast";
 // Client-safe module: importing the media-packs service would pull the storage
@@ -248,6 +249,8 @@ export function TemplatesManager({
   const [wizardErrors, setWizardErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [createdTemplateId, setCreatedTemplateId] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<{ templateId: string; result: UploadResponse } | null>(null);
+  // Bumped after an upload/publish so the mounted version-history panel reloads.
+  const [historyToken, setHistoryToken] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<(typeof templates)[number] | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -588,7 +591,16 @@ export function TemplatesManager({
     try {
       const res = await fetch(`/api/admin/templates/${templateId}/versions/${versionId}/publish`, { method: "POST" });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Publish failed");
+      if (!res.ok) {
+        const firstIssue = Array.isArray(json.issues) ? json.issues[0] : null;
+        const detail =
+          typeof firstIssue === "string"
+            ? ` ${firstIssue}`
+            : firstIssue?.message
+              ? ` ${firstIssue.message}`
+              : "";
+        throw new Error((json.error ?? "Publish failed") + detail);
+      }
       setRows((rs) =>
         rs.map((r) =>
           r.id === templateId
@@ -604,15 +616,18 @@ export function TemplatesManager({
         )
       );
       setValidationResult(null);
-      const removed = json.cleanup?.deletedVersions?.length ?? 0;
-      const cleanupNote =
-        removed > 0
-          ? ` Removed ${removed} superseded release${removed === 1 ? "" : "s"}.`
-          : "";
+      setHistoryToken((token) => token + 1);
+      const repointed = json.repointedInvitations ?? 0;
+      const previousNote = json.previous
+        ? ` v${json.previous.version} stays restorable for ${json.retentionHours ?? 72} hours.`
+        : "";
       toast(
         `v${json.version} published`,
-        `Template is now live for new invitations.${cleanupNote}`
+        `${repointed} invitation${repointed === 1 ? "" : "s"} now use this release.${previousNote}`
       );
+      if (Array.isArray(json.warnings) && json.warnings.length > 0) {
+        toast("Published with warnings", json.warnings[0]);
+      }
     } catch (e) { toast("Publish failed", (e as Error).message); }
     finally { setSaving(false); }
   }
@@ -649,10 +664,11 @@ export function TemplatesManager({
             : r
         )
       );
+      setHistoryToken((token) => token + 1);
       const removed = json.cleanup?.deletedVersions?.length ?? 0;
       const cleanupNote =
         removed > 0
-          ? ` Removed ${removed} superseded release${removed === 1 ? "" : "s"}.`
+          ? ` Removed ${removed} superseded draft${removed === 1 ? "" : "s"}.`
           : "";
       toast(
         `v${json.version} uploaded as draft`,
@@ -1336,8 +1352,9 @@ export function TemplatesManager({
               <div className="rounded-xl border border-outline-variant bg-surface-container p-4">
                 <p className="font-body-sm font-semibold !text-on-surface">Ready to publish</p>
                 <p className="mt-1 font-body-xs text-on-surface-variant">
-                  Version {validationResult.result.version} passed validation. Publish to make it available for new invitations.
-                  Existing invitations are not affected.
+                  Version {validationResult.result.version} passed validation. Publishing repoints
+                  every invitation using this template to it in one step; URLs, content and RSVPs
+                  stay intact. The replaced release stays restorable for 72 hours.
                 </p>
                 <Button
                   className="mt-3"
@@ -1759,6 +1776,27 @@ export function TemplatesManager({
                   onThumbnail={(thumb) => void uploadThumbnail(t.id, thumb)}
                   uploading={uploading === t.id || thumbnailUploading === t.id}
                   currentVersion={t.currentVersion}
+                />
+
+                <TemplateVersionHistory
+                  templateId={t.id}
+                  templateSlug={t.slug}
+                  refreshToken={historyToken}
+                  onChanged={(update) => {
+                    setRows((rs) =>
+                      rs.map((r) =>
+                        r.id === t.id
+                          ? {
+                              ...r,
+                              currentVersion: update.currentVersion,
+                              ...(typeof update.versionCount === "number"
+                                ? { versionCount: update.versionCount }
+                                : {}),
+                            }
+                          : r
+                      )
+                    );
+                  }}
                 />
               </div>
             )}

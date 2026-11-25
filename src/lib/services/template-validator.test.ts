@@ -164,4 +164,80 @@ describe("validateTemplateZip", () => {
     expect(result.warnings.join(" ")).not.toMatch(/unknown extension/i);
     expect(result.files).toContain("etc/passwd");
   });
+
+  it("does not treat data-wedding binding paths as missing assets", () => {
+    const zip = new AdmZip();
+    zip.addFile(
+      "manifest.json",
+      Buffer.from(
+        JSON.stringify({
+          schemaVersion: "1.0",
+          id: "website-binding",
+          name: "Website binding",
+          version: "1.0.0",
+          entry: "index.html",
+          features: {},
+        })
+      )
+    );
+    zip.addFile(
+      "index.html",
+      Buffer.from(
+        '<!DOCTYPE html><html><body>' +
+          '<a data-wedding-href="site.websiteUrl">Visit Our Website</a>' +
+          '<a data-wedding-href="website.url">Visit</a>' +
+          '<img data-wedding-image="couple.bride.photo">' +
+          "</body></html>"
+      )
+    );
+
+    const buffer = zip.toBuffer();
+    const result = validateTemplateZip(buffer, buffer.length);
+
+    expect(result.ok).toBe(true);
+    // `href` inside `data-wedding-href` is a binding path, not a ZIP asset.
+    expect(result.warnings.join(" ")).not.toMatch(
+      /site\.websiteUrl|website\.url|couple\.bride\.photo/
+    );
+  });
+
+  it("still warns about genuinely missing image, font and asset references", () => {
+    const zip = new AdmZip();
+    zip.addFile(
+      "manifest.json",
+      Buffer.from(
+        JSON.stringify({
+          schemaVersion: "1.0",
+          id: "missing-assets",
+          name: "Missing assets",
+          version: "1.0.0",
+          entry: "index.html",
+          features: {},
+        })
+      )
+    );
+    zip.addFile(
+      "index.html",
+      Buffer.from(
+        '<!DOCTYPE html><html><head>' +
+          '<link href="assets/missing.css" rel="stylesheet">' +
+          "</head><body>" +
+          '<img src="assets/missing.png">' +
+          "</body></html>"
+      )
+    );
+
+    const buffer = zip.toBuffer();
+    const result = validateTemplateZip(buffer, buffer.length);
+
+    expect(result.warnings.join(" ")).toContain(
+      "Missing image: assets/missing.png"
+    );
+    expect(result.warnings.join(" ")).toContain(
+      "Asset not found in ZIP: assets/missing.css"
+    );
+    expect(
+      result.checks.find((c) => c.name === "Image references")?.passed
+    ).toBe(false);
+  });
 });

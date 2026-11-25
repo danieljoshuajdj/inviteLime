@@ -367,6 +367,11 @@ export interface Database {
           manifest: Json;
           is_current: boolean;
           status: string;
+          published_at: string | null;
+          replaced_at: string | null;
+          delete_after: string | null;
+          retired_at: string | null;
+          retirement_reason: string | null;
           created_at: string;
         };
         Insert: {
@@ -377,6 +382,11 @@ export interface Database {
           manifest?: Json;
           is_current?: boolean;
           status?: string;
+          published_at?: string | null;
+          replaced_at?: string | null;
+          delete_after?: string | null;
+          retired_at?: string | null;
+          retirement_reason?: string | null;
           created_at?: string;
         };
         Update: {
@@ -387,6 +397,11 @@ export interface Database {
           manifest?: Json;
           is_current?: boolean;
           status?: string;
+          published_at?: string | null;
+          replaced_at?: string | null;
+          delete_after?: string | null;
+          retired_at?: string | null;
+          retirement_reason?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -1321,6 +1336,29 @@ export interface Database {
           p_user_id?: string | null;
           p_session_id?: string | null;
           p_metadata?: Json;
+        };
+        Returns: Json;
+      };
+      publish_template_version: {
+        Args: {
+          p_template_id: string;
+          p_version_id: string;
+          p_retention_hours?: number;
+        };
+        Returns: Json;
+      };
+      rollback_template_version: {
+        Args: {
+          p_template_id: string;
+          p_target_version_id: string;
+        };
+        Returns: Json;
+      };
+      retire_template_version: {
+        Args: {
+          p_template_id: string;
+          p_version_id: string;
+          p_reason?: string;
         };
         Returns: Json;
       };

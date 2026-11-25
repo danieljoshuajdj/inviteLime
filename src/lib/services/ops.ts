@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { getObjectStorage } from "./storage";
+import { purgeDueTemplateVersions } from "./template-version-cleanup";
 import { purgeGuestSessionFolders, purgeWedding } from "./wedding-purge";
 
 export interface RateLimitOptions {
@@ -17,7 +19,10 @@ interface RpcResult {
 type UncheckedRpc = (fn: string, args?: Record<string, unknown>) => Promise<RpcResult>;
 
 function rpc(client: ReturnType<typeof createAdminClient>): UncheckedRpc {
-  return client.rpc as unknown as UncheckedRpc;
+  // Supabase's `rpc` is an instance method that reads `this.rest`. Handing the
+  // bare function to callers loses that binding and throws at runtime, so bind
+  // it here once.
+  return client.rpc.bind(client) as unknown as UncheckedRpc;
 }
 
 /**
@@ -70,8 +75,14 @@ export interface MaintenanceResult {
   purgedSessions: number;
   /** Storage objects removed across every purge this run. */
   purgedObjects: number;
+  /** Replaced template releases retired after their rollback window. */
+  templateVersionsRetired: number;
+  /** Retired template releases whose files and row were purged. */
+  templateVersionsPurged: number;
   /** Purge attempts that failed; the next run retries them. */
   purgeFailures: number;
+  /** Non-fatal notes from this run, surfaced by the cron response. */
+  warnings: string[];
   degraded: boolean;
 }
 
@@ -287,7 +298,8 @@ async function purgeAbandonedSessionFolders(
  *  2. purge expired/cancelled invitations — rows AND stored media;
  *  3. purge unpaid checkout drafts older than the retention window;
  *  4. remove guest-session draft folders, then delete the draft/session rows;
- *  5. drop stale rate-limit counters.
+ *  5. drop stale rate-limit counters;
+ *  6. retire and purge replaced template releases after their rollback window.
  *
  * Order and payment history is never deleted: orders and payments keep their
  * rows with `wedding_id` set to NULL.
@@ -302,7 +314,10 @@ export async function runMaintenance(): Promise<MaintenanceResult> {
     purgedDraftWeddings: 0,
     purgedSessions: 0,
     purgedObjects: 0,
+    templateVersionsRetired: 0,
+    templateVersionsPurged: 0,
     purgeFailures: 0,
+    warnings: [],
     degraded: false,
   };
 
@@ -336,6 +351,18 @@ export async function runMaintenance(): Promise<MaintenanceResult> {
     // them now would orphan those objects permanently.
     result.degraded = true;
   }
+
+  // 6. Template release retention. Expired `previous` releases are retired and
+  // purged, and retired rows left by an earlier storage failure are retried.
+  const templateRetention = await purgeDueTemplateVersions({
+    supabase,
+    getStorage: getObjectStorage,
+  });
+  result.templateVersionsRetired = templateRetention.retired;
+  result.templateVersionsPurged = templateRetention.purged;
+  result.purgedObjects += templateRetention.deletedObjects;
+  result.purgeFailures += templateRetention.failures;
+  result.warnings.push(...templateRetention.warnings);
 
   return result;
 }

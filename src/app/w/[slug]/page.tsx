@@ -168,7 +168,11 @@ export default async function PublicInvitationPage({ params, searchParams }: Pag
     },
   });
 
-  const runtime = await loadInvitationRuntime(wedding.template_version_id, payload).catch(() => null);
+  const runtime = await loadInvitationRuntime(
+    wedding.template_version_id,
+    payload,
+    { templateId: wedding.template_id }
+  ).catch(() => null);
 
   if (runtime) {
     return (

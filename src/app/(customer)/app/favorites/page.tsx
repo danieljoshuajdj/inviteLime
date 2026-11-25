@@ -11,26 +11,27 @@ import { Button } from "@/components/shared/Button";
 
 export const metadata: Metadata = { title: "Favorites" };
 
+interface FavoriteTemplate {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  thumbnail_path?: string | null;
+  product?: {
+    price_paise?: number;
+    currency?: string;
+    prices?: Array<{ currency: string; amount_minor: number; active: boolean }>;
+  } | null;
+  template_categories?: Array<{ category: { name: string } | null }> | null;
+}
+
 export default async function FavoritesPage() {
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let favorites: Array<{
-    id: string;
-    slug: string;
-    name: string;
-    description: string | null;
-    thumbnail_url?: string | null;
-    thumbnail_path?: string | null;
-    product?: {
-      price_paise?: number;
-      currency?: string;
-      prices?: Array<{ currency: string; amount_minor: number; active: boolean }>;
-    } | null;
-    template_categories?: Array<{ category: { name: string } }>;
-  }> = [];
+  let favorites: FavoriteTemplate[] = [];
   try {
     const { data } = await supabase
       .from("favorite_templates")
@@ -40,7 +41,11 @@ export default async function FavoritesPage() {
       // page for every account, including planners.
       .select(`template_id, template:template_id(id, name, slug, description, thumbnail_path, product:product_id(id, price_paise, currency, prices:product_prices(currency, amount_minor, active)), template_categories:template_categories(category:categories(name)))`)
       .eq("user_id", user?.id ?? "");
-    favorites = ((data ?? []) as Array<{ template_id: string; template: any }>).map((r) => r.template).filter(Boolean);
+    favorites = (
+      (data ?? []) as Array<{ template_id: string; template: FavoriteTemplate | null }>
+    )
+      .map((row) => row.template)
+      .filter((template): template is FavoriteTemplate => template !== null);
   } catch {
     favorites = [];
   }
@@ -82,7 +87,7 @@ export default async function FavoritesPage() {
       ) : (
         <div className="mt-6">
           <ExploreGrid
-            templates={favorites.map((t: any) => {
+            templates={favorites.map((t) => {
               const { label, payable } = quoteForTemplate(
                 {
                   price_paise: t.product?.price_paise ?? 0,
@@ -98,7 +103,10 @@ export default async function FavoritesPage() {
                 description: t.description,
                 thumbnailUrl: t.thumbnail_path ? storagePublicUrl("templates", t.thumbnail_path) : null,
                 priceLabel: payable ? label : "Free preview",
-                categories: t.template_categories?.map((tc: any) => tc.category.name) ?? [],
+                categories:
+                  t.template_categories
+                    ?.map((tc) => tc.category?.name)
+                    .filter((name): name is string => Boolean(name)) ?? [],
               };
             })}
             initialFavorites={favorites.map((f) => f.id)}

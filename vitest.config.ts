@@ -17,6 +17,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // Next resolves the `react-server` condition; Vitest does not. Point the
+      // marker at its empty server build so service tests can import modules
+      // that are guarded with `import "server-only"`.
+      "server-only": fileURLToPath(
+        new URL("./node_modules/server-only/empty.js", import.meta.url)
+      ),
     },
   },
 });

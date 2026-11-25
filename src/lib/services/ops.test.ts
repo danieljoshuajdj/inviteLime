@@ -21,7 +21,7 @@ interface Row {
   [key: string]: unknown;
 }
 
-type FilterKind = "eq" | "lt" | "gt" | "in";
+type FilterKind = "eq" | "lt" | "lte" | "gt" | "in";
 
 interface Filter {
   kind: FilterKind;
@@ -39,6 +39,8 @@ function matches(row: Row, filter: Filter): boolean {
       return (filter.value as unknown[]).includes(cell);
     case "lt":
       return cell != null && String(cell) < String(filter.value);
+    case "lte":
+      return cell != null && String(cell) <= String(filter.value);
     case "gt":
       return cell != null && String(cell) > String(filter.value);
   }
@@ -61,6 +63,10 @@ class FakeQuery {
   }
   lt(column: string, value: unknown) {
     this.filters.push({ kind: "lt", column, value });
+    return this;
+  }
+  lte(column: string, value: unknown) {
+    this.filters.push({ kind: "lte", column, value });
     return this;
   }
   gt(column: string, value: unknown) {
@@ -96,7 +102,13 @@ interface FakeDb {
   rpc: ReturnType<typeof vi.fn>;
 }
 
-const rpc = vi.fn(async (fn: string) => {
+// Supabase's real `rpc` is an instance method that reads `this`, so the mock
+// must preserve the receiver too. Calling the extracted function unbound
+// returns an error instead of throwing, which is what production did.
+const rpc = vi.fn(function (this: unknown, fn: string) {
+  if (this !== db) {
+    return { data: null, error: { message: "rpc called without its client" } };
+  }
   if (fn === "mark_expired_invitations") return { data: 1, error: null };
   if (fn === "cleanup_expired_guest_data") {
     return { data: { guest_drafts: 5, guest_sessions: 4, rate_limit_counters: 2 }, error: null };

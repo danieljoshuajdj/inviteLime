@@ -62,7 +62,7 @@ export function buildGuestPreviewPayload(
     invitationUrl: `${context.publicAppUrl ?? context.appUrl}/create/${context.token}`,
     expiresAt: null,
     planner: context.planner ?? null,
-    site: context.site ?? null,
+    site: context.site ?? undefined,
     wedding: rewriteRuntimeMedia(wedding, (url) =>
       signDraftMediaUrl(url, {
         appUrl: context.appUrl,

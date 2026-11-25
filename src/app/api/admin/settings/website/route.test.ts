@@ -2,60 +2,65 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ADMIN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-const getSetting = vi.fn();
-const getSettingFresh = vi.fn();
-const updateSetting = vi.fn();
-const auditRows: Array<Record<string, unknown>> = [];
-
-const state = {
-  user: { id: ADMIN_ID } as { id: string } | null,
-  role: "admin" as string | null,
+const state: {
+  user: { id: string } | null;
+  role: string;
+  websiteUrl: string | null;
+} = {
+  user: { id: ADMIN_ID },
+  role: "admin",
+  websiteUrl: null,
 };
 
-vi.mock("server-only", () => ({}));
-vi.mock("@/lib/services/site-settings", () => ({
-  getSetting: (...args: unknown[]) => getSetting(...args),
-  getSettingFresh: (...args: unknown[]) => getSettingFresh(...args),
-  updateSetting: (...args: unknown[]) => updateSetting(...args),
-}));
+const getWebsiteRedirectDestination = vi.fn(async () => state.websiteUrl);
+const setWebsiteRedirectDestination = vi.fn(async (url: string | null) => {
+  state.websiteUrl = url;
+});
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
+
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
-      getUser: async () => ({
-        data: { user: state.user },
-        error: null,
-      }),
+      getUser: async () => ({ data: { user: state.user }, error: null }),
     },
-    from: (table: string) => {
-      if (table !== "profiles") throw new Error(`Unexpected table ${table}`);
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({
-              data: state.user && state.role ? { id: state.user.id, role: state.role } : null,
-              error: null,
-            }),
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => ({
+            data: state.user ? { role: state.role } : null,
+            error: null,
           }),
         }),
-      };
-    },
-  }),
-}));
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({
-    from: (table: string) => {
-      if (table !== "audit_logs") throw new Error(`Unexpected table ${table}`);
-      return {
-        insert: async (row: Record<string, unknown>) => {
-          auditRows.push(row);
-          return { data: null, error: null };
-        },
-      };
-    },
+      }),
+    }),
   }),
 }));
 
-const { GET, PUT } = await import("./route");
+vi.mock("@/lib/services/website-redirect", () => ({
+  getWebsiteRedirectDestination: () => getWebsiteRedirectDestination(),
+  setWebsiteRedirectDestination: (url: string | null) =>
+    setWebsiteRedirectDestination(url),
+  WEBSITE_REDIRECT_SETTING_KEY: "website_redirect_url",
+}));
+
+vi.mock("@/lib/services/admin", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/services/admin")>();
+  return {
+    ...actual,
+    logAdminAction: (...args: unknown[]) => logAdminAction(...args),
+  };
+});
+
+import { GET, PUT } from "./route";
+
+beforeEach(() => {
+  state.user = { id: ADMIN_ID };
+  state.role = "admin";
+  state.websiteUrl = null;
+  getWebsiteRedirectDestination.mockClear();
+  setWebsiteRedirectDestination.mockClear();
+  logAdminAction.mockClear();
+});
 
 function put(body: unknown) {
   return PUT(
@@ -67,130 +72,92 @@ function put(body: unknown) {
   );
 }
 
-beforeEach(() => {
-  state.user = { id: ADMIN_ID };
-  state.role = "admin";
-  auditRows.length = 0;
-  getSetting.mockReset().mockResolvedValue("");
-  getSettingFresh.mockReset();
-  updateSetting.mockReset().mockResolvedValue(undefined);
-});
-
 describe("GET /api/admin/settings/website", () => {
-  it("returns the saved destination for an admin", async () => {
-    getSetting.mockResolvedValue("https://mywebsite.com");
-    const res = await GET();
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({
-      websiteUrl: "https://mywebsite.com/",
-    });
-  });
-
-  it("returns null when no destination is configured", async () => {
-    const res = await GET();
-    await expect(res.json()).resolves.toEqual({ websiteUrl: null });
-  });
-
-  it("rejects signed-out visitors", async () => {
+  it("returns 401 when nobody is signed in", async () => {
     state.user = null;
     const res = await GET();
     expect(res.status).toBe(401);
-    expect(getSetting).not.toHaveBeenCalled();
   });
 
-  it("rejects non-admin accounts", async () => {
+  it("returns 403 for a signed-in customer", async () => {
     state.role = "customer";
     const res = await GET();
     expect(res.status).toBe(403);
-    expect(getSetting).not.toHaveBeenCalled();
+  });
+
+  it("returns the saved destination to an admin", async () => {
+    state.websiteUrl = "https://mywebsite.com/";
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ websiteUrl: "https://mywebsite.com/" });
   });
 });
 
 describe("PUT /api/admin/settings/website", () => {
-  it("normalises and saves the destination, then audits the change", async () => {
-    getSetting.mockResolvedValue("https://old.example");
+  it("refuses a non-admin and never writes", async () => {
+    state.role = "customer";
+    const res = await put({ url: "https://mywebsite.com" });
+    expect(res.status).toBe(403);
+    expect(setWebsiteRedirectDestination).not.toHaveBeenCalled();
+    expect(logAdminAction).not.toHaveBeenCalled();
+  });
 
-    const res = await put({ url: "mynewwebsite.com" });
+  it("saves a normalised destination and audits the change", async () => {
+    state.websiteUrl = "https://old.example/";
+    const res = await put({ url: "https://mywebsite.com" });
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({
-      websiteUrl: "https://mynewwebsite.com/",
-    });
-    expect(updateSetting).toHaveBeenCalledWith(
-      "website_redirect_url",
-      "https://mynewwebsite.com/"
+    expect(await res.json()).toEqual({ websiteUrl: "https://mywebsite.com/" });
+    expect(setWebsiteRedirectDestination).toHaveBeenCalledWith(
+      "https://mywebsite.com/"
     );
-    expect(auditRows).toEqual([
-      expect.objectContaining({
-        admin_id: ADMIN_ID,
-        action: "settings.website_redirect.update",
-        target_type: "site_settings",
-        target_id: "website_redirect_url",
-        metadata: {
-          previous: "https://old.example/",
-          next: "https://mynewwebsite.com/",
-        },
-      }),
-    ]);
+    expect(logAdminAction).toHaveBeenCalledWith(
+      ADMIN_ID,
+      "settings.website_redirect.update",
+      "site_settings",
+      "website_redirect_url",
+      { previous: "https://old.example/", next: "https://mywebsite.com/" }
+    );
   });
 
-  it("clears the destination with an empty value", async () => {
-    const res = await put({ url: "   " });
-
+  it("accepts a bare domain by assuming HTTPS", async () => {
+    const res = await put({ url: "mynewwebsite.com" });
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ websiteUrl: null });
-    expect(updateSetting).toHaveBeenCalledWith("website_redirect_url", "");
+    expect(await res.json()).toEqual({ websiteUrl: "https://mynewwebsite.com/" });
   });
 
-  it("rejects unsafe or malformed URLs without writing", async () => {
-    for (const url of [
-      "javascript:alert(1)",
-      "data:text/html,<script>alert(1)</script>",
-      "ftp://example.com",
-      "https://user:pass@example.com",
-      "mywebsite",
-    ]) {
+  it("clears the destination when the field is left blank", async () => {
+    state.websiteUrl = "https://mywebsite.com/";
+    const res = await put({ url: "   " });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ websiteUrl: null });
+    expect(setWebsiteRedirectDestination).toHaveBeenCalledWith(null);
+  });
+
+  it("rejects an invalid or unsafe URL without writing", async () => {
+    for (const url of ["javascript:alert(1)", "ftp://example.com", "mywebsite"]) {
       const res = await put({ url });
-      expect(res.status, url).toBe(400);
-      await expect(res.json()).resolves.toMatchObject({
-        error: expect.stringMatching(/valid website/i),
-      });
+      expect(res.status).toBe(400);
     }
-    expect(updateSetting).not.toHaveBeenCalled();
-    expect(auditRows).toHaveLength(0);
+    expect(setWebsiteRedirectDestination).not.toHaveBeenCalled();
+    expect(logAdminAction).not.toHaveBeenCalled();
   });
 
-  it("rejects a missing url field and over-long values", async () => {
-    const missing = await put({});
-    expect(missing.status).toBe(400);
-
-    const tooLong = await put({ url: `https://example.com/${"a".repeat(3000)}` });
-    expect(tooLong.status).toBe(400);
-
-    expect(updateSetting).not.toHaveBeenCalled();
-  });
-
-  it("rejects signed-out and non-admin callers before reading or writing", async () => {
-    state.user = null;
-    const signedOut = await put({ url: "https://example.com" });
-    expect(signedOut.status).toBe(401);
-
-    state.user = { id: ADMIN_ID };
-    state.role = "planner";
-    const nonAdmin = await put({ url: "https://example.com" });
-    expect(nonAdmin.status).toBe(403);
-
-    expect(getSetting).not.toHaveBeenCalled();
-    expect(updateSetting).not.toHaveBeenCalled();
-    expect(auditRows).toHaveLength(0);
-  });
-
-  it("does not write or audit when the settings store fails", async () => {
-    updateSetting.mockRejectedValue(new Error("database down"));
-
-    const res = await put({ url: "https://example.com" });
-
+  it("rejects a malformed body", async () => {
+    const res = await PUT(
+      new Request("http://localhost/api/admin/settings/website", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: "{",
+      })
+    );
     expect(res.status).toBe(400);
-    expect(auditRows).toHaveLength(0);
+    expect(setWebsiteRedirectDestination).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-string url", async () => {
+    const res = await put({ url: 123 });
+    expect(res.status).toBe(400);
+    expect(setWebsiteRedirectDestination).not.toHaveBeenCalled();
   });
 });

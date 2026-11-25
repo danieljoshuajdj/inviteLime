@@ -7,10 +7,13 @@ import { Icon } from "@/components/shared/Icon";
 interface HeroData {
   title?: string;
   subtitle?: string;
+  /** Small pill above the headline; admin-editable with the rest of the hero. */
+  eyebrow?: string;
   images?: HeroCarouselImage[];
 }
 
 const FALLBACK_TITLE = "Create a Breathtaking Wedding Website";
+const FALLBACK_EYEBROW = "Trusted for 5,00,000+ happy couples";
 
 /**
  * The headline is stored as a single string in `site_settings.hero.title`
@@ -28,7 +31,7 @@ function headlineLines(title?: string): [string, string | null] {
   return [lead, text.slice(at).trim() || accent];
 }
 
-export function Hero({ title, subtitle, images = [] }: HeroData) {
+export function Hero({ title, subtitle, eyebrow, images = [] }: HeroData) {
   const [headlineLead, headlineAccent] = headlineLines(title);
 
   return (
@@ -42,7 +45,7 @@ export function Hero({ title, subtitle, images = [] }: HeroData) {
         <div className="mx-auto max-w-3xl text-center">
           <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-navy-300/40 bg-ivory-100 px-4 py-1.5 font-body-xs font-semibold text-navy-950">
             <span className="h-2 w-2 rounded-full bg-gold-400" />
-            Trusted for 5,00,000+ happy couples
+            {eyebrow?.trim() || FALLBACK_EYEBROW}
           </p>
 
           <h1 className="font-heading-2xl !tracking-tight text-ivory-950 sm:font-heading-3xl">

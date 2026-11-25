@@ -320,7 +320,12 @@ function getRootPrefix(files: string[]): string {
 function extractAssetRefs(html: string): string[] {
   const refs = new Set<string>();
   // src=, href=, data-src=, poster=
-  const attrRe = /(?:src|href|data-src|poster|data-lazysrc)\s*=\s*["']([^"'#?]+)["']/gi;
+  //
+  // The attribute name must start at a real boundary. Without the lookbehind,
+  // `href` inside `data-wedding-href="site.websiteUrl"` was captured as a
+  // relative asset and reported as missing from the ZIP. `xlink:href` still
+  // matches because `:` is a valid boundary.
+  const attrRe = /(?<![\w-])(?:src|href|data-src|poster|data-lazysrc)\s*=\s*["']([^"'#?]+)["']/gi;
   let m: RegExpExecArray | null;
   while ((m = attrRe.exec(html)) !== null) {
     const val = m[1]!.trim();

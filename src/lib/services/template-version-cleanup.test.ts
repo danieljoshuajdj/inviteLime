@@ -4,9 +4,11 @@ import type { Supabase } from "@/lib/services/helpers";
 import type { ObjectStorage } from "@/lib/services/storage";
 import {
   cleanupStaleVersionUploads,
-  cleanupSupersededTemplateVersions,
+  cleanupSupersededDraftVersions,
   deleteTemplateVersionObjects,
   isSafeTemplateVersionPrefix,
+  purgeDueTemplateVersions,
+  purgeTemplateVersion,
   selectSupersededVersions,
   type TemplateVersionRow,
 } from "@/lib/services/template-version-cleanup";
@@ -25,7 +27,7 @@ interface Row {
 interface Filter {
   column: string;
   value: unknown;
-  op: "eq" | "neq";
+  op: "eq" | "neq" | "lte" | "in";
 }
 
 class FakeQuery {
@@ -65,6 +67,20 @@ class FakeQuery {
     return this;
   }
 
+  lte(column: string, value: unknown) {
+    this.filters.push({ column, value, op: "lte" });
+    return this;
+  }
+
+  in(column: string, values: unknown[]) {
+    this.filters.push({ column, value: values, op: "in" });
+    return this;
+  }
+
+  order() {
+    return this;
+  }
+
   limit(count: number) {
     this.limitCount = count;
     return this;
@@ -87,7 +103,10 @@ class FakeQuery {
   private matches(row: Row): boolean {
     return this.filters.every((filter) => {
       const value = row[filter.column];
-      return filter.op === "eq" ? value === filter.value : value !== filter.value;
+      if (filter.op === "eq") return value === filter.value;
+      if (filter.op === "neq") return value !== filter.value;
+      if (filter.op === "in") return (filter.value as unknown[]).includes(value);
+      return value != null && String(value) <= String(filter.value);
     });
   }
 
@@ -120,6 +139,28 @@ class FakeDb {
   from(table: string) {
     return new FakeQuery(table, this);
   }
+  rpc = vi.fn(async (fn: string, args?: Record<string, unknown>) => {
+    if (fn !== "retire_template_version") {
+      return { data: null, error: { message: `unexpected rpc ${fn}` } };
+    }
+    const rows = this.rows.template_versions ?? [];
+    const row = rows.find(
+      (item) =>
+        item.id === args?.p_version_id &&
+        item.template_id === args?.p_template_id &&
+        item.status === "previous"
+    );
+    if (!row) {
+      return { data: null, error: { message: "Template version not found" } };
+    }
+    row.status = "retired";
+    row.is_current = false;
+    row.retired_at = new Date().toISOString();
+    return {
+      data: { ok: true, versionId: row.id, version: row.version },
+      error: null,
+    };
+  });
 }
 
 function version(
@@ -154,7 +195,10 @@ function createStorage(keys: string[]): ObjectStorage & {
       set.delete(key);
     }),
     upload: vi.fn(),
-    download: vi.fn(),
+    download: vi.fn(async () => ({
+      body: Buffer.from("<!doctype html><html><body>ok</body></html>"),
+      contentType: "text/html",
+    })),
     exists: vi.fn(),
     move: vi.fn(),
     copy: vi.fn(),
@@ -192,22 +236,16 @@ function seed(
   return db;
 }
 
-function runCleanup(
+function runDraftCleanup(
   db: FakeDb,
   storage: ObjectStorage,
-  options: {
-    newVersionId: string;
-    protectCurrent?: boolean;
-    repointGuestDrafts?: boolean;
-  }
+  newVersionId: string
 ) {
-  return cleanupSupersededTemplateVersions({
+  return cleanupSupersededDraftVersions({
     supabase: db as unknown as Supabase,
     templateId: TPL,
-    newVersionId: options.newVersionId,
+    newVersionId,
     storage,
-    protectCurrent: options.protectCurrent,
-    repointGuestDrafts: options.repointGuestDrafts,
   });
 }
 
@@ -240,8 +278,8 @@ describe("isSafeTemplateVersionPrefix", () => {
   });
 });
 
-describe("cleanupSupersededTemplateVersions", () => {
-  it("removes superseded drafts immediately but protects the current published version", async () => {
+describe("cleanupSupersededDraftVersions", () => {
+  it("removes superseded drafts and leaves the current published release alone", async () => {
     const db = seed([
       version(V1, "1.0.0", "2026-01-01T00:00:00.000Z"),
       version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
@@ -257,10 +295,7 @@ describe("cleanupSupersededTemplateVersions", () => {
       `${TPL}/thumbnail`,
     ]);
 
-    const result = await runCleanup(db, storage, {
-      newVersionId: V3,
-      protectCurrent: true,
-    });
+    const result = await runDraftCleanup(db, storage, V3);
 
     expect(result.deletedVersions.map((item) => item.version)).toEqual(["1.0.0"]);
     expect(result.remainingVersions).toBe(2);
@@ -289,17 +324,17 @@ describe("cleanupSupersededTemplateVersions", () => {
       `${TPL}/thumbnail`,
     ]);
 
-    const result = await runCleanup(db, storage, { newVersionId: V2 });
+    const result = await runDraftCleanup(db, storage, V2);
 
     expect(result.deletedVersions.map((item) => item.version)).toEqual(["1.0.0"]);
     expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(false);
     expect(storage.keys.has(`${TPL}/thumbnail`)).toBe(true);
   });
 
-  it("removes the previous published version after the replacement is current", async () => {
+  it("keeps superseded published releases for the rollback window", async () => {
     const db = seed([
       version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
-        status: "published",
+        status: "previous",
         is_current: false,
       }),
       version(V3, "1.0.2", "2026-01-03T00:00:00.000Z", {
@@ -312,88 +347,42 @@ describe("cleanupSupersededTemplateVersions", () => {
       `${TPL}/v1.0.2/index.html`,
     ]);
 
-    const result = await runCleanup(db, storage, {
-      newVersionId: V3,
-      repointGuestDrafts: true,
-    });
-
-    expect(result.deletedVersions.map((item) => item.version)).toEqual(["1.0.1"]);
-    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V3]);
-    expect(storage.keys.has(`${TPL}/v1.0.1/index.html`)).toBe(false);
-    expect(storage.keys.has(`${TPL}/v1.0.2/index.html`)).toBe(true);
-  });
-
-  it("keeps a version that a live invitation pins", async () => {
-    const db = seed(
-      [
-        version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
-          status: "published",
-          is_current: false,
-        }),
-        version(V3, "1.0.2", "2026-01-03T00:00:00.000Z", {
-          status: "published",
-          is_current: true,
-        }),
-      ],
-      {
-        weddings: [
-          {
-            id: "wedding-1",
-            template_id: TPL,
-            template_version_id: V2,
-            status: "active",
-            expiration_date: "2999-01-01",
-          },
-        ],
-      }
-    );
-    const storage = createStorage([
-      `${TPL}/v1.0.1/index.html`,
-      `${TPL}/v1.0.2/index.html`,
-    ]);
-
-    const result = await runCleanup(db, storage, {
-      newVersionId: V3,
-      repointGuestDrafts: true,
-    });
+    const result = await runDraftCleanup(db, storage, V3);
 
     expect(result.deletedVersions).toEqual([]);
     expect(db.rows.template_versions.map((row) => row.id)).toEqual([V2, V3]);
     expect(storage.keys.has(`${TPL}/v1.0.1/index.html`)).toBe(true);
+    expect(storage.keys.has(`${TPL}/v1.0.2/index.html`)).toBe(true);
     expect(result.skipped).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ version: "1.0.1", reason: "referenced-by-invitation" }),
+        expect.objectContaining({ version: "1.0.1", reason: "not-a-draft" }),
       ])
     );
   });
 
-  it("moves guest builder drafts to the published replacement before deleting the old row", async () => {
+  it("keeps a draft that a builder session still references", async () => {
     const db = seed(
       [
-        version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
-          status: "published",
-          is_current: false,
-        }),
-        version(V3, "1.0.2", "2026-01-03T00:00:00.000Z", {
-          status: "published",
-          is_current: true,
-        }),
+        version(V1, "1.0.0", "2026-01-01T00:00:00.000Z"),
+        version(V2, "1.0.1", "2026-01-02T00:00:00.000Z"),
       ],
       {
-        drafts: [{ id: "draft-1", template_id: TPL, template_version_id: V2 }],
+        drafts: [{ id: "draft-1", template_id: TPL, template_version_id: V1 }],
       }
     );
-    const storage = createStorage([`${TPL}/v1.0.1/index.html`]);
+    const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
 
-    const result = await runCleanup(db, storage, {
-      newVersionId: V3,
-      repointGuestDrafts: true,
-    });
+    const result = await runDraftCleanup(db, storage, V2);
 
-    expect(result.deletedVersions.map((item) => item.version)).toEqual(["1.0.1"]);
-    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V3]);
-    expect(db.rows.guest_drafts[0]?.template_version_id).toBe(V3);
-    expect(storage.keys.has(`${TPL}/v1.0.1/index.html`)).toBe(false);
+    expect(result.deletedVersions).toEqual([]);
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V1, V2]);
+    expect(db.rows.guest_drafts[0]?.template_version_id).toBe(V1);
+    expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(true);
+    expect(result.skipped).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ version: "1.0.0", reason: "referenced-by-guest-draft" }),
+      ])
+    );
   });
 
   it("never deletes a newer version uploaded concurrently", async () => {
@@ -410,10 +399,7 @@ describe("cleanupSupersededTemplateVersions", () => {
       `${TPL}/v1.0.3/index.html`,
     ]);
 
-    const result = await runCleanup(db, storage, {
-      newVersionId: V3,
-      repointGuestDrafts: true,
-    });
+    const result = await runDraftCleanup(db, storage, V3);
 
     expect(result.deletedVersions.map((item) => item.version)).toEqual(["1.0.0", "1.0.1"]);
     expect(db.rows.template_versions.map((row) => row.id)).toEqual([V3, V4]);
@@ -428,7 +414,7 @@ describe("cleanupSupersededTemplateVersions", () => {
     ]);
     const storage = createStorage([`${TPL}/v1.0.1/index.html`]);
 
-    const result = await runCleanup(db, storage, { newVersionId: V2 });
+    const result = await runDraftCleanup(db, storage, V2);
 
     expect(result.deletedVersions).toEqual([]);
     expect(db.rows.template_versions.map((row) => row.id)).toEqual([V1, V2]);
@@ -447,12 +433,200 @@ describe("cleanupSupersededTemplateVersions", () => {
     const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
     storage.list.mockRejectedValueOnce(new Error("temporary B2 outage"));
 
-    const result = await runCleanup(db, storage, { newVersionId: V2 });
+    const result = await runDraftCleanup(db, storage, V2);
 
     expect(result.deletedVersions.map((item) => item.version)).toEqual(["1.0.0"]);
     // Prefix list + retry, then the orphan sweep lists the template root.
     expect(storage.list).toHaveBeenCalledTimes(3);
     expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(false);
+  });
+});
+
+describe("purgeTemplateVersion", () => {
+  it("deletes a retired version's files first, then its row", async () => {
+    const db = seed([
+      version(V1, "1.0.0", "2026-01-01T00:00:00.000Z", {
+        status: "retired",
+        retired_at: "2026-01-05T00:00:00.000Z",
+      }),
+      version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
+        status: "published",
+        is_current: true,
+      }),
+    ]);
+    const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
+
+    const result = await purgeTemplateVersion({
+      supabase: db as unknown as Supabase,
+      templateId: TPL,
+      versionId: V1,
+      storage,
+    });
+
+    expect(result.deleted).toBe(true);
+    expect(result.deletedObjects).toBe(1);
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V2]);
+    expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(false);
+  });
+
+  it("refuses to purge a version that is not retired", async () => {
+    const db = seed([
+      version(V1, "1.0.0", "2026-01-01T00:00:00.000Z", { status: "previous" }),
+      version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
+        status: "published",
+        is_current: true,
+      }),
+    ]);
+    const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
+
+    const result = await purgeTemplateVersion({
+      supabase: db as unknown as Supabase,
+      templateId: TPL,
+      versionId: V1,
+      storage,
+    });
+
+    expect(result.deleted).toBe(false);
+    expect(result.warnings[0]).toMatch(/only a retired/i);
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V1, V2]);
+    expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(true);
+  });
+
+  it("keeps a retired version that an invitation still references", async () => {
+    const db = seed(
+      [
+        version(V1, "1.0.0", "2026-01-01T00:00:00.000Z", { status: "retired" }),
+        version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
+          status: "published",
+          is_current: true,
+        }),
+      ],
+      {
+        weddings: [
+          {
+            id: "wedding-1",
+            template_id: TPL,
+            template_version_id: V1,
+            status: "active",
+            expiration_date: "2999-01-01",
+          },
+        ],
+      }
+    );
+    const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
+
+    const result = await purgeTemplateVersion({
+      supabase: db as unknown as Supabase,
+      templateId: TPL,
+      versionId: V1,
+      storage,
+    });
+
+    expect(result.deleted).toBe(false);
+    expect(result.warnings[0]).toMatch(/invitation still references/i);
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V1, V2]);
+    expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(true);
+  });
+
+  it("keeps the retired row when storage refuses the delete", async () => {
+    const db = seed([
+      version(V1, "1.0.0", "2026-01-01T00:00:00.000Z", { status: "retired" }),
+      version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
+        status: "published",
+        is_current: true,
+      }),
+    ]);
+    const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
+    storage.list.mockRejectedValue(new Error("storage down"));
+
+    const result = await purgeTemplateVersion({
+      supabase: db as unknown as Supabase,
+      templateId: TPL,
+      versionId: V1,
+      storage,
+    });
+
+    expect(result.deleted).toBe(false);
+    expect(result.warnings.join(" ")).toMatch(/could not be deleted yet/i);
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V1, V2]);
+  });
+
+  it("reports an already-deleted version without throwing", async () => {
+    const db = seed([]);
+    const storage = createStorage([]);
+
+    const result = await purgeTemplateVersion({
+      supabase: db as unknown as Supabase,
+      templateId: TPL,
+      versionId: V1,
+      storage,
+    });
+
+    expect(result.alreadyDeleted).toBe(true);
+    expect(result.deleted).toBe(false);
+  });
+});
+
+describe("purgeDueTemplateVersions", () => {
+  it("retires an expired previous release and purges it in the same run", async () => {
+    const past = new Date(Date.now() - 1_000).toISOString();
+    const db = seed([
+      version(V1, "1.0.0", "2026-01-01T00:00:00.000Z", {
+        status: "previous",
+        replaced_at: "2026-01-03T00:00:00.000Z",
+        delete_after: past,
+      }),
+      version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
+        status: "published",
+        is_current: true,
+        manifest: { entry: "index.html" },
+      }),
+    ]);
+    const storage = createStorage([`${TPL}/v1.0.0/index.html`]);
+
+    const result = await purgeDueTemplateVersions({
+      supabase: db as unknown as Supabase,
+      getStorage: async () => storage,
+      now: new Date(),
+    });
+
+    expect(result.retired).toBe(1);
+    expect(result.purged).toBe(1);
+    expect(result.deletedObjects).toBe(1);
+    expect(result.failures).toBe(0);
+    expect(db.rpc).toHaveBeenCalledWith("retire_template_version", {
+      p_template_id: TPL,
+      p_version_id: V1,
+      p_reason: "expired",
+    });
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V2]);
+    expect(storage.keys.has(`${TPL}/v1.0.0/index.html`)).toBe(false);
+  });
+
+  it("leaves a previous release inside its window and never touches storage", async () => {
+    const future = new Date(Date.now() + 60_000).toISOString();
+    const db = seed([
+      version(V1, "1.0.0", "2026-01-01T00:00:00.000Z", {
+        status: "previous",
+        delete_after: future,
+      }),
+      version(V2, "1.0.1", "2026-01-02T00:00:00.000Z", {
+        status: "published",
+        is_current: true,
+      }),
+    ]);
+    const getStorage = vi.fn(async () => createStorage([]));
+
+    const result = await purgeDueTemplateVersions({
+      supabase: db as unknown as Supabase,
+      getStorage,
+      now: new Date(),
+    });
+
+    expect(result).toMatchObject({ retired: 0, purged: 0, failures: 0 });
+    expect(getStorage).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.rows.template_versions.map((row) => row.id)).toEqual([V1, V2]);
   });
 });
 

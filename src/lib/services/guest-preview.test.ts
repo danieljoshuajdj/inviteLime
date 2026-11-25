@@ -77,6 +77,28 @@ describe("buildGuestPreviewPayload", () => {
     expect(buildGuestPreviewPayload(context, { brideName: "Meera" }).planner).toBeNull();
   });
 
+  it("carries the global website redirect state through the preview payload", () => {
+    const withSite = buildGuestPreviewPayload(
+      {
+        ...context,
+        site: {
+          websiteUrl: `${context.appUrl}/visit-website`,
+          websiteConfigured: true,
+        },
+      },
+      { brideName: "Meera" }
+    );
+    expect(withSite.site).toEqual({
+      websiteUrl: `${context.appUrl}/visit-website`,
+      websiteConfigured: true,
+    });
+
+    expect(buildGuestPreviewPayload(context, { brideName: "Meera" }).site).toEqual({
+      websiteUrl: null,
+      websiteConfigured: false,
+    });
+  });
+
   it("tolerates a partial/empty preview so mid-edit renders are safe", () => {
     const payload = buildGuestPreviewPayload(context, { brideName: "Meera" });
     expect(payload.wedding.brideName).toBe("Meera");

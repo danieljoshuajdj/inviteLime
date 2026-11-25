@@ -14,9 +14,9 @@
  *    the claim and its files, so a rejected package never leaves orphaned rows
  *    or objects.
  *  - Once the upload is committed as a draft, superseded draft versions are
- *    removed. The currently published version is kept until the new draft is
- *    published, because demos and live invitations still render it. The publish
- *    route finishes the replacement.
+ *    removed. Published and retained-previous versions are never touched here;
+ *    the publish route switches the live release atomically and keeps the
+ *    replaced one for the rollback window.
  *
  * Security:
  *  - requireAdmin() on every request
@@ -41,7 +41,7 @@ import {
 } from "@/lib/services/storage";
 import {
   cleanupStaleVersionUploads,
-  cleanupSupersededTemplateVersions,
+  cleanupSupersededDraftVersions,
   deleteTemplateVersionObjects,
   type VersionCleanupResult,
 } from "@/lib/services/template-version-cleanup";
@@ -352,22 +352,22 @@ export async function POST(req: Request, { params }: RouteContext) {
       }
     }
 
-    // ── Remove superseded versions that are safe to delete now ───────────
-    // The published version is protected until the admin publishes this draft.
+    // ── Remove superseded drafts that are safe to delete now ─────────────
+    // Published/previous releases are retained: they are the live package or
+    // a rollback candidate until the admin publishes this draft.
     let cleanup: VersionCleanupResult | null = null;
     try {
-      cleanup = await cleanupSupersededTemplateVersions({
+      const result = await cleanupSupersededDraftVersions({
         supabase: adminClient,
         templateId: id,
         newVersionId: claimed.id,
         storage,
-        protectCurrent: true,
-        repointGuestDrafts: false,
       });
-      warnings.push(...cleanup.warnings);
+      cleanup = result;
+      warnings.push(...result.warnings);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      warnings.push(`Previous-version cleanup will retry on the next upload: ${message}`);
+      warnings.push(`Draft cleanup will retry on the next upload: ${message}`);
       console.error("[template-upload] cleanup failed", { templateId: id, error: message });
     }
 

@@ -483,13 +483,32 @@ Existing invitations pin an exact version:
 wedding.template_version_id
 ```
 
-If v2.0.0 is published, existing v1.0.0 invitations remain on v1.0.0.
+If v2.0.0 is published, every invitation using this template is atomically
+repointed to v2.0.0 in the same transaction. URLs, customer data, media,
+music, RSVP responses and settings are preserved; only the immutable package
+reference changes.
 
-New customers use the latest published version.
+The replaced version becomes `previous` and stays restorable for 72 hours.
+During that window it remains renderable for invitations that have not been
+repointed yet (for example an old invitation caught mid-switch). Publishing or
+restoring is hard-blocked when the new package is unreadable or explicitly
+drops a feature the live invitations use.
 
-Never silently migrate an existing live invitation.
+After 72 hours the version is retired and permanently purged from Postgres and
+object storage. A restored version immediately retires the rejected release and
+purges its files; if storage fails, the retired row remains as an automatic
+retry record. The current release is never auto-deleted.
 
 Never overwrite published template assets.
+
+Admin → Templates → Manage → Version History & Rollback shows the active
+release, retained releases with their countdowns, drafts, preview links and the
+restore action. Admin-only version previews use
+`/templates/{slug}/demo?version={versionId}`; public visitors cannot request a
+version.
+
+Template data compatibility is checked before every publish, rollback and
+retention switch. A failed check changes nothing.
 
 ------------------------------------------------------------------------
 
@@ -1374,7 +1393,10 @@ Need:
 -   rollback/migration visibility
 -   Used Today metric if required by the UI/spec
 
-Do not physically delete versions referenced by live invitations.
+Do not physically delete versions referenced by live invitations. Replaced
+versions are retained for 72 hours, then retired and purged only after their
+invitations have been atomically repointed to the live release. The current
+release is never auto-deleted.
 
 ## Users
 
@@ -3094,7 +3116,12 @@ use RSVP
 
 ## Versioning
 
-Old invitation remains on old template version.
+Publishing a new version updates every invitation using the template in one
+transaction while preserving its URL, content, media, music, RSVP data and
+settings. The replaced release remains restorable for 72 hours. A rollback or
+retention expiry purges only the retired release, never the active version, and
+a failed compatibility check leaves the working version and all invitations
+untouched.
 
 ## Expiration
 
@@ -3157,8 +3184,8 @@ Never:
 -   trust frontend roles
 -   use fake analytics
 -   use hardcoded production metrics
--   silently migrate template versions
--   delete referenced template versions
+-   silently copy customer data into template files
+-   delete referenced template versions or the active release
 -   use client-only authorization
 -   use public URLs for private media
 -   create duplicate API routes
@@ -3265,7 +3292,6 @@ As of the latest verified report:
 -   advanced admin management
 -   template multi-category UI
 -   filters/sorting/bulk actions
--   template version history UI
 -   real dashboard filters
 -   location picker
 -   events builder

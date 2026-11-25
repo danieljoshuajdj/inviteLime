@@ -1,42 +1,52 @@
 import type { Supabase } from "@/lib/services/helpers";
 import { TEMPLATE_BUCKET, type ObjectStorage } from "@/lib/services/storage";
+import { verifyTemplateVersionCompatibility } from "@/lib/services/template-version-compatibility";
 
 /**
  * Template-version cleanup.
  *
- * A new package upload replaces the previous release, but template versions
- * are immutable and invitations pin the exact row they were purchased on. The
- * cleanup therefore runs in two safe phases:
+ * Versions are immutable and invitations pin the exact row they were purchased
+ * on. The lifecycle has three distinct cleanup paths:
  *
- *  1. After an upload, superseded *draft* rows are removed immediately. The
- *     currently published version is kept until the replacement is published,
- *     so demos and live invitations never lose their package.
- *  2. After a publish, every superseded version that is not pinned by an
- *     invitation is removed (row first, then storage objects). Versions still
- *     referenced by invitations are kept so those invitations keep rendering.
+ *  1. Upload: a new draft replaces older *draft* rows. Published/previous
+ *     releases are never touched here.
+ *  2. Publish: the replaced published version becomes `previous` and is kept
+ *     for the retention window (72 hours). Nothing is deleted at publish time.
+ *  3. Retention/rollback: a `previous` version that has expired, or the
+ *     version rejected by a rollback, is marked `retired` and then permanently
+ *     removed — row and storage prefix.
  *
- * Guest drafts are throwaway builder state. Once the replacement is published
- * they are repointed to it, which lets the old version row go without breaking
- * an in-progress builder session.
+ * Retired rows are the retry record. They are never served by the runtime, so
+ * a failed storage delete leaves only an unavailable row. The files are
+ * deleted before the row: a storage failure therefore keeps a row that still
+ * names the prefix, and the next maintenance run retries it. Deleting the row
+ * first would orphan files with no handle left to remove them.
  *
- * Ordering matters: the database row is deleted before its storage prefix. A
- * failed storage delete therefore leaves only unreferenced objects, which the
- * orphan sweep retries on the next upload/publish. Deleting storage first would
- * leave a live row pointing at missing files if the row delete failed.
+ * Guest drafts are throwaway builder state. When a version is retired its
+ * drafts are repointed to the current version by the database switch function,
+ * so the old row can go without breaking an in-progress builder session.
  */
 
 export interface TemplateVersionRow {
   id: string;
   version: string;
   storage_prefix: string | null;
+  manifest?: Record<string, unknown> | null;
   status: string;
   is_current: boolean;
   created_at: string;
+  published_at?: string | null;
+  replaced_at?: string | null;
+  delete_after?: string | null;
+  retired_at?: string | null;
+  retirement_reason?: string | null;
 }
 
 export type VersionCleanupSkipReason =
   | "current-version"
   | "upload-in-progress"
+  | "not-a-draft"
+  | "not-retired"
   | "referenced-by-invitation"
   | "referenced-by-guest-draft"
   | "unsafe-storage-prefix"
@@ -65,8 +75,17 @@ export interface StaleUploadCleanupResult {
   warnings: string[];
 }
 
+export interface PurgeTemplateVersionResult {
+  versionId: string;
+  version: string | null;
+  deleted: boolean;
+  alreadyDeleted: boolean;
+  deletedObjects: number;
+  warnings: string[];
+}
+
 const VERSION_COLUMNS =
-  "id, version, storage_prefix, status, is_current, created_at";
+  "id, version, storage_prefix, status, is_current, created_at, published_at, replaced_at, delete_after, retired_at, retirement_reason";
 
 /** Rows that existed before `newVersionId`, in creation order. */
 export function selectSupersededVersions(
@@ -208,7 +227,7 @@ export async function deleteTemplateVersionObjects(
  * version, thumbnail or preview references. This is the retry path for a
  * storage delete that failed after its database row was already removed.
  */
-async function sweepOrphanedTemplateObjects(options: {
+export async function sweepOrphanedTemplateObjects(options: {
   supabase: Supabase;
   templateId: string;
   storage: ObjectStorage;
@@ -281,28 +300,19 @@ async function sweepOrphanedTemplateObjects(options: {
 }
 
 /**
- * Removes superseded versions of one template.
+ * Removes superseded *draft* versions after a new upload.
  *
- * `protectCurrent` is true immediately after an upload (the previous published
- * version is still serving demos/invitations until the new one is published).
- * `repointGuestDrafts` is true only after the new version is published.
+ * Published/previous versions are deliberately untouched: they are either the
+ * live release or a retained rollback candidate. A draft pinned by a builder
+ * session is kept until the next publish repoints that session.
  */
-export async function cleanupSupersededTemplateVersions(options: {
+export async function cleanupSupersededDraftVersions(options: {
   supabase: Supabase;
   templateId: string;
   newVersionId: string;
   storage: ObjectStorage;
-  protectCurrent?: boolean;
-  repointGuestDrafts?: boolean;
 }): Promise<VersionCleanupResult> {
-  const {
-    supabase,
-    templateId,
-    newVersionId,
-    storage,
-    protectCurrent = false,
-    repointGuestDrafts = false,
-  } = options;
+  const { supabase, templateId, newVersionId, storage } = options;
 
   const versions = await fetchVersions(supabase, templateId);
   const target = versions.find((version) => version.id === newVersionId);
@@ -317,20 +327,16 @@ export async function cleanupSupersededTemplateVersions(options: {
   let deletedObjects = 0;
 
   for (const version of superseded) {
-    if (version.status === "uploading") {
+    if (version.status !== "draft") {
       skipped.push({
         id: version.id,
         version: version.version,
-        reason: "upload-in-progress",
-      });
-      continue;
-    }
-
-    if (protectCurrent && version.is_current) {
-      skipped.push({
-        id: version.id,
-        version: version.version,
-        reason: "current-version",
+        reason:
+          version.status === "uploading"
+            ? "upload-in-progress"
+            : version.status === "published" && version.is_current
+              ? "current-version"
+              : "not-a-draft",
       });
       continue;
     }
@@ -350,49 +356,10 @@ export async function cleanupSupersededTemplateVersions(options: {
     }
 
     try {
-      if (await hasInvitationReference(supabase, version.id)) {
-        skipped.push({
-          id: version.id,
-          version: version.version,
-          reason: "referenced-by-invitation",
-        });
-        continue;
-      }
-    } catch (err) {
-      skipped.push({
-        id: version.id,
-        version: version.version,
-        reason: "delete-failed",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-      warnings.push(
-        `Kept v${version.version}: could not check invitation references (${
-          err instanceof Error ? err.message : String(err)
-        }).`
-      );
-      continue;
-    }
-
-    let guestDraftReference = false;
-    try {
-      guestDraftReference = await hasGuestDraftReference(supabase, version.id);
-    } catch (err) {
-      skipped.push({
-        id: version.id,
-        version: version.version,
-        reason: "delete-failed",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-      warnings.push(
-        `Kept v${version.version}: could not check builder drafts (${
-          err instanceof Error ? err.message : String(err)
-        }).`
-      );
-      continue;
-    }
-
-    if (guestDraftReference) {
-      if (!repointGuestDrafts || target.status !== "published") {
+      if (
+        (await hasInvitationReference(supabase, version.id)) ||
+        (await hasGuestDraftReference(supabase, version.id))
+      ) {
         skipped.push({
           id: version.id,
           version: version.version,
@@ -400,33 +367,29 @@ export async function cleanupSupersededTemplateVersions(options: {
         });
         continue;
       }
-
-      const { error: repointError } = await supabase
-        .from("guest_drafts")
-        .update({ template_version_id: target.id })
-        .eq("template_version_id", version.id);
-      if (repointError) {
-        skipped.push({
-          id: version.id,
-          version: version.version,
-          reason: "delete-failed",
-          detail: repointError.message,
-        });
-        warnings.push(
-          `Kept v${version.version}: could not move builder drafts to v${target.version} (${repointError.message}).`
-        );
-        continue;
-      }
+    } catch (err) {
+      skipped.push({
+        id: version.id,
+        version: version.version,
+        reason: "delete-failed",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      warnings.push(
+        `Kept v${version.version}: could not check references (${
+          err instanceof Error ? err.message : String(err)
+        }).`
+      );
+      continue;
     }
 
     // Conditional delete: never remove a row that a concurrent publish has
-    // just made current. Zero rows means the row changed under us, so it is
-    // kept rather than reported as deleted.
+    // just made current or a concurrent upload has re-claimed.
     const { data, error } = await supabase
       .from("template_versions")
       .delete()
       .eq("id", version.id)
       .eq("template_id", templateId)
+      .eq("status", "draft")
       .eq("is_current", false)
       .select("id");
     if (error) {
@@ -516,6 +479,438 @@ export async function cleanupSupersededTemplateVersions(options: {
     currentVersion:
       remaining.find((version) => version.is_current)?.version ?? null,
   };
+}
+
+/**
+ * Permanently removes one retired version: its stored files first, then its
+ * row. If the storage delete fails the retired row survives as the retry
+ * record and the version stays unavailable.
+ */
+export async function purgeTemplateVersion(options: {
+  supabase: Supabase;
+  templateId: string;
+  versionId: string;
+  storage: ObjectStorage;
+  /**
+   * If a race left an invitation or builder draft on the retired version, move
+   * it to this live release before deleting the files. Without a target the
+   * purge is refused, because deleting files would break that invitation.
+   */
+  repointToVersionId?: string;
+}): Promise<PurgeTemplateVersionResult> {
+  const { supabase, templateId, versionId, storage, repointToVersionId } = options;
+  const warnings: string[] = [];
+
+  const { data, error } = await supabase
+    .from("template_versions")
+    .select(VERSION_COLUMNS)
+    .eq("id", versionId)
+    .eq("template_id", templateId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) {
+    return {
+      versionId,
+      version: null,
+      deleted: false,
+      alreadyDeleted: true,
+      deletedObjects: 0,
+      warnings,
+    };
+  }
+
+  const version = data as TemplateVersionRow;
+  if (version.is_current || version.status !== "retired") {
+    return {
+      versionId,
+      version: version.version,
+      deleted: false,
+      alreadyDeleted: false,
+      deletedObjects: 0,
+      warnings: [
+        `v${version.version} was kept: only a retired, non-current version can be purged.`,
+      ],
+    };
+  }
+
+  try {
+    let invitationReference = await hasInvitationReference(supabase, version.id);
+    let draftReference = await hasGuestDraftReference(supabase, version.id);
+
+    // A retry can find a stray reference created by a race. Move it to the
+    // live replacement before touching storage; never delete files under a
+    // row that is still in use.
+    if (
+      (invitationReference || draftReference) &&
+      repointToVersionId &&
+      repointToVersionId !== version.id
+    ) {
+      if (invitationReference) {
+        const { error: repointError } = await supabase
+          .from("weddings")
+          .update({ template_version_id: repointToVersionId })
+          .eq("template_version_id", version.id);
+        if (repointError) throw new Error(repointError.message);
+      }
+      if (draftReference) {
+        const { error: repointError } = await supabase
+          .from("guest_drafts")
+          .update({ template_version_id: repointToVersionId })
+          .eq("template_version_id", version.id);
+        if (repointError) throw new Error(repointError.message);
+      }
+      invitationReference = await hasInvitationReference(supabase, version.id);
+      draftReference = await hasGuestDraftReference(supabase, version.id);
+    }
+
+    if (invitationReference || draftReference) {
+      return {
+        versionId,
+        version: version.version,
+        deleted: false,
+        alreadyDeleted: false,
+        deletedObjects: 0,
+        warnings: [
+          `v${version.version} was kept: ${
+            invitationReference ? "an invitation" : "a builder draft"
+          } still references it.`,
+        ],
+      };
+    }
+  } catch (err) {
+    return {
+      versionId,
+      version: version.version,
+      deleted: false,
+      alreadyDeleted: false,
+      deletedObjects: 0,
+      warnings: [
+        `v${version.version} was kept: reference check failed (${
+          err instanceof Error ? err.message : String(err)
+        }).`,
+      ],
+    };
+  }
+
+  let deletedObjects = 0;
+  const prefix = normalizeStoragePrefix(version.storage_prefix);
+  if (!isSafeTemplateVersionPrefix(prefix, templateId)) {
+    warnings.push(
+      `v${version.version} files were not removed: the storage prefix is outside this template's namespace.`
+    );
+  } else {
+    let sharedPrefix = false;
+    try {
+      sharedPrefix = await isPrefixSharedByAnotherVersion(
+        supabase,
+        templateId,
+        version.storage_prefix ?? "",
+        version.id
+      );
+    } catch (err) {
+      return {
+        versionId,
+        version: version.version,
+        deleted: false,
+        alreadyDeleted: false,
+        deletedObjects: 0,
+        warnings: [
+          `v${version.version} was kept: could not verify prefix ownership (${
+            err instanceof Error ? err.message : String(err)
+          }).`,
+        ],
+      };
+    }
+
+    if (sharedPrefix) {
+      warnings.push(
+        `v${version.version} files were not removed: another version uses the same storage prefix.`
+      );
+    } else {
+      const storageResult = await deleteTemplateVersionObjects(
+        storage,
+        templateId,
+        prefix
+      );
+      deletedObjects += storageResult.deleted;
+      if (storageResult.error) {
+        return {
+          versionId,
+          version: version.version,
+          deleted: false,
+          alreadyDeleted: false,
+          deletedObjects,
+          warnings: [
+            ...warnings,
+            `v${version.version} is unavailable, but its files could not be deleted yet: ${storageResult.error.message}`,
+          ],
+        };
+      }
+    }
+  }
+
+  const { data: deletedRows, error: deleteError } = await supabase
+    .from("template_versions")
+    .delete()
+    .eq("id", version.id)
+    .eq("template_id", templateId)
+    .eq("status", "retired")
+    .eq("is_current", false)
+    .select("id");
+  if (deleteError) {
+    warnings.push(
+      `v${version.version} files were removed, but its database row could not be deleted yet: ${deleteError.message}`
+    );
+    return {
+      versionId,
+      version: version.version,
+      deleted: false,
+      alreadyDeleted: false,
+      deletedObjects,
+      warnings,
+    };
+  }
+  if (!Array.isArray(deletedRows) || deletedRows.length === 0) {
+    warnings.push(
+      `v${version.version} changed during purge; its database row was left in place.`
+    );
+    return {
+      versionId,
+      version: version.version,
+      deleted: false,
+      alreadyDeleted: false,
+      deletedObjects,
+      warnings,
+    };
+  }
+
+  return {
+    versionId,
+    version: version.version,
+    deleted: true,
+    alreadyDeleted: false,
+    deletedObjects,
+    warnings,
+  };
+}
+
+export interface TemplateVersionRetentionResult {
+  /** Expired `previous` versions switched to `retired` this run. */
+  retired: number;
+  /** Retired rows whose files and row were removed this run. */
+  purged: number;
+  deletedObjects: number;
+  /** Versions that remain for a later run (usually a storage failure). */
+  failures: number;
+  warnings: string[];
+}
+
+/**
+ * Retention sweep for `/api/cron/maintenance`.
+ *
+ * Finds `previous` releases whose rollback window has ended, asks the database
+ * to retire them (which repoints any remaining invitation to the live release),
+ * then purges every retired row. Retired rows from earlier failed storage
+ * deletes are retried here too, so the sweep is idempotent.
+ *
+ * Storage is resolved lazily: a run with nothing to do never constructs the
+ * object-storage client.
+ */
+export async function purgeDueTemplateVersions(options: {
+  supabase: Supabase;
+  getStorage: () => Promise<ObjectStorage>;
+  now?: Date;
+  batchSize?: number;
+}): Promise<TemplateVersionRetentionResult> {
+  const { supabase, getStorage } = options;
+  const nowIso = (options.now ?? new Date()).toISOString();
+  const batch = Math.max(1, options.batchSize ?? 20);
+  const result: TemplateVersionRetentionResult = {
+    retired: 0,
+    purged: 0,
+    deletedObjects: 0,
+    failures: 0,
+    warnings: [],
+  };
+
+  const [dueResult, retiredResult] = await Promise.all([
+    supabase
+      .from("template_versions")
+      .select("id, template_id, version")
+      .eq("status", "previous")
+      .lte("delete_after", nowIso)
+      .order("delete_after", { ascending: true })
+      .limit(batch),
+    supabase
+      .from("template_versions")
+      .select("id, template_id")
+      .eq("status", "retired")
+      .order("retired_at", { ascending: true })
+      .limit(batch),
+  ]);
+
+  if (dueResult.error) {
+    result.failures += 1;
+    result.warnings.push(
+      `Could not load expired template versions: ${dueResult.error.message}`
+    );
+  }
+  if (retiredResult.error) {
+    result.failures += 1;
+    result.warnings.push(
+      `Could not load retired template versions: ${retiredResult.error.message}`
+    );
+  }
+
+  const due = (dueResult.data ?? []) as Array<{
+    id: string;
+    template_id: string;
+    version: string;
+  }>;
+  const toPurge = new Map<string, { id: string; template_id: string }>();
+  for (const row of (retiredResult.data ?? []) as Array<{
+    id: string;
+    template_id: string;
+  }>) {
+    toPurge.set(row.id, row);
+  }
+
+  if (due.length === 0 && toPurge.size === 0) return result;
+
+  let storage: ObjectStorage;
+  try {
+    storage = await getStorage();
+  } catch (err) {
+    result.failures += 1;
+    result.warnings.push(
+      `Template-version retention was skipped: object storage is unavailable (${
+        err instanceof Error ? err.message : String(err)
+      }).`
+    );
+    return result;
+  }
+
+  // Resolve the live release once per template. It is the destination for any
+  // invitation still pinned to an expiring version, and it must be readable
+  // before the expiring release is retired.
+  const currentByTemplate = new Map<
+    string,
+    { id: string; version: string } | null
+  >();
+  async function currentVersion(templateId: string) {
+    if (currentByTemplate.has(templateId)) {
+      return currentByTemplate.get(templateId) ?? null;
+    }
+    const { data, error } = await supabase
+      .from("template_versions")
+      .select("id, version")
+      .eq("template_id", templateId)
+      .eq("status", "published")
+      .eq("is_current", true)
+      .maybeSingle();
+    if (error) {
+      result.failures += 1;
+      result.warnings.push(
+        `Could not resolve the live release for template ${templateId}: ${error.message}`
+      );
+      currentByTemplate.set(templateId, null);
+      return null;
+    }
+    const value = (data as { id: string; version: string } | null) ?? null;
+    currentByTemplate.set(templateId, value);
+    return value;
+  }
+
+  for (const row of due) {
+    const current = await currentVersion(row.template_id);
+    if (!current) {
+      result.failures += 1;
+      result.warnings.push(
+        `Kept expired v${row.version}: its template has no live release to move invitations to.`
+      );
+      continue;
+    }
+
+    // Verify the live package before repointing anything. If it cannot render,
+    // the expiring release is safer and stays available beyond its window.
+    try {
+      const compatibility = await verifyTemplateVersionCompatibility({
+        supabase,
+        templateId: row.template_id,
+        versionId: current.id,
+        storage,
+        purpose: "retire",
+        sourceVersionIds: [row.id],
+      });
+      if (!compatibility.ok) {
+        result.failures += 1;
+        result.warnings.push(
+          `Kept expired v${row.version}: the live release v${current.version} is not compatible (${compatibility.issues
+            .map((issue) => issue.message)
+            .join(" ")})`
+        );
+        continue;
+      }
+    } catch (err) {
+      result.failures += 1;
+      result.warnings.push(
+        `Kept expired v${row.version}: compatibility check failed (${
+          err instanceof Error ? err.message : String(err)
+        }).`
+      );
+      continue;
+    }
+
+    const { data, error } = await supabase.rpc("retire_template_version", {
+      p_template_id: row.template_id,
+      p_version_id: row.id,
+      p_reason: "expired",
+    });
+    if (error) {
+      result.failures += 1;
+      result.warnings.push(
+        `Could not retire v${row.version}: ${error.message}`
+      );
+      continue;
+    }
+    const outcome = data as { ok?: boolean } | null;
+    if (!outcome?.ok) {
+      result.failures += 1;
+      result.warnings.push(`Could not retire v${row.version}: no result`);
+      continue;
+    }
+    result.retired += 1;
+    toPurge.set(row.id, { id: row.id, template_id: row.template_id });
+  }
+
+  for (const row of toPurge.values()) {
+    try {
+      const current = await currentVersion(row.template_id);
+      const purge = await purgeTemplateVersion({
+        supabase,
+        templateId: row.template_id,
+        versionId: row.id,
+        storage,
+        repointToVersionId: current?.id,
+      });
+      result.deletedObjects += purge.deletedObjects;
+      result.warnings.push(...purge.warnings);
+      if (purge.deleted || purge.alreadyDeleted) {
+        result.purged += 1;
+      } else {
+        result.failures += 1;
+      }
+    } catch (err) {
+      result.failures += 1;
+      result.warnings.push(
+        `Could not purge template version ${row.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  }
+
+  return result;
 }
 
 /**
